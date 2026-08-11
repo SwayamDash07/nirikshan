@@ -184,6 +184,37 @@ def perspective_weighted_people(detections: list[Detection], calibration: dict[s
     )
 
 
+def is_near_camera(detection: Detection, calibration: dict[str, Any]) -> bool:
+    """Use the same box-height boundary as perspective correction for the HUD."""
+    correction = calibration.get("perspectiveCorrection", {})
+    if not correction.get("enabled", False):
+        return True
+    reference_height = max(float(correction.get("referenceBoxHeightPixels", 100.0)), 1.0)
+    return (detection.box[3] - detection.box[1]) >= reference_height
+
+
+def draw_dashed_rectangle(frame: Any, box: tuple[int, int, int, int], color: tuple[int, int, int], thickness: int) -> None:
+    """Draw a compact dashed box for farther, perspective-corrected detections."""
+    left, top, right, bottom = box
+    dash_length, gap = 9, 6
+    for start, end in (((left, top), (right, top)), ((right, top), (right, bottom)),
+                       ((right, bottom), (left, bottom)), ((left, bottom), (left, top))):
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        length = max(abs(dx), abs(dy))
+        if length == 0:
+            continue
+        step_x, step_y = dx / length, dy / length
+        for offset in range(0, length, dash_length + gap):
+            segment_end = min(offset + dash_length, length)
+            cv2.line(
+                frame,
+                (round(start[0] + step_x * offset), round(start[1] + step_y * offset)),
+                (round(start[0] + step_x * segment_end), round(start[1] + step_y * segment_end)),
+                color,
+                thickness,
+            )
+
+
 def draw_trend_arrow(frame: Any, trend: str, x: int, y: int, color: tuple[int, int, int]) -> None:
     if trend == "↑":
         start, end = (x, y + 12), (x, y - 12)
@@ -373,13 +404,17 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 color = RISK_COLORS[level]
                 cv2.rectangle(frame, (2, 2), (frame_width - 3, frame_height - 3), color, max(3, round(frame_width / 350)))
                 for detection in detections:
-                    cv2.rectangle(frame, detection.box[:2], detection.box[2:], color, max(2, round(frame_width / 600)))
+                    if is_near_camera(detection, calibration):
+                        cv2.rectangle(frame, detection.box[:2], detection.box[2:], color, max(2, round(frame_width / 600)))
+                    else:
+                        draw_dashed_rectangle(frame, detection.box, color, max(1, round(frame_width / 900)))
                 draw_text_box(frame, [
                     f"NIRIKSHAN | Zone {args.zone_id} | {format_video_time(timestamp_seconds)}",
                     f"People detected: {current_total_people}",
                     f"Density: {latest_density:.2f} people/m2",
                     f"Movement: {latest_speed:.2f} m/s",
                     f"Risk: {level} | trend",
+                    "Confidence: solid=near | dashed=far corrected",
                 ], (12, 168), color, font_scale=max(0.5, min(0.9, frame_width / 1800)))
                 draw_trend_arrow(frame, latest_trend, min(frame_width - 30, 350), 150, color)
                 cv2.putText(frame, f"Replay frame {frame_index}/{frame_count}", (12, frame_height - 14),

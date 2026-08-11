@@ -1,0 +1,9 @@
+package com.nirikshan.repository;
+import com.nirikshan.model.Alert;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+public interface AlertRepository extends JpaRepository<Alert, Long> {
+    List<Alert> findByResolvedOrderByTimestampDesc(boolean resolved);
+    List<Alert> findAllByOrderByTimestampDesc();
+    long countByResolvedFalse();
+}

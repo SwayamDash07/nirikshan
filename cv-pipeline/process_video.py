@@ -1,0 +1,446 @@
+"""Process one CCTV video as one physical Nirikshan zone.
+
+Example:
+    python process_video.py --input clip.mp4 --zone-id 1 \
+      --thresholds thresholds_config.json --output events.json --annotate
+
+For a direct count comparison against the previous nano model, add:
+    --compare-model yolov8n.pt
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import shutil
+import subprocess
+import sys
+import time
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+import cv2
+import numpy as np
+import requests
+import torch
+from ultralytics import YOLO
+
+from risk_scoring import ZoneRisk, calculate_zone_risk
+
+
+RISK_COLORS = {
+    "LOW": (60, 180, 75),
+    "MEDIUM": (0, 215, 255),
+    "HIGH": (0, 140, 255),
+    "CRITICAL": (0, 0, 255),
+}
+RISK_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+
+
+@dataclass
+class Detection:
+    centroid: tuple[float, float]
+    box: tuple[int, int, int, int]
+
+
+class CentroidTracker:
+    """Nearest-centroid tracker for approximate whole-frame motion."""
+
+    def __init__(self, max_distance_pixels: float) -> None:
+        self.max_distance = max_distance_pixels
+        self.previous: list[tuple[float, float]] = []
+
+    def average_displacement(self, current: list[Detection]) -> float:
+        current_points = [d.centroid for d in current]
+        available = set(range(len(self.previous)))
+        distances: list[float] = []
+        for point in current_points:
+            if not available:
+                break
+            nearest = min(available, key=lambda index: math.dist(point, self.previous[index]))
+            distance = math.dist(point, self.previous[nearest])
+            if distance <= self.max_distance:
+                distances.append(distance)
+                available.remove(nearest)
+        self.previous = current_points
+        return sum(distances) / len(distances) if distances else 0.0
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def detect_people(model: YOLO, frame: Any, confidence: float, device: str, augment: bool = False) -> list[Detection]:
+    # Augmentation runs several transformed views and merges their detections.
+    # It can improve small/distant-person recall, but materially increases
+    # processing time, so it is controlled by thresholds_config.json.
+    results = model.predict(frame, conf=confidence, classes=[0], augment=augment, device=device, verbose=False)
+    detections: list[Detection] = []
+    if not results or results[0].boxes is None:
+        return detections
+    for box in results[0].boxes.xyxy.cpu().tolist():
+        left, top, right, bottom = [round(value) for value in box]
+        detections.append(Detection(((left + right) / 2, (top + bottom) / 2), (left, top, right, bottom)))
+    return detections
+
+
+def make_writer(path: Path, fps: float, width: int, height: int) -> cv2.VideoWriter:
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+    if not writer.isOpened():
+        raise RuntimeError(f"Could not open annotated video writer: {path}")
+    return writer
+
+
+def transcode_annotation(raw_path: Path, final_path: Path) -> None:
+    """Convert OpenCV's broadly available MPEG-4 output to browser-safe H.264."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        print("Warning: ffmpeg was not found; keeping the raw annotated MP4. Chrome may not play it.", file=sys.stderr)
+        if raw_path != final_path:
+            raw_path.replace(final_path)
+        return
+    command = [
+        ffmpeg, "-y", "-i", str(raw_path), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", "-an", str(final_path),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Warning: H.264 conversion failed; keeping raw annotation. {result.stderr[-1200:]}", file=sys.stderr)
+        if final_path.exists():
+            final_path.unlink()
+        raw_path.replace(final_path)
+        return
+    if raw_path != final_path and raw_path.exists():
+        raw_path.unlink()
+    print(f"Browser-compatible annotated video written: {final_path}")
+
+
+def draw_text_box(frame: Any, lines: list[str], origin: tuple[int, int], color: tuple[int, int, int],
+                  font_scale: float = 0.6, line_gap: int = 8, alpha: float = 0.75) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    thickness = max(1, round(font_scale * 2))
+    sizes = [cv2.getTextSize(line, font, font_scale, thickness)[0] for line in lines]
+    width = max(size[0] for size in sizes) + 20
+    line_height = max(size[1] for size in sizes) + line_gap
+    height = line_height * len(lines) + 12
+    x, y = max(4, origin[0]), min(origin[1], frame.shape[0] - 4)
+    panel = frame.copy()
+    cv2.rectangle(panel, (x, y - height), (x + width, y), (15, 20, 25), -1)
+    cv2.addWeighted(panel, alpha, frame, 1.0 - alpha, 0, frame)
+    for index, line in enumerate(lines):
+        baseline = y - height + 24 + index * line_height
+        cv2.putText(frame, line, (x + 10, baseline), font, font_scale, color, thickness, cv2.LINE_AA)
+
+
+def format_video_time(seconds: float) -> str:
+    total = max(0, int(seconds))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def density_trend(samples: deque[tuple[float, float, float]], timestamp_seconds: float, lookback_seconds: float = 5.0) -> str:
+    if not samples:
+        return "→"
+    baseline = next((sample for sample in reversed(samples) if timestamp_seconds - sample[0] >= lookback_seconds), samples[0])
+    change = (samples[-1][1] - baseline[1]) / max(abs(baseline[1]), 0.001)
+    if change > 0.05:
+        return "↑"
+    if change < -0.05:
+        return "↓"
+    return "→"
+
+
+def rolling_average(samples: deque[tuple[float, float, float]], now: float, window_seconds: float) -> tuple[float, float]:
+    recent = [sample for sample in samples if now - sample[0] <= window_seconds]
+    if not recent:
+        return 0.0, 0.0
+    return (
+        sum(sample[1] for sample in recent) / len(recent),
+        sum(sample[2] for sample in recent) / len(recent),
+    )
+
+
+def perspective_weighted_people(detections: list[Detection], calibration: dict[str, Any]) -> float:
+    """Estimate crowd presence for a front-facing camera using box height as a depth proxy.
+
+    Smaller boxes are usually further from the camera and represent more of the
+    scene's ground area. We therefore increase their contribution slightly,
+    while clamping the result so a missed or unusually small box cannot skew
+    the density estimate. Raw detector count is retained for `peopleCount`.
+    """
+    correction = calibration.get("perspectiveCorrection", {})
+    if not correction.get("enabled", False):
+        return float(len(detections))
+    reference_height = max(float(correction.get("referenceBoxHeightPixels", 100.0)), 1.0)
+    min_weight = float(correction.get("minWeight", 0.70))
+    max_weight = max(min_weight, float(correction.get("maxWeight", 1.60)))
+    return sum(
+        min(max(reference_height / max(detection.box[3] - detection.box[1], 1), min_weight), max_weight)
+        for detection in detections
+    )
+
+
+def draw_trend_arrow(frame: Any, trend: str, x: int, y: int, color: tuple[int, int, int]) -> None:
+    if trend == "↑":
+        start, end = (x, y + 12), (x, y - 12)
+    elif trend == "↓":
+        start, end = (x, y - 12), (x, y + 12)
+    else:
+        start, end = (x - 12, y), (x + 12, y)
+    cv2.arrowedLine(frame, start, end, color, 3, tipLength=0.35)
+
+
+def apply_density_heatmap(frame: Any, detections: list[Detection]) -> Any:
+    """Blend a Gaussian density field over detected person centroids."""
+    if not detections:
+        return frame
+    height, width = frame.shape[:2]
+    density = np.zeros((height, width), dtype=np.float32)
+    kernel_radius = max(12, round(min(width, height) * 0.025))
+    for detection in detections:
+        x, y = round(detection.centroid[0]), round(detection.centroid[1])
+        if 0 <= x < width and 0 <= y < height:
+            cv2.circle(density, (x, y), kernel_radius, 1.0, -1)
+    density = cv2.GaussianBlur(density, (0, 0), sigmaX=kernel_radius, sigmaY=kernel_radius)
+    peak = float(density.max())
+    if peak <= 0:
+        return frame
+    normalized = np.clip(density / peak, 0.0, 1.0)
+    color_map = cv2.applyColorMap((normalized * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    alpha = (normalized * 0.62)[..., None]
+    blended = frame.astype(np.float32) * (1.0 - alpha) + color_map.astype(np.float32) * alpha
+    return np.clip(blended, 0, 255).astype(np.uint8)
+
+
+def resolve_device() -> str:
+    if torch.cuda.is_available():
+        device_name = torch.cuda.get_device_name(0)
+        print(f"Using device: cuda ({device_name})")
+        return "cuda"
+    print("Using device: cpu (no GPU detected)")
+    return "cpu"
+
+
+def load_model(weights: str, device: str) -> YOLO:
+    model = YOLO(weights)
+    # YOLO's constructor loads weights; moving explicitly here makes the
+    # selected runtime device unambiguous before any prediction starts.
+    model.to(device)
+    return model
+
+
+def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
+    thresholds = load_json(Path(args.thresholds))
+    device = resolve_device()
+    model = load_model(args.model, device)
+    capture = cv2.VideoCapture(str(args.input))
+    if not capture.isOpened():
+        raise RuntimeError(f"Could not open input video: {args.input}")
+
+    fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
+    frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    process_every = max(1, int(thresholds.get("processEveryNFrames", 3)))
+    emit_every = float(thresholds.get("emitEverySeconds", 1.0))
+    lookback = float(thresholds.get("lookbackSeconds", 10.0))
+    smoothing_window = float(thresholds.get("rollingAverageSeconds", 3.0))
+    zone_calibration = thresholds.get("zoneCalibration", {}).get(str(args.zone_id), {})
+    calibration = {**thresholds, **zone_calibration}
+    meters_per_pixel = float(calibration.get("metersPerPixel", 0.02))
+    visible_area = max(float(calibration.get("visibleAreaSqMeters", 100.0)), 0.001)
+    max_history = max(10, round((lookback + smoothing_window + 5.0) * fps / process_every))
+    tracker = CentroidTracker(float(thresholds.get("maxTrackDistancePixels", 120.0)))
+    raw_history: deque[tuple[float, float, float]] = deque(maxlen=max_history)
+    smoothed_history: deque[tuple[float, float, float]] = deque(maxlen=max_history)
+    events: list[dict[str, Any]] = []
+    confidence = args.confidence if args.confidence is not None else float(thresholds.get("personConfidence", 0.28))
+    augment = bool(thresholds.get("augment", False))
+    detection_log_path = Path(args.detection_log or f"{Path(args.output).with_suffix('')}_detection_counts.csv")
+    comparison_model = load_model(args.compare_model, device) if args.compare_model else None
+    detection_log_path.parent.mkdir(parents=True, exist_ok=True)
+    detection_log = detection_log_path.open("w", encoding="utf-8")
+    detection_log.write("frame,timestamp_seconds,model,confidence,augment,people_detected,manual_reference_count\\n")
+    print(
+        f"Detection audit: model={args.model}, confidence={confidence:.2f}, augment={augment}, "
+        f"visible_area={visible_area:.1f}m2, perspective_correction="
+        f"{calibration.get('perspectiveCorrection', {}).get('enabled', False)}"
+    )
+    if comparison_model is not None:
+        print(f"Before/after comparison enabled: before={args.compare_model}, after={args.model}")
+    replay_start = datetime.fromisoformat(args.start_time.replace("Z", "+00:00")) if args.start_time else datetime.now(timezone.utc)
+    if replay_start.tzinfo is None:
+        replay_start = replay_start.replace(tzinfo=timezone.utc)
+
+    writer = None
+    annotation_output: Path | None = None
+    raw_annotation_output: Path | None = None
+    if args.annotate:
+        annotation_output = Path(args.annotation_output or f"{Path(args.output).with_suffix('')}_annotated.mp4")
+        raw_annotation_output = annotation_output.with_name(f"{annotation_output.stem}_raw.mp4")
+        writer = make_writer(raw_annotation_output, fps, frame_width, frame_height)
+
+    frame_index = 0
+    last_emit = -emit_every
+    latest_risk: ZoneRisk | None = None
+    latest_trend = "→"
+    latest_density = 0.0
+    latest_speed = 0.0
+    current_total_people = 0
+    detections: list[Detection] = []
+    last_posted_video_seconds: float | None = None
+    debug_reported = False
+    try:
+        while True:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            timestamp_seconds = frame_index / fps
+            if frame_index % process_every == 0:
+                detections = detect_people(model, frame, confidence, device=device, augment=augment)
+                current_total_people = len(detections)
+                weighted_people = perspective_weighted_people(detections, calibration)
+                before_count = ""
+                if comparison_model is not None:
+                    before_count = str(len(detect_people(comparison_model, frame, confidence, device=device, augment=False)))
+                    print(
+                        f"COUNT frame={frame_index} time={timestamp_seconds:.2f}s "
+                        f"before({args.compare_model})={before_count} after({args.model})={current_total_people}"
+                    )
+                else:
+                    print(f"COUNT frame={frame_index} time={timestamp_seconds:.2f}s model={args.model} people={current_total_people}")
+                detection_log.write(
+                    f"{frame_index},{timestamp_seconds:.3f},{args.model},{confidence:.3f},{augment},"
+                    f"{current_total_people},{before_count}\\n"
+                )
+                detection_log.flush()
+                raw_density = weighted_people / visible_area
+                displacement_pixels = tracker.average_displacement(detections)
+                raw_speed = displacement_pixels * meters_per_pixel * fps / process_every
+                raw_history.append((timestamp_seconds, raw_density, raw_speed))
+                latest_density, latest_speed = rolling_average(raw_history, timestamp_seconds, smoothing_window)
+                smoothed_history.append((timestamp_seconds, latest_density, latest_speed))
+
+                baseline = next(
+                    (sample for sample in reversed(smoothed_history) if timestamp_seconds - sample[0] >= lookback),
+                    smoothed_history[0],
+                )
+                density_increase = (latest_density - baseline[1]) / max(abs(baseline[1]), 0.001)
+                speed_drop = (baseline[2] - latest_speed) / max(abs(baseline[2]), 0.001)
+                latest_risk = calculate_zone_risk(
+                    latest_density, density_increase, latest_speed, thresholds, speed_drop=speed_drop
+                )
+                latest_trend = density_trend(smoothed_history, timestamp_seconds)
+
+                if args.debug_calibration and not debug_reported and current_total_people > 0:
+                    print("CALIBRATION DEBUG (first non-empty sample frame)")
+                    print(f"  frame: {frame_index} ({timestamp_seconds:.2f}s)")
+                    print(f"  raw detected person count: {current_total_people}")
+                    print(f"  estimated effective zone area: {visible_area:.2f} m2")
+                    print(f"  perspective-corrected detection count: {weighted_people:.2f}")
+                    print(f"  density: {weighted_people:.2f} / {visible_area:.2f} = {latest_density:.2f} people/m2")
+                    print(f"  resulting risk: {latest_risk.level} (score {latest_risk.score:.3f})")
+                    debug_reported = True
+
+                if timestamp_seconds - last_emit >= emit_every:
+                    events.append({
+                        "zoneId": args.zone_id,
+                        "timestamp": (replay_start + timedelta(seconds=timestamp_seconds)).isoformat().replace("+00:00", "Z"),
+                        "densityScore": round(latest_risk.density, 4),
+                        "peopleCount": current_total_people,
+                        "movementSpeed": round(latest_risk.speed, 4),
+                        "riskLevel": latest_risk.level,
+                        "explanation": latest_risk.explanation,
+                        "sourceClipId": args.source_clip_id or Path(args.input).stem,
+                    })
+                    if args.post_live:
+                        if last_posted_video_seconds is not None:
+                            wait_seconds = max(0.0, timestamp_seconds - last_posted_video_seconds) + args.post_delay
+                            if wait_seconds > 0:
+                                time.sleep(wait_seconds)
+                        post_event(events[-1], args.post_url or "http://localhost:8080/api/risk-events", args.timeout)
+                        last_posted_video_seconds = timestamp_seconds
+                    last_emit = timestamp_seconds
+
+            if writer is not None:
+                if args.heatmap_overlay is not False:
+                    frame = apply_density_heatmap(frame, detections)
+                level = latest_risk.level if latest_risk else "LOW"
+                color = RISK_COLORS[level]
+                cv2.rectangle(frame, (2, 2), (frame_width - 3, frame_height - 3), color, max(3, round(frame_width / 350)))
+                for detection in detections:
+                    cv2.rectangle(frame, detection.box[:2], detection.box[2:], color, max(2, round(frame_width / 600)))
+                draw_text_box(frame, [
+                    f"NIRIKSHAN | Zone {args.zone_id} | {format_video_time(timestamp_seconds)}",
+                    f"People detected: {current_total_people}",
+                    f"Density: {latest_density:.2f} people/m2",
+                    f"Movement: {latest_speed:.2f} m/s",
+                    f"Risk: {level} | trend",
+                ], (12, 168), color, font_scale=max(0.5, min(0.9, frame_width / 1800)))
+                draw_trend_arrow(frame, latest_trend, min(frame_width - 30, 350), 150, color)
+                cv2.putText(frame, f"Replay frame {frame_index}/{frame_count}", (12, frame_height - 14),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (230, 230, 230), 1, cv2.LINE_AA)
+                writer.write(frame)
+            frame_index += 1
+    finally:
+        capture.release()
+        if writer is not None:
+            writer.release()
+        detection_log.close()
+
+    if annotation_output is not None and raw_annotation_output is not None:
+        transcode_annotation(raw_annotation_output, annotation_output)
+
+    if args.debug_calibration and not debug_reported:
+        print("CALIBRATION DEBUG: no non-empty detection sample was produced")
+
+    Path(args.output).write_text(json.dumps(events, indent=2), encoding="utf-8")
+    return events
+
+
+def post_events(events: list[dict[str, Any]], url: str, timeout: float) -> None:
+    for index, event in enumerate(events, start=1):
+        response = requests.post(url, json=event, timeout=timeout)
+        response.raise_for_status()
+        print(f"Posted event {index}/{len(events)}: zone={event['zoneId']} level={event['riskLevel']}")
+
+
+def post_event(event: dict[str, Any], url: str, timeout: float) -> None:
+    response = requests.post(url, json=event, timeout=timeout)
+    response.raise_for_status()
+    print(f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} timestamp={event['timestamp']}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Process one CCTV camera/video as one backend zone")
+    parser.add_argument("--input", required=True, help="Input crowd video path")
+    parser.add_argument("--zone-id", required=True, type=int, help="Backend Zone ID represented by this camera/video")
+    parser.add_argument("--thresholds", required=True, help="Risk-scoring and calibration configuration JSON file")
+    parser.add_argument("--output", required=True, help="Output risk-event JSON path")
+    parser.add_argument("--model", default="yolov8m.pt", help="Ultralytics model weights (default: yolov8m.pt)")
+    parser.add_argument("--confidence", type=float, help="Override person confidence threshold for this run")
+    parser.add_argument("--debug-calibration", action="store_true", help="Print area, raw count, perspective count, density, and risk for a sample frame")
+    parser.add_argument("--compare-model", help="Optional baseline model for per-frame before/after count comparison")
+    parser.add_argument("--detection-log", help="CSV path for per-frame detection counts; defaults beside --output")
+    parser.add_argument("--annotate", action="store_true", help="Write an annotated MP4 alongside the JSON")
+    parser.add_argument("--heatmap-overlay", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable in-frame density heatmap; enabled by default with --annotate")
+    parser.add_argument("--annotation-output", help="Explicit annotated MP4 path")
+    parser.add_argument("--source-clip-id", help="Source clip ID; defaults to input filename stem")
+    parser.add_argument("--start-time", help="Replay start timestamp in ISO 8601; defaults to current UTC time")
+    parser.add_argument("--post-url", help="Backend risk-event URL; used with --post-live")
+    parser.add_argument("--post-live", action="store_true", help="POST each generated event during processing")
+    parser.add_argument("--post-delay", type=float, default=0.0, help="Extra seconds added between live POSTs")
+    parser.add_argument("--timeout", type=float, default=10.0, help="HTTP POST timeout in seconds")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    try:
+        process_video(parse_args())
+    except (OSError, RuntimeError, ValueError, requests.RequestException) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(1)

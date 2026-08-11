@@ -1,0 +1,47 @@
+# Java / Spring Boot
+target/
+*.class
+
+# Next.js / Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/public/sw.js
+frontend/public/workbox-*.js
+frontend/public/fallback-*.js
+node_modules/
+npm-debug.log*
+
+# Python
+cv-pipeline/venv/
+**/__pycache__/
+*.py[cod]
+*.pyo
+
+# Local CV models and generated runtime data
+cv-pipeline/*.pt
+cv-pipeline/real_footage/*
+!cv-pipeline/real_footage/.gitkeep
+cv-pipeline/uploads/*
+!cv-pipeline/uploads/.gitkeep
+cv-pipeline/outputs/**/*
+!cv-pipeline/outputs/.gitkeep
+_archived_test_runs/
+
+# Environment files and secrets
+.env
+.env.local
+.env.*
+!.env.local.example
+frontend/.env
+frontend/.env.local
+frontend/.env.*
+!frontend/.env.local.example
+
+# Editor / operating system files
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db

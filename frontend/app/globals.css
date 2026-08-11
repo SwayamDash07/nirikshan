@@ -1,0 +1,7 @@
+:root { --ink: #122238; --muted: #71809a; --line: #e5ebf2; --blue: #2164d7; --navy: #102445; --teal: #62dfd2; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; }
+button, input { font: inherit; }
+.critical-pulse { animation: leafletCriticalPulse 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes leafletCriticalPulse { 0%, 100% { stroke-opacity: 1; fill-opacity: .82; } 50% { stroke-opacity: .4; fill-opacity: .55; } }

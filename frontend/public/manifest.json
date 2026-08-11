@@ -1,0 +1,12 @@
+{
+  "name": "Nirikshan Alerts",
+  "short_name": "Nirikshan",
+  "description": "Calm, location-aware crowd safety alerts for your venue.",
+  "start_url": "/alerts",
+  "display": "standalone",
+  "background_color": "#f5f8fb",
+  "theme_color": "#14345f",
+  "icons": [
+    {"src": "/icons/nirikshan-alerts.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

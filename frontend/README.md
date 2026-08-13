@@ -4,6 +4,12 @@ Next.js App Router + TypeScript command dashboard for Nirikshan. It connects dir
 
 The primary hero visualization uses Leaflet with OpenStreetMap tiles and real zone latitude/longitude values returned by the backend. The original SVG bubble-map implementation remains in `app/page.tsx` as an alternate view for future use.
 
+## Role-aware routes
+
+- `/alerts` is the mobile-first citizen/security sign-in experience. Public sign-up creates Citizens only.
+- Security accounts are created in the administrator console, must replace their temporary password, then see only their assigned-zone alerts and instructions.
+- `/console/login` and the unlinked `/console` route are for administrators.
+
 ## Run locally
 
 Start the Spring Boot backend first from the repository root:

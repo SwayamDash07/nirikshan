@@ -6,7 +6,9 @@ spring:
       max-file-size: 1GB
       max-request-size: 1GB
   profiles:
-    default: dev
+    # PostgreSQL is the normal development/deployment path. Use `dev` only
+    # when an offline, disposable H2 database is needed.
+    default: local-postgres
   jpa:
     open-in-view: false
   jackson:
@@ -17,6 +19,13 @@ server:
   port: 8080
 
 nirikshan:
+  web:
+    allowed-origin-patterns: ${NIRIKSHAN_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  auth:
+    jwt-secret: ${NIRIKSHAN_JWT_SECRET:change-this-demo-secret-to-a-long-random-value-1234567890}
+    jwt-expiry-hours: 24
+    admin-seed-email: ${ADMIN_SEED_EMAIL:}
+    admin-seed-password: ${ADMIN_SEED_PASSWORD:}
   cv:
     pipeline-dir: ${NIRIKSHAN_CV_PIPELINE_DIR:cv-pipeline}
     python-executable: ${NIRIKSHAN_PYTHON:python}
@@ -30,6 +39,8 @@ spring:
   config:
     activate:
       on-profile: dev
+  flyway:
+    enabled: false
   datasource:
     url: jdbc:h2:mem:nirikshan;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
@@ -51,10 +62,38 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/nirikshan}
-    username: ${DATABASE_USERNAME:postgres}
-    password: ${DATABASE_PASSWORD:postgres}
+    # Railway supplies DATABASE_URL as postgresql://...; the application
+    # normalizes that value to jdbc:postgresql://... at startup.
+    url: ${SPRING_DATASOURCE_URL:${DATABASE_URL:${PGJDBC_URL:}}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${PGUSER:}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${PGPASSWORD:}}}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local-postgres
+  datasource:
+    # Set DATABASE_URL to either a JDBC URL or a Railway-style
+    # postgresql:// URL. The latter is normalized by PostgresDataSourceConfig.
+    url: ${SPRING_DATASOURCE_URL:${DATABASE_URL:jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:nirikshan}}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${PGUSER:postgres}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${PGPASSWORD:postgres}}}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration

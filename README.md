@@ -2,6 +2,20 @@
 
 Spring Boot 3.3 / Java 17 backend for the Nirikshan crowd-risk prototype. The Python CV pipeline supplies pre-computed density, movement, risk level, and explanation values; this service stores, broadcasts, and surfaces them.
 
+## Authentication roles
+
+The public mobile experience at `/alerts` creates `CITIZEN` accounts only. Security accounts are created by an administrator and must change their one-time password at first sign-in. The unlinked administrator console is `/console`, with login at `/console/login`.
+
+Before starting the backend for the first time, seed a demo admin using environment variables:
+
+```powershell
+$env:ADMIN_SEED_EMAIL="admin@example.com"
+$env:ADMIN_SEED_PASSWORD="ChangeThisPassword123!"
+$env:NIRIKSHAN_JWT_SECRET="use-a-long-random-secret-of-at-least-32-characters"
+```
+
+The hidden route is suitable only for a hackathon demo. A production deployment also needs network-level administrative access restrictions.
+
 ## Run locally
 
 Requirements: Java 17+, Maven 3.9+.
@@ -35,7 +49,62 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\run-backend.ps1
 ```
 
-The default `dev` profile uses an in-memory H2 database and seeds KIIT Campus 25 with five campus zones. H2 console: `http://localhost:8080/h2-console` with JDBC URL `jdbc:h2:mem:nirikshan`.
+### Database profiles
+
+The default profile is `local-postgres`, which uses PostgreSQL with Flyway migrations and Hibernate schema validation. This keeps risk events, citizen reports, alerts, jobs, and users across backend restarts. The PostgreSQL JDBC driver and Flyway are included in `pom.xml`.
+
+For a local PostgreSQL server:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="local-postgres"
+$env:DATABASE_URL="jdbc:postgresql://localhost:5432/nirikshan"
+$env:DATABASE_USERNAME="postgres"
+$env:DATABASE_PASSWORD="your-local-password"
+mvn spring-boot:run
+```
+
+`DATABASE_URL` may also be a Railway-style `postgresql://...` URL. The backend converts it to the JDBC form automatically. `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` override the `DATABASE_*` variables when present.
+
+For Railway deployment, attach a Railway PostgreSQL service and set the backend service variables from the database service. The usual Railway URL is shaped like this (keep the real credential in Railway variables, never in source control):
+
+```text
+SPRING_PROFILES_ACTIVE=prod
+DATABASE_URL=postgresql://postgres:<password>@postgres.railway.internal:5432/railway
+NIRIKSHAN_JWT_SECRET=<long-random-secret>
+```
+
+Railway may alternatively expose `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`; the `prod` profile supports those variables too. For local testing against the Railway database, use the database service's reachable/public URL if `postgres.railway.internal` is only resolvable inside Railway:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="prod"
+$env:DATABASE_URL="postgresql://postgres:<password>@<railway-public-host>:<port>/railway"
+mvn spring-boot:run
+```
+
+On a fresh PostgreSQL database, Flyway applies `src/main/resources/db/migration/V1__create_initial_schema.sql` before Hibernate starts. Existing non-empty prototype databases are baselined at version `0`, then the idempotent migration runs; it can create missing tables such as `users` without deleting existing data. If the schema is incomplete in another way, startup fails with the exact validation error instead of silently serving a broken app. The seed runner is enabled only for `dev` and `local-postgres`; production does not create demo data or admin accounts.
+
+The public health endpoint is `http://localhost:8080/api/health`. It reports the active profile, database name/schema, missing required tables, and row counts. A `DOWN` response means the backend is pointed at the wrong database, cannot connect, or has an incomplete schema.
+
+To use the disposable offline H2 fallback:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="dev"
+mvn spring-boot:run
+```
+
+The H2 `dev` profile uses `create-drop`; data is intentionally lost when the process stops. H2 console: `http://localhost:8080/h2-console` with JDBC URL `jdbc:h2:mem:nirikshan`.
+
+For a production admin, create the account in the connected PostgreSQL database. `pgcrypto` produces BCrypt-compatible `$2a$` hashes accepted by Spring Security:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+UPDATE users
+SET password_hash = crypt('replace-with-a-strong-password', gen_salt('bf', 12)),
+    role = 'ADMIN', active = true, must_change_password = false
+WHERE lower(email) = lower('admin@example.com');
+```
+
+Always run this against the same database shown by `/api/health`.
 
 ### Video processing jobs
 
@@ -55,8 +124,6 @@ To build:
 ```text
 mvn clean package
 ```
-
-For PostgreSQL, set `SPRING_PROFILES_ACTIVE=prod` and configure `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD` (or the corresponding Spring environment variables).
 
 Swagger UI is available at `http://localhost:8080/swagger-ui.html`; OpenAPI JSON is at `/v3/api-docs`.
 

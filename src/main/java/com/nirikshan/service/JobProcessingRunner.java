@@ -62,6 +62,7 @@ public class JobProcessingRunner {
             for (RiskEventRequest event : events) riskEvents.ingest(event);
             jobs.markComplete(jobId);
         } catch (Exception error) {
+            log.error("CV processing job {} failed", jobId, error);
             jobs.markFailed(jobId, error.getMessage());
         }
     }

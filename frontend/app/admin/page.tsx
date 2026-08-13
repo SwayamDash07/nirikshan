@@ -1,146 +1,38 @@
 "use client";
 
 import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import AppShell, { NavItem } from "../components/AppShell";
+import { Button, Card, Field, Select, Spinner } from "../components/ui";
+import { api, apiBase, clearSession, readSession, type UserInfo } from "../lib/auth";
 import styles from "./admin.module.css";
-import { api, apiBase, clearSession, readSession } from "../lib/auth";
 
 type Zone = { id: number; name: string };
 type Venue = { id: number; name: string };
 type JobStatus = "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
-type Job = {
-  id: number;
-  zoneId: number;
-  zoneName: string;
-  videoFilename: string;
-  status: JobStatus;
-  createdAt: string;
-  completedAt?: string;
-  errorMessage?: string;
-  annotatedVideoPath?: string;
-  summaryPath?: string;
-};
-
+type Job = { id: number; zoneId: number; zoneName: string; videoFilename: string; status: JobStatus; createdAt: string; completedAt?: string; errorMessage?: string; annotatedVideoPath?: string; summaryPath?: string };
 const activeStatuses = new Set<JobStatus>(["PENDING", "PROCESSING"]);
+const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
+function formatDate(value: string) { return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+function UploadWorkspace({ zones, zoneId, setZoneId, file, setFile, uploading, dragging, setDragging, onUpload, notice, error }: { zones: Zone[]; zoneId?: number; setZoneId: (id: number) => void; file?: File; setFile: (file?: File) => void; uploading: boolean; dragging: boolean; setDragging: (value: boolean) => void; onUpload: (event: FormEvent) => void; notice: string; error: string }) {
+  function selectFile(next?: File) { setFile(next); }
+  function onFileChange(event: ChangeEvent<HTMLInputElement>) { selectFile(event.target.files?.[0]); }
+  function onDrop(event: DragEvent<HTMLLabelElement>) { event.preventDefault(); setDragging(false); selectFile(event.dataTransfer.files?.[0]); }
+  return <Card className={styles.uploadCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>NEW PROCESSING JOB</span><h2>Turn footage into signals</h2><p>Choose a zone, add a recording, and publish validated events to the command workspace.</p></div><span className={styles.stepBadge}>STEP 1 OF 3</span></div><form onSubmit={onUpload} className={styles.uploadForm}><Field label="Campus zone"><Select value={zoneId || ""} onChange={(event) => setZoneId(Number(event.target.value))} required><option value="">Choose a zone</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</Select></Field><label className={`${styles.dropzone} ${dragging ? styles.dragging : ""}`} htmlFor="video-file" onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}><input id="video-file" type="file" accept="video/*,.mp4,.mov,.avi,.mkv" onChange={onFileChange} /><span className={styles.uploadIcon}>UP</span><strong>{file ? file.name : "Add a camera recording"}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected` : "Drop a video here or browse from your device"}</small></label><div className={styles.formFooter}><span>Accepted formats: MP4, MOV, AVI, MKV</span><Button size="lg" disabled={!file || !zoneId || uploading}>{uploading ? "Uploading" : "Upload and process"}</Button></div>{notice && <p className={styles.notice} role="status">{notice}</p>}{error && <p className={styles.error} role="alert">{error}</p>}</form></Card>;
 }
 
-export default function AdminUploadPage() {
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [zoneId, setZoneId] = useState<number>();
-  const [file, setFile] = useState<File>();
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+function ProcessingGuide() { return <Card className={styles.guideCard}><span className={styles.kicker}>PROCESSING PIPELINE</span><h2>What happens next</h2><ol className={styles.pipeline}><li><b>01</b><div><strong>Queue</strong><p>The recording is stored as a processing job.</p></div></li><li><b>02</b><div><strong>Analyse</strong><p>Computer vision extracts density and risk events.</p></div></li><li><b>03</b><div><strong>Publish</strong><p>Validated signals appear in the command workspace.</p></div></li></ol></Card>; }
 
-  const loadJobs = useCallback(async (selectedZoneId?: number) => {
-    const suffix = selectedZoneId ? `?zoneId=${selectedZoneId}` : "";
-    setJobs(await api<Job[]>(`/api/jobs${suffix}`));
-  }, []);
+function JobsTable({ jobs, onRefresh, onError }: { jobs: Job[]; onRefresh: () => void; onError: (message: string) => void }) { return <Card className={styles.jobsCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>PROCESSING HISTORY</span><h2>Recent jobs</h2><p>Monitor recordings as they move through the pipeline.</p></div><Button variant="secondary" size="sm" type="button" onClick={onRefresh}>Refresh</Button></div>{jobs.length ? <div className={styles.jobTable}><div className={styles.jobHeader}><span>Recording</span><span>Zone</span><span>Status</span><span>Submitted</span><span>Output</span></div>{jobs.map((job) => <article className={styles.jobRow} key={job.id}><div><strong>{job.videoFilename}</strong>{job.errorMessage && <small className={styles.jobError}>{job.errorMessage}</small>}</div><span>{job.zoneName}</span><span className={`${styles.status} ${styles[job.status]}`}>{job.status}</span><span>{formatDate(job.createdAt)}</span><div className={styles.outputs}>{job.status === "COMPLETE" ? <><a href={`${apiBase}${job.annotatedVideoPath}`} target="_blank" rel="noreferrer">Video</a><a href={`${apiBase}${job.summaryPath}`} target="_blank" rel="noreferrer">Report</a></> : <small>{job.status === "PROCESSING" ? "Analysis running" : job.status === "PENDING" ? "Waiting to start" : "Processing failed"}</small>}</div></article>)}</div> : <div className={styles.empty}>No processing jobs for this workspace yet.</div>}</Card>; }
 
-  useEffect(() => {
-    const session = readSession();
-    if (!session || session.user.role !== "ADMIN" || session.user.mustChangePassword) {
-      clearSession();
-      window.location.replace("/console/login");
-      return;
-    }
-
-    (async () => {
-      try {
-        const venues = await api<Venue[]>("/api/venues");
-        if (!venues.length) throw new Error("No venue is available yet.");
-        const fetchedZones = await api<Zone[]>(`/api/venues/${venues[0].id}/zones`);
-        setZones(fetchedZones);
-        setZoneId(fetchedZones[0]?.id);
-        await loadJobs();
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Could not load upload workspace.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [loadJobs]);
-
-  useEffect(() => {
-    if (!jobs.some((job) => activeStatuses.has(job.status))) return;
-    const timer = window.setInterval(() => { loadJobs(zoneId).catch(() => undefined); }, 3000);
-    return () => window.clearInterval(timer);
-  }, [jobs, loadJobs, zoneId]);
-
-  useEffect(() => {
-    if (!loading) loadJobs(zoneId).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load jobs."));
-  }, [zoneId, loading, loadJobs]);
-
-  function selectFile(next?: File) {
-    setFile(next);
-    setNotice("");
-    if (next) setError("");
-  }
-
-  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    selectFile(event.target.files?.[0]);
-  }
-
-  function onDrop(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    setDragging(false);
-    selectFile(event.dataTransfer.files?.[0]);
-  }
-
-  async function upload(event: FormEvent) {
-    event.preventDefault();
-    if (!file || !zoneId) return;
-    setUploading(true);
-    setError("");
-    setNotice("");
-    try {
-      const body = new FormData();
-      body.append("zoneId", String(zoneId));
-      body.append("file", file);
-      const result = await api<Job>("/api/jobs/upload", { method: "POST", body });
-      setFile(undefined);
-      setNotice(`Job #${result.id} was queued for processing.`);
-      await loadJobs(zoneId);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  if (loading) return <main className={styles.state}>Loading upload workspace…</main>;
-
-  return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <a href="/console" className={styles.brand}><span>◈</span><div><b>Nirikshan</b><small>OPERATIONS ADMIN</small></div></a>
-        <nav><a href="/console">Command dashboard</a><button onClick={() => { clearSession(); window.location.replace("/console/login"); }}>Sign out</button></nav>
-      </header>
-      <section className={styles.hero}><span>VIDEO INGESTION</span><h1>Process a campus<br /><em>camera recording.</em></h1><p>Upload a clip, assign its physical zone, and Nirikshan will generate visual evidence and live safety events.</p></section>
-      <section className={styles.workspace}>
-        <form className={styles.uploadCard} onSubmit={upload}>
-          <div className={styles.cardTitle}><div><span>NEW PROCESSING JOB</span><h2>Upload a recording</h2></div><i>Internal tool</i></div>
-          <label className={styles.field}>Campus zone<select value={zoneId || ""} onChange={(event) => setZoneId(Number(event.target.value))}>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
-          <label className={`${styles.dropzone} ${dragging ? styles.dragging : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
-            <input type="file" accept="video/*,.mp4,.mov,.avi,.mkv" onChange={onFileChange} />
-            <strong>{file ? file.name : "Drop video here"}</strong>
-            <span>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected` : "or click to browse for a campus video"}</span>
-          </label>
-          <button className={styles.uploadButton} disabled={!file || !zoneId || uploading}>{uploading ? "Uploading…" : "Upload & process video"}</button>
-          {notice && <p className={styles.notice}>{notice}</p>}
-          {error && <p className={styles.error}>{error}</p>}
-        </form>
-        <aside className={styles.flow}><span>WHAT HAPPENS NEXT</span><ol><li><b>1</b><div><strong>Queue</strong><small>Video is stored per processing job.</small></div></li><li><b>2</b><div><strong>Analyse</strong><small>CV produces events and annotated footage.</small></div></li><li><b>3</b><div><strong>Publish</strong><small>Validated events update the command dashboard.</small></div></li></ol></aside>
-      </section>
-      <section className={styles.jobs}>
-        <div className={styles.jobsHeading}><div><span>PROCESSING HISTORY</span><h2>{zoneId ? zones.find((zone) => zone.id === zoneId)?.name || "Selected zone" : "All zones"}</h2></div><button onClick={() => loadJobs(zoneId).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not refresh jobs."))}>Refresh</button></div>
-        {jobs.length ? <div className={styles.jobList}>{jobs.map((job) => <article className={styles.job} key={job.id}><div className={styles.jobMain}><span className={`${styles.status} ${styles[job.status]}`}>{job.status}</span><div><strong>{job.videoFilename}</strong><small>{job.zoneName} · submitted {formatDate(job.createdAt)}</small>{job.errorMessage && <p className={styles.jobError}>{job.errorMessage}</p>}</div></div><div className={styles.actions}>{job.status === "COMPLETE" ? <><a href={`${apiBase}${job.annotatedVideoPath}`} target="_blank" rel="noreferrer">Annotated video</a><a href={`${apiBase}${job.summaryPath}`} target="_blank" rel="noreferrer">Summary report</a></> : <span>{job.status === "PROCESSING" ? "Analysis running…" : job.status === "PENDING" ? "Waiting to start…" : "Processing failed"}</span>}</div></article>)}</div> : <div className={styles.empty}>No processing jobs for this zone yet.</div>}
-      </section>
-    </main>
-  );
+function AdminUpload({ user }: { user: UserInfo }) {
+  const [zones, setZones] = useState<Zone[]>([]); const [jobs, setJobs] = useState<Job[]>([]); const [zoneId, setZoneId] = useState<number>(); const [file, setFile] = useState<File>(); const [loading, setLoading] = useState(true); const [uploading, setUploading] = useState(false); const [dragging, setDragging] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
+  const loadJobs = useCallback(async (selectedZoneId?: number) => { const suffix = selectedZoneId ? `?zoneId=${selectedZoneId}` : ""; setJobs(await api<Job[]>(`/api/jobs${suffix}`)); }, []);
+  useEffect(() => { if (user.mustChangePassword) { window.location.replace("/alerts/security"); return; } (async () => { try { const venues = await api<Venue[]>("/api/venues"); if (!venues.length) throw new Error("No venue is available yet."); const fetchedZones = await api<Zone[]>(`/api/venues/${venues[0].id}/zones`); setZones(fetchedZones); setZoneId(fetchedZones[0]?.id); await loadJobs(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load upload workspace."); } finally { setLoading(false); } })(); }, [loadJobs, user.mustChangePassword]);
+  useEffect(() => { if (!jobs.some((job) => activeStatuses.has(job.status))) return; const timer = window.setInterval(() => { loadJobs(zoneId).catch(() => undefined); }, 3000); return () => window.clearInterval(timer); }, [jobs, loadJobs, zoneId]); useEffect(() => { if (!loading) loadJobs(zoneId).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load jobs.")); }, [zoneId, loading, loadJobs]);
+  async function upload(event: FormEvent) { event.preventDefault(); if (!file || !zoneId) return; setUploading(true); setError(""); setNotice(""); try { const body = new FormData(); body.append("zoneId", String(zoneId)); body.append("file", file); const result = await api<Job>("/api/jobs/upload", { method: "POST", body }); setFile(undefined); setNotice(`Job ${result.id} is queued for processing.`); await loadJobs(zoneId); } catch (reason) { setError(reason instanceof Error ? reason.message : "Upload failed."); } finally { setUploading(false); } }
+  if (loading) return <AppShell user={user} title="Video ingestion" active="Video ingestion" navItems={navItems}><Spinner label="Loading ingestion workspace" /></AppShell>;
+  return <AppShell user={user} title="Video ingestion" subtitle="Process camera recordings into explainable safety signals" active="Video ingestion" navItems={navItems}><div className={styles.workspace}><UploadWorkspace zones={zones} zoneId={zoneId} setZoneId={(id) => { setZoneId(id); setError(""); }} file={file} setFile={(next) => { setFile(next); setNotice(""); if (next) setError(""); }} uploading={uploading} dragging={dragging} setDragging={setDragging} onUpload={upload} notice={notice} error={error} /><ProcessingGuide /></div><JobsTable jobs={jobs} onRefresh={() => loadJobs(zoneId).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not refresh jobs."))} onError={setError} /></AppShell>;
 }
+
+export default function Page() { const [user, setUser] = useState<UserInfo>(); useEffect(() => { const session = readSession(); if (!session || session.user.role !== "ADMIN") { clearSession(); window.location.replace("/console/login"); return; } setUser(session.user); }, []); if (!user) return <main className={styles.state}>Checking access</main>; return <AdminUpload user={user} />; }

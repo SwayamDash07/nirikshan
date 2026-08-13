@@ -9,6 +9,7 @@ export type UserInfo = {
   assignedZoneId?: number | null;
   assignedZoneName?: string | null;
   active: boolean;
+  protectedAdmin: boolean;
 };
 
 export type Session = { token: string; user: UserInfo };

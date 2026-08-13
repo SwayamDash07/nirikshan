@@ -1,0 +1,77 @@
+"use client";
+
+import { ChangeEvent, ReactNode, useEffect, useState } from "react";
+import { clearSession, type Role, type UserInfo } from "../lib/auth";
+import Icon, { IconName } from "./Icon";
+import ThemeToggle from "./ThemeToggle";
+import styles from "./shell.module.css";
+
+export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
+type PreviewRole = "SECURITY" | "CITIZEN";
+
+const roleLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security operator", CITIZEN: "Campus member" };
+const switchLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security personnel", CITIZEN: "Customer view" };
+const sidebarKey = "nirikshan.sidebar-collapsed";
+
+export function AppShell({ user, title, subtitle, active, navItems, previewRole, children }: { user: UserInfo; title: string; subtitle?: string; active: string; navItems: NavItem[]; previewRole?: PreviewRole; children: ReactNode }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [queryPreview, setQueryPreview] = useState<PreviewRole>();
+  const workspaceRole = previewRole || queryPreview || user.role;
+  const homeHref = workspaceRole === "ADMIN" ? "/console" : workspaceRole === "SECURITY" ? "/security" : "/alerts";
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(sidebarKey) === "true");
+    const preview = new URLSearchParams(window.location.search).get("preview");
+    if (preview === "security") setQueryPreview("SECURITY");
+    if (preview === "customer") setQueryPreview("CITIZEN");
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(sidebarKey, String(next));
+      return next;
+    });
+  }
+
+  function signOut() {
+    clearSession();
+    window.location.replace("/alerts");
+  }
+
+  function changeWorkspace(event: ChangeEvent<HTMLSelectElement>) {
+    const destinations: Record<Role, string> = { ADMIN: "/console", SECURITY: "/security?preview=security", CITIZEN: "/alerts?preview=customer" };
+    window.location.assign(destinations[event.target.value as Role]);
+  }
+
+  const sidebarClass = `${styles.sidebar} ${collapsed ? styles.collapsed : ""} ${mobileOpen ? styles.mobileOpen : ""}`;
+  const mainClass = `${styles.main} ${collapsed ? styles.mainCollapsed : ""}`;
+
+  return <div className={styles.app}>
+    <aside className={sidebarClass} aria-label="Application sidebar">
+      <div className={styles.sidebarTop}>
+        <div className={styles.brandRow}>
+          <a className={styles.brand} href={homeHref} onClick={() => setMobileOpen(false)}><span className={styles.brandMark}>N</span><span><b>Nirikshan</b><small>Safety intelligence</small></span></a>
+          <button className={styles.sidebarToggle} type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><Icon name="menu" /></button>
+        </div>
+        <div className={styles.workspaceSwitch}><span className={styles.workspaceDot} />{user.role === "ADMIN" ? <><label className={styles.srOnly} htmlFor="workspace-view">Switch workspace view</label><select id="workspace-view" className={styles.workspaceSelect} value={workspaceRole} onChange={changeWorkspace}><option value="ADMIN">{switchLabels.ADMIN}</option><option value="SECURITY">{switchLabels.SECURITY}</option><option value="CITIZEN">{switchLabels.CITIZEN}</option></select><Icon name="chevron" /></> : <><span>{roleLabels[user.role]}</span><Icon name="chevron" /></>}</div>
+      </div>
+      <nav className={styles.sideNav} aria-label="Primary navigation">{navItems.map((item) => <a key={item.href} className={`${styles.navItem} ${active === item.label ? styles.active : ""}`} href={item.href} aria-current={active === item.label ? "page" : undefined} onClick={() => setMobileOpen(false)}><Icon name={item.icon} /><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}</a>)}</nav>
+      <div className={styles.sidebarBottom}>
+        <a className={styles.accountLink} href="/alerts/security" onClick={() => setMobileOpen(false)}><span className={styles.avatar}>{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.email}</small></span></a>
+        <button className={styles.signOut} type="button" onClick={signOut}><Icon name="logout" /><span>Sign out</span></button>
+      </div>
+    </aside>
+    {mobileOpen && <button className={styles.mobileBackdrop} type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
+    <header className={styles.mobileHeader}><a className={styles.brand} href={homeHref}><span className={styles.brandMark}>N</span><b>Nirikshan</b></a><ThemeToggle /><button className={styles.mobileMenu} type="button" onClick={() => setMobileOpen((current) => !current)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen}><Icon name="menu" /></button></header>
+    <main className={mainClass}>
+      <div className={styles.mobileNav}>{navItems.slice(0, 5).map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={item.href}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
+      <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><ThemeToggle /></div></header>
+      {queryPreview && <div className={styles.previewBanner} role="status">{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</div>}
+      {children}
+    </main>
+  </div>;
+}
+
+export default AppShell;

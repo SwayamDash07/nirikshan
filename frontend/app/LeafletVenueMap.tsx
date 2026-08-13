@@ -4,7 +4,8 @@ import { useEffect, useMemo } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet.heat";
-import styles from "./dashboard.module.css";
+import styles from "./console/console.module.css";
+import { useTheme } from "./components/ThemeProvider";
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
@@ -25,35 +26,37 @@ type Venue = {
 };
 
 const riskColors: Record<RiskLevel, string> = {
-  LOW: "#24a26a",
-  MEDIUM: "#d69a16",
-  HIGH: "#e97825",
-  CRITICAL: "#d84b54",
+  LOW: "var(--risk-low)",
+  MEDIUM: "var(--risk-medium)",
+  HIGH: "var(--risk-high)",
+  CRITICAL: "var(--risk-critical)",
 };
 
 function formatTime(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? "—" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(date.valueOf()) ? "Not available" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function HeatLayer({ zones }: { zones: Zone[] }) {
   const map = useMap();
+  const { mode } = useTheme();
   const points = useMemo(() => {
     const criticalReference = Math.max(...zones.map((zone) => zone.currentDensity), 6);
     return zones.map((zone) => [zone.latitude, zone.longitude, Math.min(1, Math.pow(zone.currentDensity / criticalReference, 0.82))] as [number, number, number]);
   }, [zones]);
 
   useEffect(() => {
+    const token = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
     const heatLayer = (L as typeof L & { heatLayer: (points: [number, number, number][], options: Record<string, unknown>) => L.Layer }).heatLayer(points, {
       radius: 78,
       blur: 54,
       maxZoom: 17,
       minOpacity: 0.22,
-      gradient: { 0.05: "#4e9fca", 0.22: "#2caa72", 0.42: "#d6b13a", 0.68: "#e97825", 1: "#d84b54" },
+      gradient: { 0.05: token("--primary", "#2563eb"), 0.22: token("--risk-low", "#027a48"), 0.42: token("--risk-medium", "#b54708"), 0.68: token("--risk-high", "#c4320a"), 1: token("--risk-critical", "#d92d20") },
     });
     heatLayer.addTo(map);
     return () => { map.removeLayer(heatLayer); };
-  }, [map, points]);
+  }, [map, points, mode]);
 
   return null;
 }
@@ -83,7 +86,7 @@ export default function LeafletVenueMap({ venue, zones, selectedId, onSelect }: 
                 <div className={styles.mapPopup}>
                   <span>ZONE {String(zone.id).padStart(2, "0")}</span>
                   <strong>{zone.name}</strong>
-                  <div><b style={{ color }}>● {zone.currentRiskLevel}</b><b>{zone.currentDensity.toFixed(2)} p/m²</b></div>
+                  <div><b style={{ color }}>{zone.currentRiskLevel}</b><b>{zone.currentDensity.toFixed(2)} people per m2</b></div>
                   <small>Last updated {formatTime(zone.lastUpdated)}</small>
                 </div>
               </Popup>
@@ -92,7 +95,7 @@ export default function LeafletVenueMap({ venue, zones, selectedId, onSelect }: 
         })}
       </MapContainer>
       <div className={styles.mapLegend}><span><i style={{ background: riskColors.LOW }} />Normal</span><span><i style={{ background: riskColors.MEDIUM }} />Watch</span><span><i style={{ background: riskColors.CRITICAL }} />Critical</span></div>
-      <div className={styles.densityLegend}><strong>Density heat</strong><span><i className={styles.heatLow} />0–2</span><span><i className={styles.heatMedium} />2–4</span><span><i className={styles.heatHigh} />4–6</span><span><i className={styles.heatCritical} />6+ p/m²</span></div>
+      <div className={styles.densityLegend}><strong>Density heat</strong><span><i className={styles.heatLow} />0 to 2</span><span><i className={styles.heatMedium} />2 to 4</span><span><i className={styles.heatHigh} />4 to 6</span><span><i className={styles.heatCritical} />6+ people per m2</span></div>
       <div className={styles.mapScale}><span>OPENSTREETMAP LAYER</span><strong>{zones.length} zones</strong></div>
     </div>
   );

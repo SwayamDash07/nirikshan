@@ -71,14 +71,25 @@ public class DevDataSeeder {
     }
 
     private void seedAdmin() {
-        if (!adminEmail.isBlank() && !adminPassword.isBlank()
-                && !userRepository.existsByEmailIgnoreCase(adminEmail)) {
+        if (adminEmail.isBlank()) {
+            return;
+        }
+        var existing = userRepository.findByEmailIgnoreCase(adminEmail).orElse(null);
+        if (existing != null) {
+            if (existing.getRole() == UserRole.ADMIN && !existing.isProtectedAdmin()) {
+                existing.setProtectedAdmin(true);
+                userRepository.save(existing);
+            }
+            return;
+        }
+        if (!adminPassword.isBlank()) {
             User admin = new User();
             admin.setName("Nirikshan Admin");
             admin.setEmail(adminEmail.toLowerCase());
             admin.setPasswordHash(passwords.encode(adminPassword));
             admin.setRole(UserRole.ADMIN);
             admin.setMustChangePassword(false);
+            admin.setProtectedAdmin(true);
             userRepository.save(admin);
         }
     }

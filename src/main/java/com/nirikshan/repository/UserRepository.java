@@ -6,4 +6,7 @@ public interface UserRepository extends JpaRepository<User,Long>{
  @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "assignedZone") Optional<User> findByEmailIgnoreCase(String email);
  boolean existsByEmailIgnoreCase(String email);
  @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "assignedZone") List<User> findAllByOrderByCreatedAtDesc();
+ @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "assignedZone") List<User> findAllByRoleOrderByCreatedAtAsc(com.nirikshan.model.UserRole role);
+ List<User> findAllByCreatedByAdmin(User admin);
+ Optional<User> findFirstByRoleOrderByCreatedAtAsc(com.nirikshan.model.UserRole role);
 }

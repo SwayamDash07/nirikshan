@@ -2,24 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api, readSession, saveSession, type Session } from "../../lib/auth";
+import { Button, Field, Input } from "../../components/ui";
+import ThemeToggle from "../../components/ThemeToggle";
+import Icon from "../../components/Icon";
+import styles from "./login.module.css";
 
-export default function ConsoleLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [working, setWorking] = useState(false);
-  useEffect(() => { if (readSession()?.user.role === "ADMIN") window.location.replace("/console"); }, []);
-  async function login(event: FormEvent) {
-    event.preventDefault(); setWorking(true); setError("");
-    try {
-      const session = await api<Session>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-      if (session.user.role !== "ADMIN") throw new Error("This account is not permitted to access the command console.");
-      saveSession(session); window.location.replace("/console");
-    } catch (err) { setError(err instanceof Error ? err.message : "Login failed"); }
-    finally { setWorking(false); }
-  }
-  return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#edf3f8", padding: 20 }}><form onSubmit={login} style={{ width: "min(100%, 390px)", padding: 30, background: "white", borderRadius: 18, boxShadow: "0 18px 45px #16365b20" }}><p style={{ color: "#2471d9", fontSize: 11, fontWeight: 800, letterSpacing: ".12em" }}>NIRIKSHAN / RESTRICTED</p><h1 style={{ margin: "8px 0", color: "#16365b" }}>Command console</h1><p style={{ color: "#64788e", fontSize: 13, lineHeight: 1.5 }}>Sign in with an administrator account.</p><label style={label}>Email<input style={input} value={email} type="email" onChange={(e) => setEmail(e.target.value)} required /></label><label style={label}>Password<input style={input} value={password} type="password" onChange={(e) => setPassword(e.target.value)} required /></label>{error && <p style={{ color: "#c8424d", fontSize: 12 }}>{error}</p>}<button disabled={working} style={button}>{working ? "Signing in…" : "Sign in"}</button></form></main>;
-}
-const label = { display: "grid", gap: 6, marginTop: 16, color: "#3b5570", fontSize: 12, fontWeight: 700 } as const;
-const input = { padding: "12px", border: "1px solid #d7e2eb", borderRadius: 9, fontSize: 14 } as const;
-const button = { width: "100%", marginTop: 22, padding: "13px", border: 0, borderRadius: 9, color: "white", background: "#2164d7", fontWeight: 800, cursor: "pointer" } as const;
+export default function ConsoleLogin() { const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [working, setWorking] = useState(false); useEffect(() => { if (readSession()?.user.role === "ADMIN") window.location.replace("/console"); }, []); async function login(event: FormEvent) { event.preventDefault(); setWorking(true); setError(""); try { const session = await api<Session>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); if (session.user.role !== "ADMIN") throw new Error("This account is not permitted to access the command console."); saveSession(session); window.location.replace("/console"); } catch (reason) { setError(reason instanceof Error ? reason.message : "Login failed"); } finally { setWorking(false); } } return <main className={styles.page}><section className={styles.story}><div className={styles.brand}><span className={styles.brandMark}>N</span><span><b>Nirikshan</b><small>Command operations</small></span></div><div className={styles.storyBody}><span className={styles.kicker}>OPERATIONS CONSOLE</span><h1>Make safer decisions with a clearer signal.</h1><p>Monitor venues, inspect zone telemetry, and coordinate a response while the situation is still manageable.</p><div className={styles.storyList}><span><Icon name="map" />Live venue coverage</span><span><Icon name="activity" />Explainable risk signals</span><span><Icon name="bell" />A focused response queue</span></div></div><small className={styles.storyFooter}>Spring Boot, STOMP, REST</small></section><section className={styles.formArea}><div className={styles.formTop}><a href="/alerts">Back to campus alerts</a><ThemeToggle /></div><form className={styles.card} onSubmit={login}><span className={styles.kicker}>RESTRICTED ACCESS</span><h2>Sign in to command</h2><p>Use an administrator account to open the operations workspace.</p><div className={styles.fields}><Field label="Email"><Input value={email} type="email" autoComplete="username" onChange={(event) => setEmail(event.target.value)} required /></Field><Field label="Password"><Input value={password} type="password" autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required /></Field></div>{error && <div className={styles.error} role="alert">{error}</div>}<Button size="lg" disabled={working}>{working ? "Signing in" : "Open command workspace"}</Button><small className={styles.note}>Administrator access is issued by the safety team.</small></form></section></main>; }

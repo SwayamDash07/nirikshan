@@ -13,7 +13,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}")
     private String pipelineDir;
 
-    @Value("${nirikshan.web.allowed-origin-patterns:http://localhost:3000,http://127.0.0.1:3000}")
+    @Value("${nirikshan.web.allowed-origin-patterns:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}")
     private String allowedOriginPatterns;
 
     @Override
@@ -29,7 +29,9 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        String pipelineLocation = Path.of(pipelineDir).toAbsolutePath().normalize().toUri().toString();
         String outputsLocation = Path.of(pipelineDir).toAbsolutePath().normalize().resolve("outputs").toUri().toString();
+        registry.addResourceHandler("/feed-files/**").addResourceLocations(pipelineLocation);
         registry.addResourceHandler("/job-files/**").addResourceLocations(outputsLocation);
     }
 }

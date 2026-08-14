@@ -276,7 +276,13 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-    process_every = max(1, int(thresholds.get("processEveryNFrames", 3)))
+    if args.loop:
+        # Sampling density follows the source FPS, while event cadence below
+        # is controlled by the wall clock rather than frame numbers.
+        detection_samples_per_second = max(1.0, float(thresholds.get("loopDetectionSamplesPerSecond", 5.0)))
+        process_every = max(1, round(fps / detection_samples_per_second))
+    else:
+        process_every = max(1, int(thresholds.get("processEveryNFrames", 3)))
     emit_every = float(thresholds.get("emitEverySeconds", 1.0))
     lookback = float(thresholds.get("lookbackSeconds", 10.0))
     smoothing_window = float(thresholds.get("rollingAverageSeconds", 3.0))
@@ -316,7 +322,11 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
         writer = make_writer(raw_annotation_output, fps, frame_width, frame_height)
 
     frame_index = 0
+    loop_iteration = 0
     last_emit = -emit_every
+    next_live_emit_at = time.monotonic()
+    next_frame_due = time.monotonic()
+    live_mode = bool(args.loop or args.post_live)
     latest_risk: ZoneRisk | None = None
     latest_trend = "→"
     latest_density = 0.0
@@ -329,7 +339,19 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
         while True:
             ok, frame = capture.read()
             if not ok:
-                break
+                if not args.loop:
+                    break
+                capture.release()
+                capture = cv2.VideoCapture(str(args.input))
+                if not capture.isOpened():
+                    raise RuntimeError(f"Could not reopen input video after loop {loop_iteration}: {args.input}")
+                loop_iteration += 1
+                frame_index = 0
+                tracker.previous = []
+                raw_history.clear()
+                smoothed_history.clear()
+                print(f"LOOP_ITERATION {loop_iteration}", flush=True)
+                continue
             timestamp_seconds = frame_index / fps
             if frame_index % process_every == 0:
                 detections = detect_people(model, frame, confidence, device=device, augment=augment)
@@ -377,10 +399,13 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                     print(f"  resulting risk: {latest_risk.level} (score {latest_risk.score:.3f})")
                     debug_reported = True
 
-                if timestamp_seconds - last_emit >= emit_every:
+                now_monotonic = time.monotonic()
+                should_emit = now_monotonic >= next_live_emit_at if args.loop else timestamp_seconds - last_emit >= emit_every
+                if should_emit:
+                    event_timestamp = datetime.now(timezone.utc) if args.loop else replay_start + timedelta(seconds=timestamp_seconds)
                     events.append({
                         "zoneId": args.zone_id,
-                        "timestamp": (replay_start + timedelta(seconds=timestamp_seconds)).isoformat().replace("+00:00", "Z"),
+                        "timestamp": event_timestamp.isoformat().replace("+00:00", "Z"),
                         "densityScore": round(latest_risk.density, 4),
                         "peopleCount": current_total_people,
                         "movementSpeed": round(latest_risk.speed, 4),
@@ -388,14 +413,22 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                         "explanation": latest_risk.explanation,
                         "sourceClipId": args.source_clip_id or Path(args.input).stem,
                     })
-                    if args.post_live:
-                        if last_posted_video_seconds is not None:
-                            wait_seconds = max(0.0, timestamp_seconds - last_posted_video_seconds) + args.post_delay
-                            if wait_seconds > 0:
-                                time.sleep(wait_seconds)
-                        post_event(events[-1], args.post_url or "http://localhost:8080/api/risk-events", args.timeout)
-                        last_posted_video_seconds = timestamp_seconds
+                    if live_mode:
+                        if args.loop:
+                            post_event(events[-1], args.post_url or "http://localhost:8080/api/risk-events", args.timeout)
+                            next_live_emit_at = now_monotonic + emit_every
+                        else:
+                            if last_posted_video_seconds is not None:
+                                wait_seconds = max(0.0, timestamp_seconds - last_posted_video_seconds) + args.post_delay
+                                if wait_seconds > 0:
+                                    time.sleep(wait_seconds)
+                            post_event(events[-1], args.post_url or "http://localhost:8080/api/risk-events", args.timeout)
+                            last_posted_video_seconds = timestamp_seconds
                     last_emit = timestamp_seconds
+                    if args.loop:
+                        if len(events) > 600:
+                            del events[:-600]
+                        Path(args.output).write_text(json.dumps(events, indent=2), encoding="utf-8")
 
             if writer is not None:
                 if args.heatmap_overlay is not False:
@@ -421,6 +454,9 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (230, 230, 230), 1, cv2.LINE_AA)
                 writer.write(frame)
             frame_index += 1
+            if args.loop:
+                next_frame_due += 1.0 / max(fps, 1.0)
+                time.sleep(max(0.0, next_frame_due - time.monotonic()))
     finally:
         capture.release()
         if writer is not None:
@@ -468,6 +504,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-time", help="Replay start timestamp in ISO 8601; defaults to current UTC time")
     parser.add_argument("--post-url", help="Backend risk-event URL; used with --post-live")
     parser.add_argument("--post-live", action="store_true", help="POST each generated event during processing")
+    parser.add_argument("--loop", action="store_true", help="Run continuously, restart at EOF, and timestamp each event with current UTC time")
     parser.add_argument("--post-delay", type=float, default=0.0, help="Extra seconds added between live POSTs")
     parser.add_argument("--timeout", type=float, default=10.0, help="HTTP POST timeout in seconds")
     return parser.parse_args()

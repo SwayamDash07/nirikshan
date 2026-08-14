@@ -1,0 +1,21 @@
+.picker { max-width: 1240px; margin: 0 auto 18px; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.pickerTopline { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.pickerTopline strong { display: block; margin-top: 5px; color: var(--text); font-size: 15px; }
+.status { display: inline-flex; align-items: center; gap: 6px; max-width: 300px; color: var(--text-muted); font-size: 10px; font-weight: 700; text-align: right; }
+.status i { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.statusGood { color: var(--success); }
+.statusWarn { color: var(--danger); }
+.searchRow { display: flex; gap: 9px; margin-top: 13px; }
+.searchBox { display: flex; align-items: center; flex: 1; gap: 8px; min-height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); background: var(--surface-subtle); }
+.searchBox input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; font: inherit; font-size: 12px; }
+.searchBox input::placeholder { color: var(--text-muted); }
+.locationButton, .nearest { min-height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--primary); background: var(--surface); font-size: 11px; font-weight: 750; cursor: pointer; }
+.locationButton:disabled { color: var(--text-muted); cursor: wait; }
+.results { display: grid; gap: 4px; margin-top: 6px; padding: 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 12px 28px var(--shadow-color); }
+.results button { display: grid; gap: 3px; padding: 9px; border: 0; border-radius: 6px; color: var(--text); background: transparent; text-align: left; cursor: pointer; font-size: 12px; font-weight: 700; }
+.results button:hover { background: var(--surface-subtle); }
+.results small { color: var(--text-muted); font-size: 10px; font-weight: 500; }
+.results p { margin: 8px; color: var(--text-muted); font-size: 11px; }
+.nearest { display: block; margin-top: 9px; color: var(--success); border-color: var(--success); background: var(--surface-subtle); }
+.unavailable { margin: 11px 0 0; padding: 10px; border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-soft); font-size: 11px; line-height: 1.5; }
+@media (max-width: 700px) { .picker { margin: 0 0 14px; padding: 13px; }.pickerTopline { align-items: flex-start; flex-direction: column; gap: 8px; }.status { max-width: none; text-align: left; }.searchRow { flex-direction: column; }.locationButton { width: 100%; }.locationButton span { margin-left: 4px; } }

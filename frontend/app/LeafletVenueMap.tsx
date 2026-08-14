@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet.heat";
+import { Fragment, useMemo } from "react";
+import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
 import styles from "./console/console.module.css";
-import { useTheme } from "./components/ThemeProvider";
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
@@ -15,6 +12,7 @@ type Zone = {
   latitude: number;
   longitude: number;
   currentDensity: number;
+  currentPeopleCount: number;
   currentRiskLevel: RiskLevel;
   lastUpdated: string;
 };
@@ -34,31 +32,7 @@ const riskColors: Record<RiskLevel, string> = {
 
 function formatTime(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? "Not available" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function HeatLayer({ zones }: { zones: Zone[] }) {
-  const map = useMap();
-  const { mode } = useTheme();
-  const points = useMemo(() => {
-    const criticalReference = Math.max(...zones.map((zone) => zone.currentDensity), 6);
-    return zones.map((zone) => [zone.latitude, zone.longitude, Math.min(1, Math.pow(zone.currentDensity / criticalReference, 0.82))] as [number, number, number]);
-  }, [zones]);
-
-  useEffect(() => {
-    const token = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-    const heatLayer = (L as typeof L & { heatLayer: (points: [number, number, number][], options: Record<string, unknown>) => L.Layer }).heatLayer(points, {
-      radius: 78,
-      blur: 54,
-      maxZoom: 17,
-      minOpacity: 0.22,
-      gradient: { 0.05: token("--primary", "#2563eb"), 0.22: token("--risk-low", "#027a48"), 0.42: token("--risk-medium", "#b54708"), 0.68: token("--risk-high", "#c4320a"), 1: token("--risk-critical", "#d92d20") },
-    });
-    heatLayer.addTo(map);
-    return () => { map.removeLayer(heatLayer); };
-  }, [map, points, mode]);
-
-  return null;
+  return Number.isNaN(date.valueOf()) ? "Not available" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 export default function LeafletVenueMap({ venue, zones, selectedId, onSelect }: { venue?: Venue; zones: Zone[]; selectedId?: number; onSelect: (id: number) => void }) {
@@ -69,33 +43,37 @@ export default function LeafletVenueMap({ venue, zones, selectedId, onSelect }: 
   }, [venue, zones]);
 
   if (!zones.length) return <div className={styles.emptyPanel}>No mapped zones available yet.</div>;
+  const maxHeadcount = Math.max(1, ...zones.map((zone) => zone.currentPeopleCount ?? 0));
 
-  const maxDensity = Math.max(...zones.map((zone) => zone.currentDensity), 1);
   return (
     <div className={styles.leafletPanel}>
       <div className={styles.mapTopline}><span className={styles.liveDot} /> Live venue telemetry <span className={styles.mapCoordinates}>OpenStreetMap · {venue?.name || "Venue map"}</span></div>
       <MapContainer center={center} zoom={16} scrollWheelZoom className={styles.leafletMap}>
         <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <HeatLayer zones={zones} />
         {zones.map((zone) => {
           const color = riskColors[zone.currentRiskLevel];
-          const radius = 8 + Math.min(18, (zone.currentDensity / maxDensity) * 18);
+          const headcountSignal = Math.min(1, Math.max(0, (zone.currentPeopleCount ?? 0) / maxHeadcount));
+          const coreRadius = 3.5 + headcountSignal * 6;
+          const glowRadius = coreRadius * 1.85;
           return (
-            <CircleMarker key={zone.id} center={[zone.latitude, zone.longitude]} radius={radius} pathOptions={{ color, fillColor: color, fillOpacity: 0.78, weight: 3, className: zone.currentRiskLevel === "CRITICAL" ? "critical-pulse" : "" }} eventHandlers={{ click: () => onSelect(zone.id) }}>
-              <Popup>
-                <div className={styles.mapPopup}>
-                  <span>ZONE {String(zone.id).padStart(2, "0")}</span>
-                  <strong>{zone.name}</strong>
-                  <div><b style={{ color }}>{zone.currentRiskLevel}</b><b>{zone.currentDensity.toFixed(2)} people per m2</b></div>
-                  <small>Last updated {formatTime(zone.lastUpdated)}</small>
-                </div>
-              </Popup>
-            </CircleMarker>
+            <Fragment key={zone.id}>
+              <CircleMarker center={[zone.latitude, zone.longitude]} radius={glowRadius} pathOptions={{ color, fillColor: color, fillOpacity: 0.11, weight: 1, className: "nirikshan-heat-marker" }} eventHandlers={{ click: () => onSelect(zone.id) }}>
+                <Popup>
+                  <div className={styles.mapPopup}>
+                    <span>ZONE {String(zone.id).padStart(2, "0")}</span>
+                    <strong>{zone.name}</strong>
+                    <div><b style={{ color }}>{zone.currentRiskLevel}</b><b>{zone.currentDensity.toFixed(2)} people per m2</b></div>
+                    <small>Last updated {formatTime(zone.lastUpdated)}</small>
+                  </div>
+                </Popup>
+              </CircleMarker>
+              <CircleMarker center={[zone.latitude, zone.longitude]} radius={coreRadius} pathOptions={{ color, fillColor: color, fillOpacity: 0.96, weight: 1.5, className: "nirikshan-core-marker" }} eventHandlers={{ click: () => onSelect(zone.id) }} />
+            </Fragment>
           );
         })}
       </MapContainer>
-      <div className={styles.mapLegend}><span><i style={{ background: riskColors.LOW }} />Normal</span><span><i style={{ background: riskColors.MEDIUM }} />Watch</span><span><i style={{ background: riskColors.CRITICAL }} />Critical</span></div>
-      <div className={styles.densityLegend}><strong>Density heat</strong><span><i className={styles.heatLow} />0 to 2</span><span><i className={styles.heatMedium} />2 to 4</span><span><i className={styles.heatHigh} />4 to 6</span><span><i className={styles.heatCritical} />6+ people per m2</span></div>
+      <div className={styles.mapLegend}><span><i style={{ background: riskColors.LOW }} />Normal</span><span><i style={{ background: riskColors.MEDIUM }} />Watch</span><span><i style={{ background: riskColors.HIGH }} />High</span><span><i style={{ background: riskColors.CRITICAL }} />Critical</span></div>
+      <div className={styles.densityLegend}><strong>Marker scale</strong><span>Circle size follows live headcount</span></div>
       <div className={styles.mapScale}><span>OPENSTREETMAP LAYER</span><strong>{zones.length} zones</strong></div>
     </div>
   );

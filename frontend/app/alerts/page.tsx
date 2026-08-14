@@ -4,13 +4,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import AppShell, { NavItem } from "../components/AppShell";
 import { Button, Card, Field, Input, Spinner } from "../components/ui";
+import CampusLocationPicker, { type CampusPoint, type CampusVenue, type VenueSelectionSource, distanceBetween, venueIsCovered } from "../components/CampusLocationPicker";
 import { api, clearSession, readSession, saveSession, type Session } from "../lib/auth";
 import styles from "./citizen.module.css";
 
 const CitizenMiniMap = dynamic(() => import("./CitizenMiniMap"), { ssr: false, loading: () => <div className={styles.mapLoading}>Loading safety map</div> });
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type Zone = { id: number; name: string; latitude: number; longitude: number; currentDensity: number; currentRiskLevel: RiskLevel; lastUpdated: string };
-type Venue = { id: number; name: string };
+type Venue = CampusVenue;
 type Alert = { id: number; zoneId: number; zoneName?: string; timestamp: string; message: string; severity: RiskLevel; resolved: boolean };
 type Point = { lat: number; lng: number };
 const labels: Record<RiskLevel, string> = { LOW: "Normal", MEDIUM: "Watch", HIGH: "High", CRITICAL: "Critical" };
@@ -21,7 +22,6 @@ const navItems: NavItem[] = [
 ];
 
 function ago(value: string) { const seconds = Math.max(0, Math.round((Date.now() - new Date(value).valueOf()) / 1000)); return seconds < 60 ? "Just now" : seconds < 3600 ? `${Math.floor(seconds / 60)} min ago` : `${Math.floor(seconds / 3600)} hr ago`; }
-function distanceBetween(a: Point, b: Point) { const radius = 6371000; const radians = (value: number) => value * Math.PI / 180; const haversine = Math.sin(radians(b.lat - a.lat) / 2) ** 2 + Math.cos(radians(a.lat)) * Math.cos(radians(b.lat)) * Math.sin(radians(b.lng - a.lng) / 2) ** 2; return Math.round(radius * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))); }
 function point(zones: Zone[], id: number): Point { const zone = zones.find((item) => item.id === id); return zone ? { lat: zone.latitude, lng: zone.longitude } : { lat: 20.3641, lng: 85.8163 }; }
 
 function Auth({ done }: { done: (session: Session) => void }) {
@@ -31,15 +31,20 @@ function Auth({ done }: { done: (session: Session) => void }) {
 }
 
 function Citizen({ session }: { session: Session }) {
-  const [venue, setVenue] = useState<Venue>(); const [zones, setZones] = useState<Zone[]>([]); const [alerts, setAlerts] = useState<Alert[]>([]); const [location, setLocation] = useState<Point>(); const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => { setLoading(true); setError(""); try { const venues = await api<Venue[]>("/api/venues"); if (!venues.length) throw new Error("No venue is available yet."); const [venueZones, activeAlerts] = await Promise.all([api<Zone[]>(`/api/venues/${venues[0].id}/zones`), api<Alert[]>("/api/alerts?active=true")]); setVenue(venues[0]); setZones(venueZones); setAlerts(activeAlerts); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load safety alerts"); } finally { setLoading(false); } }, []);
-  useEffect(() => { load(); navigator.geolocation?.getCurrentPosition((position) => setLocation({ lat: position.coords.latitude, lng: position.coords.longitude })); }, [load]);
+  const [venues, setVenues] = useState<Venue[]>([]); const [venue, setVenue] = useState<Venue>(); const [zones, setZones] = useState<Zone[]>([]); const [alerts, setAlerts] = useState<Alert[]>([]); const [location, setLocation] = useState<Point>(); const [selectionSource, setSelectionSource] = useState<VenueSelectionSource>("default"); const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const availableVenues = venues.length ? venues : await api<Venue[]>("/api/venues"); if (!availableVenues.length) throw new Error("No venue is available yet."); if (!venues.length) setVenues(availableVenues); const savedId = Number(window.localStorage.getItem("nirikshan.selectedVenue")); const selected = availableVenues.find((item) => item.id === savedId) || venue || availableVenues[0]; const [venueZones, activeAlerts] = await Promise.all([api<Zone[]>(`/api/venues/${selected.id}/zones`), api<Alert[]>("/api/alerts?active=true")]); setVenue(selected); setZones(venueZones); const zoneIds = new Set(venueZones.map((zone) => zone.id)); setAlerts(activeAlerts.filter((alert) => zoneIds.has(alert.zoneId))); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load safety alerts"); } finally { setLoading(false); } }, [venue, venues]);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const selectVenue = useCallback((next: CampusVenue, source: VenueSelectionSource) => { setSelectionSource(source); setVenue(next); window.localStorage.setItem("nirikshan.selectedVenue", String(next.id)); }, []);
+  useEffect(() => { if (!venue || !venues.length) return; load(); }, [venue?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onLocationChange = useCallback((next: CampusPoint) => setLocation(next), []);
   const sorted = useMemo(() => [...alerts].sort((a, b) => location ? distanceBetween(location, point(zones, a.zoneId)) - distanceBetween(location, point(zones, b.zoneId)) : +new Date(b.timestamp) - +new Date(a.timestamp)), [alerts, location, zones]);
+  const coverageUnavailable = selectionSource !== "search" && selectionSource !== "nearest" && location && venue && !venueIsCovered(venue, location);
   if (session.user.mustChangePassword) { window.location.replace("/alerts/security"); return <main className={styles.centerState}>Opening account security</main>; }
   return <AppShell user={session.user} title="Safety alerts" subtitle={`${venue?.name || "Your campus"} and current safety information`} active="Safety alerts" navItems={navItems}>
     <div className={styles.citizenIntro}><div><span className={styles.eyebrow}>YOUR SAFETY BRIEFING</span><h2>Good to see you, {session.user.name.split(" ")[0]}.</h2><p>Here is the latest picture from your campus safety network.</p></div><button className={styles.refreshButton} type="button" onClick={load} disabled={loading}>{loading ? "Refreshing" : "Refresh data"}</button></div>
+    <CampusLocationPicker venues={venues} selectedVenue={venue} location={location} onLocationChange={onLocationChange} onSelect={selectVenue} />
     {error && <div className={styles.errorBanner} role="alert">{error}<button type="button" onClick={load}>Try again</button></div>}
-    {loading ? <Spinner label="Loading campus safety data" /> : <>
+    {loading ? <Spinner label="Loading campus safety data" /> : coverageUnavailable ? <div className={styles.serviceUnavailable}><span className={styles.eyebrow}>SERVICE AREA</span><h2>We don’t provide services here yet.</h2><p>Live location is outside the supported campus area. Search for Campus-25, KIIT, or another supported campus above to view its safety services.</p></div> : <>
       <section className={styles.citizenGrid}><Card className={styles.mapCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>LOCATION CONTEXT</span><h2>Campus map</h2><p>Nearby areas and current conditions.</p></div><span className={styles.locationState}><i />{location ? "Location on" : "Location off"}</span></div><CitizenMiniMap zones={zones} alerts={alerts} location={location} /></Card><Card className={styles.briefCard}><span className={styles.kicker}>LIVE BRIEFING</span><h2>{sorted.length ? `${sorted.length} active updates` : "All clear for now"}</h2><p>{sorted.length ? "Review the highest priority updates first." : "No active conditions have been published for your campus."}</p><div className={styles.briefStat}><span>Nearest update</span><strong>{sorted[0] ? sorted[0].zoneName || `Zone ${sorted[0].zoneId}` : "No active update"}</strong></div><a href="#alerts" className={styles.primaryLink}>Review safety alerts <span>→</span></a></Card></section>
       <section id="alerts" className={styles.alertSection}><div className={styles.sectionHeading}><div><span className={styles.kicker}>SAFETY ALERTS</span><h2>Updates near you</h2></div><span>{sorted.length} active</span></div>{sorted.length ? <div className={styles.alertGrid}>{sorted.map((alert) => <article className={styles.alertCard} key={alert.id}><div className={styles.alertTop}><span className={`${styles.severity} ${styles[`severity${alert.severity}`]}`}>{labels[alert.severity]}</span>{location && <span className={styles.distance}>{distanceBetween(location, point(zones, alert.zoneId))}m away</span>}</div><h3>{alert.zoneName || `Zone ${alert.zoneId}`}</h3><p>{alert.message}</p><small>{ago(alert.timestamp)}</small></article>)}</div> : <div className={styles.emptyState}>No active alerts. The safety team has not published any current updates.</div>}</section>
     </>}

@@ -1,6 +1,6 @@
 import { SVGProps } from "react";
 
-export type IconName = "grid" | "map" | "bell" | "shield" | "upload" | "users" | "settings" | "arrow" | "activity" | "logout" | "menu" | "chevron" | "check" | "lock" | "close";
+export type IconName = "grid" | "map" | "bell" | "shield" | "upload" | "users" | "settings" | "arrow" | "activity" | "camera" | "logout" | "menu" | "chevron" | "check" | "lock" | "close";
 
 export default function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {
   const paths = {
@@ -13,6 +13,7 @@ export default function Icon({ name, ...props }: { name: IconName } & SVGProps<S
     settings: <><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="m19.4 15 .1.1a2 2 0 0 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4v.3a2 2 0 0 1-4 0v-.2A2 2 0 0 0 5.8 18l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A2 2 0 0 0 1.6 12a2 2 0 0 1 2-2h.2A2 2 0 0 0 5.2 6.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A2 2 0 0 0 12 1.6a2 2 0 0 1 2 2v.2a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A2 2 0 0 0 21.6 12a2 2 0 0 1-2 2h-.2a2 2 0 0 0 0 1Z" /></>,
     arrow: <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
     activity: <><path d="M3 12h4l2-7 4 14 2-7h6" /></>,
+    camera: <><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" /><circle cx="12" cy="13" r="3.5" /></>,
     logout: <><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M21 3v18" /></>,
     menu: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
     chevron: <path d="m8 10 4 4 4-4" />,

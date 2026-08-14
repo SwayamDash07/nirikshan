@@ -20,7 +20,7 @@ server:
 
 nirikshan:
   web:
-    allowed-origin-patterns: ${NIRIKSHAN_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origin-patterns: ${NIRIKSHAN_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
   auth:
     jwt-secret: ${NIRIKSHAN_JWT_SECRET:change-this-demo-secret-to-a-long-random-value-1234567890}
     jwt-expiry-hours: 24
@@ -29,6 +29,7 @@ nirikshan:
   cv:
     pipeline-dir: ${NIRIKSHAN_CV_PIPELINE_DIR:cv-pipeline}
     python-executable: ${NIRIKSHAN_PYTHON:python}
+    risk-event-url: ${NIRIKSHAN_RISK_EVENT_URL:http://localhost:8080/api/risk-events}
 
 springdoc:
   swagger-ui:

@@ -17,6 +17,8 @@ public class Venue {
     private String description;
     private Double latitude;
     private Double longitude;
+    @Column(name = "service_radius_meters", nullable = false)
+    private Double serviceRadiusMeters = 1000.0;
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
     @JsonIgnore
@@ -31,6 +33,7 @@ public class Venue {
     public String getDescription() { return description; } public void setDescription(String description) { this.description = description; }
     public Double getLatitude() { return latitude; } public void setLatitude(Double latitude) { this.latitude = latitude; }
     public Double getLongitude() { return longitude; } public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public Double getServiceRadiusMeters() { return serviceRadiusMeters; } public void setServiceRadiusMeters(Double serviceRadiusMeters) { this.serviceRadiusMeters = serviceRadiusMeters; }
     public Instant getCreatedAt() { return createdAt; } public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public List<Zone> getZones() { return zones; } public void setZones(List<Zone> zones) { this.zones = zones; }
     @PrePersist void onCreate() { if (createdAt == null) createdAt = Instant.now(); }

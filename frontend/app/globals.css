@@ -7,7 +7,7 @@
   --danger: #d92d20; --danger-soft: #fef3f2; --danger-soft-strong: #fee4e2; --danger-border: #fecdca;
   --input-bg: #ffffff; --focus-ring: #2563eb38; --shadow-color: #10182812;
   --panel-strong: #12213a; --panel-text: #f8fafc; --panel-muted: #b6c2d2; --panel-border: #ffffff1c; --panel-subtle: #ffffff0d;
-  --risk-low: #027a48; --risk-low-soft: #ecfdf3; --risk-medium: #b54708; --risk-medium-soft: #fffaeb; --risk-high: #c4320a; --risk-high-soft: #fff4ed; --risk-critical: #d92d20; --risk-critical-soft: #fef3f2; --chart-start: #6fe6db; --chart-end: #6ea8fe; --chart-tooltip-bg: #12213a;
+  --risk-low: #027a48; --risk-low-soft: #ecfdf3; --risk-medium: #b58105; --risk-medium-soft: #fffaeb; --risk-high: #c4320a; --risk-high-soft: #fff4ed; --risk-critical: #d92d20; --risk-critical-soft: #fef3f2; --chart-start: #6fe6db; --chart-end: #6ea8fe; --chart-tooltip-bg: #12213a;
   --radius-sm: 8px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 18px;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px; --space-9: 48px; --space-10: 64px;
 }

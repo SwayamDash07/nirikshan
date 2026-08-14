@@ -1,6 +1,7 @@
 package com.nirikshan.controller;
 
 import com.nirikshan.dto.CitizenReportRequest;
+import com.nirikshan.dto.CitizenReportResponse;
 import com.nirikshan.model.CitizenReport;
 import com.nirikshan.model.Zone;
 import com.nirikshan.repository.CitizenReportRepository;
@@ -27,7 +28,12 @@ public class CitizenReportController {
     }
 
     @GetMapping
-    public List<CitizenReport> list(@RequestParam(required = false) Long zoneId) {
-        return zoneId == null ? reportRepository.findAllByOrderByTimestampDesc() : reportRepository.findByZone_IdOrderByTimestampDesc(zoneId);
+    public List<CitizenReportResponse> list(@RequestParam(required = false) Long zoneId) {
+        List<CitizenReport> reports = zoneId == null ? reportRepository.findAllByOrderByTimestampDesc() : reportRepository.findByZone_IdOrderByTimestampDesc(zoneId);
+        return reports.stream().map(CitizenReportController::response).toList();
+    }
+
+    public static CitizenReportResponse response(CitizenReport report) {
+        return new CitizenReportResponse(report.getId(), report.getZoneId(), report.getZone().getName(), report.getDescription(), report.getTimestamp(), report.getStatus().name());
     }
 }

@@ -152,6 +152,12 @@ For a direct live-style POST while the CV pipeline is generating events, use `--
 python process_video.py --input real_footage/main_gate.mp4 --zone-id 1 --thresholds thresholds_config.json --output outputs/main_gate/events.json --post-live --post-delay 0.5
 ```
 
+For the admin camera simulator, use `--loop`. It paces frames against the source FPS, reopens the file at EOF, emits approximately one event per real second, and timestamps each event with current UTC wall-clock time. Loop mode posts events immediately by default; it is the local-file equivalent of consuming an RTSP/CCTV source.
+
+```powershell
+python process_video.py --input real_footage/main_gate.mp4 --zone-id 1 --thresholds thresholds_config.json --output outputs/live/zone-1/events.json --loop --post-url http://localhost:8080/api/risk-events
+```
+
 ## Output schema
 
 Each JSON entry matches the backend request contract:

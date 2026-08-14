@@ -106,6 +106,18 @@ WHERE lower(email) = lower('admin@example.com');
 
 Always run this against the same database shown by `/api/health`.
 
+### Continuous camera coverage
+
+The admin Video ingestion page treats each campus zone as a security camera. An administrator connects a pre-recorded video file to a zone, and the backend starts a persistent `ZoneFeed` that loops the footage from frame 0 until coverage is stopped. Loop-mode processing emits one risk event approximately every real second and re-bases each event timestamp to the current wall-clock time, so the dashboard, map, heatmap, zone cards, and trend chart always look current rather than replaying stale video timestamps.
+
+This is a demonstration simulator, not a production camera ingest path. In production, the same per-second processing and WebSocket event pipeline would consume frames from an actual RTSP/CCTV stream instead of a looped local file. The architecture does not change; only the frame source changes.
+
+The admin API for this flow is:
+
+- `GET /api/admin/zones` — list all zones with their current `OFFLINE`/`LIVE` feed state.
+- `POST /api/admin/zones/{zoneId}/connect-footage` — connect a multipart video file and start its continuous loop.
+- `POST /api/admin/zones/{zoneId}/stop-coverage` — stop the zone loop and take the camera offline.
+
 ### Video processing jobs
 
 The internal admin workspace is at `http://localhost:3000/admin`. Uploading a video creates a non-blocking processing job: the backend stores the clip in `cv-pipeline/uploads/{jobId}/`, runs `process_video.py`, generates its summary, then internally ingests the generated events through the existing risk-event service. Generated artefacts are isolated in `cv-pipeline/outputs/{jobId}/` and served from `/job-files/{jobId}/`.
@@ -117,7 +129,7 @@ NIRIKSHAN_PYTHON=C:\\path\\to\\python.exe
 NIRIKSHAN_CV_PIPELINE_DIR=C:\\path\\to\\nirikshan\\cv-pipeline
 ```
 
-Uploads allow up to 1 GB for local prototype footage. Jobs use the same status flow (`PENDING`, `PROCESSING`, `COMPLETE`, `FAILED`) that a future live-stream buffer source can reuse.
+Uploads allow up to 1 GB for local prototype footage. The legacy `ProcessingJob` endpoints remain available for developer-only one-off CV runs; the main admin demo flow uses persistent `ZoneFeed` coverage instead.
 
 To build:
 

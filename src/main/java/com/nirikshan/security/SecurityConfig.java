@@ -35,10 +35,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/api/health", "/h2-console/**", "/swagger-ui/**", "/v3/api-docs/**", "/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/risk-events").permitAll()
                         .requestMatchers("/api/admin/**", "/api/jobs/**", "/api/risk-events/**", "/api/zones/**", "/job-files/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/alerts/**").hasRole("ADMIN")
                         .requestMatchers("/api/security/**").hasRole("SECURITY")
-                        .requestMatchers("/api/venues/**", "/api/alerts/**", "/api/citizen-reports/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/citizen-reports/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/citizen-reports/**").hasAnyRole("CITIZEN", "ADMIN")
+                        .requestMatchers("/api/venues/**", "/api/alerts/**").authenticated()
                         .anyRequest().permitAll())
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

@@ -1,38 +1,149 @@
 "use client";
 
-import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useState } from "react";
+import { Client, IMessage } from "@stomp/stompjs";
 import AppShell, { NavItem } from "../components/AppShell";
-import { Button, Card, Field, Select, Spinner } from "../components/ui";
+import Icon from "../components/Icon";
+import { Button, Card, Spinner } from "../components/ui";
 import { api, apiBase, clearSession, readSession, type UserInfo } from "../lib/auth";
 import styles from "./admin.module.css";
 
-type Zone = { id: number; name: string };
-type Venue = { id: number; name: string };
-type JobStatus = "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
-type Job = { id: number; zoneId: number; zoneName: string; videoFilename: string; status: JobStatus; createdAt: string; completedAt?: string; errorMessage?: string; annotatedVideoPath?: string; summaryPath?: string };
-const activeStatuses = new Set<JobStatus>(["PENDING", "PROCESSING"]);
-const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
-function formatDate(value: string) { return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
+type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+type FeedStatus = "OFFLINE" | "LIVE";
+type Zone = {
+  id: number;
+  name: string;
+  currentDensity: number;
+  currentPeopleCount: number;
+  currentRiskLevel: RiskLevel;
+  lastUpdated: string;
+  feedStatus: FeedStatus;
+  videoFilename?: string;
+  videoUrl?: string;
+  feedStartedAt?: string;
+  currentLoopIteration: number;
+};
+type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel };
 
-function UploadWorkspace({ zones, zoneId, setZoneId, file, setFile, uploading, dragging, setDragging, onUpload, notice, error }: { zones: Zone[]; zoneId?: number; setZoneId: (id: number) => void; file?: File; setFile: (file?: File) => void; uploading: boolean; dragging: boolean; setDragging: (value: boolean) => void; onUpload: (event: FormEvent) => void; notice: string; error: string }) {
-  function selectFile(next?: File) { setFile(next); }
-  function onFileChange(event: ChangeEvent<HTMLInputElement>) { selectFile(event.target.files?.[0]); }
-  function onDrop(event: DragEvent<HTMLLabelElement>) { event.preventDefault(); setDragging(false); selectFile(event.dataTransfer.files?.[0]); }
-  return <Card className={styles.uploadCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>NEW PROCESSING JOB</span><h2>Turn footage into signals</h2><p>Choose a zone, add a recording, and publish validated events to the command workspace.</p></div><span className={styles.stepBadge}>STEP 1 OF 3</span></div><form onSubmit={onUpload} className={styles.uploadForm}><Field label="Campus zone"><Select value={zoneId || ""} onChange={(event) => setZoneId(Number(event.target.value))} required><option value="">Choose a zone</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</Select></Field><label className={`${styles.dropzone} ${dragging ? styles.dragging : ""}`} htmlFor="video-file" onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}><input id="video-file" type="file" accept="video/*,.mp4,.mov,.avi,.mkv" onChange={onFileChange} /><span className={styles.uploadIcon}>UP</span><strong>{file ? file.name : "Add a camera recording"}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected` : "Drop a video here or browse from your device"}</small></label><div className={styles.formFooter}><span>Accepted formats: MP4, MOV, AVI, MKV</span><Button size="lg" disabled={!file || !zoneId || uploading}>{uploading ? "Uploading" : "Upload and process"}</Button></div>{notice && <p className={styles.notice} role="status">{notice}</p>}{error && <p className={styles.error} role="alert">{error}</p>}</form></Card>;
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
+const navItems: NavItem[] = [
+  { label: "Dashboard", href: "/console", icon: "grid" },
+  { label: "Administration", href: "/console/admin", icon: "users" },
+  { label: "Video ingestion", href: "/admin", icon: "upload" },
+  { label: "Security", href: "/alerts/security", icon: "lock" },
+];
+const riskLabels: Record<RiskLevel, string> = { LOW: "Normal", MEDIUM: "Watch", HIGH: "High", CRITICAL: "Critical" };
+
+function formatTime(value?: string) {
+  if (!value) return "Awaiting signal";
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "Awaiting signal" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function ProcessingGuide() { return <Card className={styles.guideCard}><span className={styles.kicker}>PROCESSING PIPELINE</span><h2>What happens next</h2><ol className={styles.pipeline}><li><b>01</b><div><strong>Queue</strong><p>The recording is stored as a processing job.</p></div></li><li><b>02</b><div><strong>Analyse</strong><p>Computer vision extracts density and risk events.</p></div></li><li><b>03</b><div><strong>Publish</strong><p>Validated signals appear in the command workspace.</p></div></li></ol></Card>; }
+function CameraPlaceholder() {
+  return <div className={styles.cameraPlaceholder}><Icon name="camera" /><span>No footage connected</span></div>;
+}
 
-function JobsTable({ jobs, onRefresh, onError }: { jobs: Job[]; onRefresh: () => void; onError: (message: string) => void }) { return <Card className={styles.jobsCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>PROCESSING HISTORY</span><h2>Recent jobs</h2><p>Monitor recordings as they move through the pipeline.</p></div><Button variant="secondary" size="sm" type="button" onClick={onRefresh}>Refresh</Button></div>{jobs.length ? <div className={styles.jobTable}><div className={styles.jobHeader}><span>Recording</span><span>Zone</span><span>Status</span><span>Submitted</span><span>Output</span></div>{jobs.map((job) => <article className={styles.jobRow} key={job.id}><div><strong>{job.videoFilename}</strong>{job.errorMessage && <small className={styles.jobError}>{job.errorMessage}</small>}</div><span>{job.zoneName}</span><span className={`${styles.status} ${styles[job.status]}`}>{job.status}</span><span>{formatDate(job.createdAt)}</span><div className={styles.outputs}>{job.status === "COMPLETE" ? <><a href={`${apiBase}${job.annotatedVideoPath}`} target="_blank" rel="noreferrer">Video</a><a href={`${apiBase}${job.summaryPath}`} target="_blank" rel="noreferrer">Report</a></> : <small>{job.status === "PROCESSING" ? "Analysis running" : job.status === "PENDING" ? "Waiting to start" : "Processing failed"}</small>}</div></article>)}</div> : <div className={styles.empty}>No processing jobs for this workspace yet.</div>}</Card>; }
+function CameraCard({ zone, busy, onPick, onDrop, onStop }: { zone: Zone; busy: boolean; onPick: (file: File) => void; onDrop: (file: File) => void; onStop: () => void }) {
+  const live = zone.feedStatus === "LIVE";
+  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) onPick(file);
+    event.target.value = "";
+  }
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) onDrop(file);
+  }
+  return <Card className={`${styles.cameraCard} ${live ? styles.liveCard : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+    <div className={styles.cameraHeader}>
+      <div><span className={styles.zoneLabel}>ZONE {String(zone.id).padStart(2, "0")}</span><h2>{zone.name}</h2></div>
+      <span className={`${styles.feedBadge} ${live ? styles.feedLive : styles.feedOffline}`}><i />{live ? "Live" : "Offline"}</span>
+    </div>
+    <div className={styles.preview}>
+      {live && zone.videoUrl ? <video key={zone.videoUrl} src={`${apiBase}${zone.videoUrl}`} autoPlay muted loop playsInline preload="auto" aria-label={`${zone.name} camera preview`} /> : <CameraPlaceholder />}
+      {live && <span className={styles.previewOverlay}><i className={styles.pulseDot} />PROCESSING NOW</span>}
+    </div>
+    {live ? <>
+      <div className={styles.liveStats}>
+        <div><span>Headcount</span><strong>{zone.currentPeopleCount ?? 0}</strong></div>
+        <div><span>Density</span><strong>{(zone.currentDensity ?? 0).toFixed(2)} <small>/m²</small></strong></div>
+        <div><span>Risk</span><strong className={`${styles.riskText} ${styles[`risk${zone.currentRiskLevel}`]}`}>{riskLabels[zone.currentRiskLevel]}</strong></div>
+      </div>
+      <div className={styles.cardFooter}><span>Updated {formatTime(zone.lastUpdated)}</span><span>Loop {zone.currentLoopIteration}</span><Button variant="danger" size="sm" type="button" disabled={busy} onClick={onStop}>{busy ? "Stopping..." : "Stop Coverage"}</Button></div>
+    </> : <div className={styles.offlineBody}><p>Connect a recording to bring this camera online. The footage will loop continuously as a live simulation.</p><label className={styles.dropHint} htmlFor={`feed-file-${zone.id}`}>Drop footage anywhere on this card or choose a file</label><input id={`feed-file-${zone.id}`} className={styles.hiddenInput} type="file" accept="video/*,.mp4,.mov,.avi,.mkv" onChange={handleFile} /><Button type="button" disabled={busy} onClick={() => document.getElementById(`feed-file-${zone.id}`)?.click()}><Icon name="upload" />{busy ? "Connecting camera feed..." : "Connect Footage"}</Button></div>}
+  </Card>;
+}
 
 function AdminUpload({ user }: { user: UserInfo }) {
-  const [zones, setZones] = useState<Zone[]>([]); const [jobs, setJobs] = useState<Job[]>([]); const [zoneId, setZoneId] = useState<number>(); const [file, setFile] = useState<File>(); const [loading, setLoading] = useState(true); const [uploading, setUploading] = useState(false); const [dragging, setDragging] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
-  const loadJobs = useCallback(async (selectedZoneId?: number) => { const suffix = selectedZoneId ? `?zoneId=${selectedZoneId}` : ""; setJobs(await api<Job[]>(`/api/jobs${suffix}`)); }, []);
-  useEffect(() => { if (user.mustChangePassword) { window.location.replace("/alerts/security"); return; } (async () => { try { const venues = await api<Venue[]>("/api/venues"); if (!venues.length) throw new Error("No venue is available yet."); const fetchedZones = await api<Zone[]>(`/api/venues/${venues[0].id}/zones`); setZones(fetchedZones); setZoneId(fetchedZones[0]?.id); await loadJobs(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load upload workspace."); } finally { setLoading(false); } })(); }, [loadJobs, user.mustChangePassword]);
-  useEffect(() => { if (!jobs.some((job) => activeStatuses.has(job.status))) return; const timer = window.setInterval(() => { loadJobs(zoneId).catch(() => undefined); }, 3000); return () => window.clearInterval(timer); }, [jobs, loadJobs, zoneId]); useEffect(() => { if (!loading) loadJobs(zoneId).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load jobs.")); }, [zoneId, loading, loadJobs]);
-  async function upload(event: FormEvent) { event.preventDefault(); if (!file || !zoneId) return; setUploading(true); setError(""); setNotice(""); try { const body = new FormData(); body.append("zoneId", String(zoneId)); body.append("file", file); const result = await api<Job>("/api/jobs/upload", { method: "POST", body }); setFile(undefined); setNotice(`Job ${result.id} is queued for processing.`); await loadJobs(zoneId); } catch (reason) { setError(reason instanceof Error ? reason.message : "Upload failed."); } finally { setUploading(false); } }
-  if (loading) return <AppShell user={user} title="Video ingestion" active="Video ingestion" navItems={navItems}><Spinner label="Loading ingestion workspace" /></AppShell>;
-  return <AppShell user={user} title="Video ingestion" subtitle="Process camera recordings into explainable safety signals" active="Video ingestion" navItems={navItems}><div className={styles.workspace}><UploadWorkspace zones={zones} zoneId={zoneId} setZoneId={(id) => { setZoneId(id); setError(""); }} file={file} setFile={(next) => { setFile(next); setNotice(""); if (next) setError(""); }} uploading={uploading} dragging={dragging} setDragging={setDragging} onUpload={upload} notice={notice} error={error} /><ProcessingGuide /></div><JobsTable jobs={jobs} onRefresh={() => loadJobs(zoneId).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not refresh jobs."))} onError={setError} /></AppShell>;
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyZoneId, setBusyZoneId] = useState<number>();
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const loadZones = useCallback(async () => {
+    const next = await api<Zone[]>("/api/admin/zones");
+    setZones(next);
+  }, []);
+
+  useEffect(() => {
+    if (user.mustChangePassword) { window.location.replace("/alerts/security"); return; }
+    loadZones().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load camera coverage.")).finally(() => setLoading(false));
+  }, [loadZones, user.mustChangePassword]);
+
+  useEffect(() => {
+    if (loading) return;
+    const timer = window.setInterval(() => loadZones().catch(() => undefined), 4000);
+    return () => window.clearInterval(timer);
+  }, [loadZones, loading]);
+
+  useEffect(() => {
+    const client = new Client({ brokerURL: WS_URL, reconnectDelay: 5000, onConnect: () => {
+      client.subscribe("/topic/risk-updates", (message: IMessage) => {
+        const event = JSON.parse(message.body) as RiskEvent;
+        setZones((current) => current.map((zone) => zone.id === event.zoneId ? { ...zone, currentDensity: event.densityScore, currentPeopleCount: event.peopleCount, currentRiskLevel: event.riskLevel, lastUpdated: event.timestamp } : zone));
+      });
+    } });
+    client.activate();
+    return () => { client.deactivate(); };
+  }, []);
+
+  async function connect(zoneId: number, file: File) {
+    setBusyZoneId(zoneId); setError(""); setNotice("");
+    try {
+      const body = new FormData(); body.append("file", file);
+      const connected = await api<Zone>(`/api/admin/zones/${zoneId}/connect-footage`, { method: "POST", body });
+      setZones((current) => current.map((zone) => zone.id === zoneId ? connected : zone));
+      setNotice(`${connected.name} is online. Continuous coverage is now running.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect camera footage."); }
+    finally { setBusyZoneId(undefined); }
+  }
+
+  async function stop(zoneId: number) {
+    setBusyZoneId(zoneId); setError(""); setNotice("");
+    try {
+      const stopped = await api<Zone>(`/api/admin/zones/${zoneId}/stop-coverage`, { method: "POST" });
+      setZones((current) => current.map((zone) => zone.id === zoneId ? stopped : zone));
+      setNotice(`${stopped.name} coverage stopped. The camera is offline.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not stop camera coverage."); }
+    finally { setBusyZoneId(undefined); }
+  }
+
+  if (loading) return <AppShell user={user} title="Video ingestion" active="Video ingestion" navItems={navItems}><Spinner label="Loading camera coverage" /></AppShell>;
+  return <AppShell user={user} title="Video ingestion" subtitle="Connect recorded footage as continuous simulated CCTV coverage" active="Video ingestion" navItems={navItems}>
+    <section className={styles.intro}><div><span className={styles.kicker}>CAMERA MANAGEMENT</span><h1>Connect your camera network</h1><p>Each zone behaves like a security camera. Connect footage once and Nirikshan keeps processing it in a real-time loop until you stop coverage.</p></div><div className={styles.networkState}><i />{zones.filter((zone) => zone.feedStatus === "LIVE").length} of {zones.length} cameras live</div></section>
+    {notice && <p className={styles.notice} role="status">{notice}</p>}
+    {error && <p className={styles.error} role="alert">{error}</p>}
+    <section className={styles.cameraGrid} aria-label="Camera coverage by zone">{zones.map((zone) => <CameraCard key={zone.id} zone={zone} busy={busyZoneId === zone.id} onPick={(file) => connect(zone.id, file)} onDrop={(file) => connect(zone.id, file)} onStop={() => stop(zone.id)} />)}</section>
+    <Card className={styles.simulationNote}><span className={styles.noteIcon}><Icon name="activity" /></span><div><strong>Live simulation mode</strong><p>Uploaded recordings are looped from frame 0. Every signal is timestamped with the current wall-clock time, so the map, heatmap, zone cards, and trend charts stay current for demonstrations.</p></div></Card>
+  </AppShell>;
 }
 
-export default function Page() { const [user, setUser] = useState<UserInfo>(); useEffect(() => { const session = readSession(); if (!session || session.user.role !== "ADMIN") { clearSession(); window.location.replace("/console/login"); return; } setUser(session.user); }, []); if (!user) return <main className={styles.state}>Checking access</main>; return <AdminUpload user={user} />; }
+export default function Page() {
+  const [user, setUser] = useState<UserInfo>();
+  useEffect(() => { const session = readSession(); if (!session || session.user.role !== "ADMIN") { clearSession(); window.location.replace("/console/login"); return; } setUser(session.user); }, []);
+  if (!user) return <main className={styles.state}>Checking access</main>;
+  return <AdminUpload user={user} />;
+}

@@ -48,14 +48,14 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   const sidebarClass = `${styles.sidebar} ${collapsed ? styles.collapsed : ""} ${mobileOpen ? styles.mobileOpen : ""}`;
   const mainClass = `${styles.main} ${collapsed ? styles.mainCollapsed : ""}`;
 
-  return <div className={styles.app}>
+  return <div className={`${styles.app} ${workspaceRole === "CITIZEN" ? styles.citizenApp : ""}`}>
     <aside className={sidebarClass} aria-label="Application sidebar">
       <div className={styles.sidebarTop}>
         <div className={styles.brandRow}>
           <a className={styles.brand} href={homeHref} onClick={() => setMobileOpen(false)}><span className={styles.brandMark}>N</span><span><b>Nirikshan</b><small>Safety intelligence</small></span></a>
           <button className={styles.sidebarToggle} type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><Icon name="menu" /></button>
         </div>
-        <div className={styles.workspaceSwitch}><span className={styles.workspaceDot} />{user.role === "ADMIN" ? <><label className={styles.srOnly} htmlFor="workspace-view">Switch workspace view</label><select id="workspace-view" className={styles.workspaceSelect} value={workspaceRole} onChange={changeWorkspace}><option value="ADMIN">{switchLabels.ADMIN}</option><option value="SECURITY">{switchLabels.SECURITY}</option><option value="CITIZEN">{switchLabels.CITIZEN}</option></select><Icon name="chevron" /></> : <><span>{roleLabels[user.role]}</span><Icon name="chevron" /></>}</div>
+        {user.role !== "CITIZEN" && <div className={styles.workspaceSwitch}><span className={styles.workspaceDot} />{user.role === "ADMIN" ? <><label className={styles.srOnly} htmlFor="workspace-view">Switch workspace view</label><select id="workspace-view" className={styles.workspaceSelect} value={workspaceRole} onChange={changeWorkspace}><option value="ADMIN">{switchLabels.ADMIN}</option><option value="SECURITY">{switchLabels.SECURITY}</option><option value="CITIZEN">{switchLabels.CITIZEN}</option></select><Icon name="chevron" /></> : <><span>{roleLabels[user.role]}</span><Icon name="chevron" /></>}</div>}
       </div>
       <nav className={styles.sideNav} aria-label="Primary navigation">{navItems.map((item) => <a key={item.href} className={`${styles.navItem} ${active === item.label ? styles.active : ""}`} href={item.href} aria-current={active === item.label ? "page" : undefined} onClick={() => setMobileOpen(false)}><Icon name={item.icon} /><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}</a>)}</nav>
       <div className={styles.sidebarBottom}>

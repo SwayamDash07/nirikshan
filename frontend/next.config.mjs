@@ -8,7 +8,6 @@ const withPWA = withPWAInit({
   fallbacks: { document: "/offline.html" },
 });
 
-/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 };

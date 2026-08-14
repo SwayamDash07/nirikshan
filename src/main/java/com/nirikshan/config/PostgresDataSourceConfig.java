@@ -10,10 +10,6 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.util.StringUtils;
 
-/**
- * Allows Railway's DATABASE_URL to be used without requiring developers to
- * manually prepend the JDBC scheme.
- */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(DataSourceProperties.class)
 @Profile({"prod", "local-postgres"})
@@ -28,8 +24,6 @@ public class PostgresDataSourceConfig {
         }
         if (url != null && (url.startsWith("postgresql://") || url.startsWith("postgres://"))) {
             properties.setUrl("jdbc:" + url);
-            // Credentials embedded in Railway's URL take precedence over the
-            // optional split username/password variables.
             properties.setUsername(null);
             properties.setPassword(null);
         }

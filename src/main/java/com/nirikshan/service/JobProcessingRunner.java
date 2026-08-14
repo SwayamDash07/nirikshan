@@ -37,10 +37,6 @@ public class JobProcessingRunner {
         }
     }
 
-    /**
-     * Uploads are one-off jobs today. A future stream-buffer producer can create
-     * recurring jobs and reuse this same PENDING -> PROCESSING -> terminal flow.
-     */
     @Async
     public void processAsync(Long jobId) {
         try {

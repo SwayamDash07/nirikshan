@@ -82,10 +82,6 @@ def calculate_zone_risk(
 
     density_level = _severity_from_thresholds(density, density_thresholds)
     score_level = _severity_from_thresholds(score, score_thresholds)
-    # Density has hard safety semantics: 4 and 6 people/m² must not be
-    # downgraded simply because motion happens to be stable. Conversely, the
-    # more conservative composite thresholds keep noisy front-facing tracking
-    # changes from declaring HIGH/CRITICAL at low physical density.
     level = max((density_level, score_level), key=LEVELS.index)
 
     explanation = (

@@ -5,6 +5,7 @@ import com.nirikshan.repository.ZoneFeedRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -35,6 +36,13 @@ public class ZoneFeedRunner {
         this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize();
         this.pythonExecutable = pythonExecutable;
         this.riskEventUrl = riskEventUrl;
+    }
+
+    @PostConstruct
+    void restartPersistedLiveFeeds() {
+        feedRepository.findByStatus(ZoneFeedStatus.LIVE)
+                .forEach(feed -> java.util.concurrent.CompletableFuture.runAsync(
+                        () -> start(feed.getZone().getId(), feed.getVideoPath())));
     }
 
     public synchronized void stop(Long zoneId) {

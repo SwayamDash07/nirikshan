@@ -76,9 +76,6 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def detect_people(model: YOLO, frame: Any, confidence: float, device: str, augment: bool = False) -> list[Detection]:
-    # Augmentation runs several transformed views and merges their detections.
-    # It can improve small/distant-person recall, but materially increases
-    # processing time, so it is controlled by thresholds_config.json.
     results = model.predict(frame, conf=confidence, classes=[0], augment=augment, device=device, verbose=False)
     detections: list[Detection] = []
     if not results or results[0].boxes is None:
@@ -258,8 +255,6 @@ def resolve_device() -> str:
 
 def load_model(weights: str, device: str) -> YOLO:
     model = YOLO(weights)
-    # YOLO's constructor loads weights; moving explicitly here makes the
-    # selected runtime device unambiguous before any prediction starts.
     model.to(device)
     return model
 
@@ -277,8 +272,6 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     if args.loop:
-        # Sampling density follows the source FPS, while event cadence below
-        # is controlled by the wall clock rather than frame numbers.
         detection_samples_per_second = max(1.0, float(thresholds.get("loopDetectionSamplesPerSecond", 5.0)))
         process_every = max(1, round(fps / detection_samples_per_second))
     else:

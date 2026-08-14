@@ -2,13 +2,10 @@
 @zoneId = 1
 @alertId = 1
 
-### List venues
 GET {{baseUrl}}/api/venues
 
-### List zones for venue
 GET {{baseUrl}}/api/venues/1/zones
 
-### Ingest a low-risk event
 POST {{baseUrl}}/api/risk-events
 Content-Type: application/json
 
@@ -23,7 +20,6 @@ Content-Type: application/json
   "sourceClipId": "india-gate-demo-01"
 }
 
-### Ingest a high-risk event (creates an alert)
 POST {{baseUrl}}/api/risk-events
 Content-Type: application/json
 
@@ -38,11 +34,8 @@ Content-Type: application/json
   "sourceClipId": "india-gate-demo-01"
 }
 
-### Recent zone events
 GET {{baseUrl}}/api/zones/{{zoneId}}/risk-events?limit=50
 
-### Active alerts
 GET {{baseUrl}}/api/alerts?active=true
 
-### Resolve an alert
 PATCH {{baseUrl}}/api/alerts/{{alertId}}/resolve

@@ -6,8 +6,6 @@ spring:
       max-file-size: 1GB
       max-request-size: 1GB
   profiles:
-    # PostgreSQL is the normal development/deployment path. Use `dev` only
-    # when an offline, disposable H2 database is needed.
     default: local-postgres
   jpa:
     open-in-view: false
@@ -63,8 +61,6 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    # Railway supplies DATABASE_URL as postgresql://...; the application
-    # normalizes that value to jdbc:postgresql://... at startup.
     url: ${SPRING_DATASOURCE_URL:${DATABASE_URL:${PGJDBC_URL:}}}
     username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${PGUSER:}}}
     password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${PGPASSWORD:}}}
@@ -84,8 +80,6 @@ spring:
     activate:
       on-profile: local-postgres
   datasource:
-    # Set DATABASE_URL to either a JDBC URL or a Railway-style
-    # postgresql:// URL. The latter is normalized by PostgresDataSourceConfig.
     url: ${SPRING_DATASOURCE_URL:${DATABASE_URL:jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:nirikshan}}}
     username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${PGUSER:postgres}}}
     password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${PGPASSWORD:postgres}}}

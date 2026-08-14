@@ -51,7 +51,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const text = response.status === 204 ? "" : await response.text();
   let payload: unknown = text;
   if (text && contentType.includes("json")) {
-    try { payload = JSON.parse(text); } catch { /* preserve the raw response below */ }
+    try { payload = JSON.parse(text); } catch { }
   }
 
   if (!response.ok) {

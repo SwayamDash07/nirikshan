@@ -838,12 +838,3 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
-.leafletPanel :global(.nirikshan-heat-marker),
-.leafletPanel :global(.nirikshan-core-marker) {
-  transition:
-    cx 0.35s ease,
-    cy 0.35s ease,
-    r 0.35s ease,
-    fill 0.35s ease,
-    stroke 0.35s ease;
-}

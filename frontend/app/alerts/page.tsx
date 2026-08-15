@@ -335,6 +335,7 @@ function Citizen({ session }: { session: Session }) {
       subtitle={`${venue?.name || "Your campus"} and current safety information`}
       active="Safety alerts"
       navItems={navItems}
+      assistantZones={zones.map((zone) => ({ id: zone.id, name: zone.name }))}
     >
       <div className={styles.citizenIntro}>
         <div>

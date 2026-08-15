@@ -49,6 +49,21 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\run-backend.ps1
 ```
 
+### AI incident summaries
+
+Incident summaries use Groq's OpenAI-compatible chat API. Create a free key at [console.groq.com](https://console.groq.com) without adding a billing card. The Spring Boot backend reads `GROQ_API_KEY` from its own process environment through `${GROQ_API_KEY:}`. It does not read `frontend/.env.local`, and there is no backend `.env` file or `application.yml` dotenv loader configured for this key.
+
+For local development in PowerShell, set the variable in the same shell that starts Spring Boot:
+
+```powershell
+$env:GROQ_API_KEY="gsk_your_key_here"
+mvn spring-boot:run
+```
+
+If using `.\run-backend.ps1`, set `$env:GROQ_API_KEY` before running the script; it passes the existing backend environment through and never imports the frontend env file. For Railway, open the backend service, select the **Variables** tab, add a variable named `GROQ_API_KEY` with the Groq key as its value, then redeploy. Do not put this secret in `frontend/.env.local`; that file is only for browser-safe `NEXT_PUBLIC_*` settings.
+
+At startup, the backend logs either `GROQ_API_KEY found` with a masked value or `GROQ_API_KEY missing`. Summaries are cached for 7 minutes by default and return `Summary unavailable` only when the key or API is unavailable. Set `NIRIKSHAN_INCIDENT_SUMMARY_CACHE_SECONDS` or the matching Spring property to change the cache interval.
+
 ### Database profiles
 
 The default profile is `local-postgres`, which uses PostgreSQL with Flyway migrations and Hibernate schema validation. This keeps risk events, citizen reports, alerts, jobs, and users across backend restarts. The PostgreSQL JDBC driver and Flyway are included in `pom.xml`.

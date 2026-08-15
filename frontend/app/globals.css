@@ -19,6 +19,7 @@ button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
 .critical-pulse { animation: leafletCriticalPulse 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.nirikshan-heat-marker, .nirikshan-core-marker { transition: cx .35s ease, cy .35s ease, r .35s ease, fill .35s ease, stroke .35s ease; }
 @keyframes leafletCriticalPulse { 0%, 100% { stroke-opacity: 1; fill-opacity: .82; } 50% { stroke-opacity: .4; fill-opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 :root { --map-popup-bg: #ffffff; --map-popup-text: #172b4d; --map-popup-muted: #667085; --map-popup-border: #d0d5dd; }

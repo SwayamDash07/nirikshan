@@ -4,6 +4,7 @@ import { ChangeEvent, ReactNode, useEffect, useState } from "react";
 import { clearSession, type Role, type UserInfo } from "../lib/auth";
 import Icon, { IconName } from "./Icon";
 import ThemeToggle from "./ThemeToggle";
+import AssistantChatWidget, { type AssistantZone } from "./AssistantChatWidget";
 import styles from "./shell.module.css";
 
 export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
@@ -13,7 +14,7 @@ const roleLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Se
 const switchLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security personnel", CITIZEN: "Customer view" };
 const sidebarKey = "nirikshan.sidebar-collapsed";
 
-export function AppShell({ user, title, subtitle, active, navItems, previewRole, children }: { user: UserInfo; title: string; subtitle?: string; active: string; navItems: NavItem[]; previewRole?: PreviewRole; children: ReactNode }) {
+export function AppShell({ user, title, subtitle, active, navItems, previewRole, assistantZones, children }: { user: UserInfo; title: string; subtitle?: string; active: string; navItems: NavItem[]; previewRole?: PreviewRole; assistantZones?: AssistantZone[]; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [queryPreview, setQueryPreview] = useState<PreviewRole | undefined>(() => {
@@ -83,6 +84,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
       <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><ThemeToggle /></div></header>
       {queryPreview && <div className={styles.previewBanner} role="status">{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</div>}
       {children}
+      <AssistantChatWidget zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />
     </main>
   </div>;
 }

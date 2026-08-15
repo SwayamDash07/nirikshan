@@ -635,6 +635,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       subtitle={`${venue?.name || "Venue workspace"} and live safety signals`}
       active="Dashboard"
       navItems={navItems}
+      assistantZones={zones.map((zone) => ({ id: zone.id, name: zone.name }))}
     >
       <div className={styles.connection}>
         <span

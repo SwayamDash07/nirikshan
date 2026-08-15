@@ -14,4 +14,5 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
     boolean existsByTypeAndZoneIsNullAndCreatedAtAfter(RecommendationType type, Instant createdAt);
     List<Recommendation> findByZoneIdAndStatus(Long zoneId, RecommendationStatus status);
     List<Recommendation> findByTypeAndStatus(RecommendationType type, RecommendationStatus status);
+    List<Recommendation> findByZoneIdAndCreatedAtAfterOrderByCreatedAtAsc(Long zoneId, Instant createdAt);
 }

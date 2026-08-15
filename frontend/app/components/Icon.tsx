@@ -1,6 +1,6 @@
 import { SVGProps } from "react";
 
-export type IconName = "grid" | "map" | "bell" | "shield" | "upload" | "users" | "settings" | "arrow" | "activity" | "camera" | "logout" | "menu" | "chevron" | "check" | "lock" | "close";
+export type IconName = "grid" | "map" | "bell" | "shield" | "upload" | "users" | "settings" | "arrow" | "activity" | "camera" | "logout" | "menu" | "chevron" | "check" | "lock" | "close" | "chat";
 
 export default function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {
   const paths = {
@@ -20,6 +20,7 @@ export default function Icon({ name, ...props }: { name: IconName } & SVGProps<S
     check: <path d="m5 12 4 4L19 6" />,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
     close: <><path d="m6 6 12 12" /><path d="m18 6-12 12" /></>,
+    chat: <><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H11l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /><path d="M7 9h10M7 13h6" /></>,
   }[name];
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths}</svg>;
 }

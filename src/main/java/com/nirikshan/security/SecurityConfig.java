@@ -35,6 +35,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/api/health", "/h2-console/**", "/swagger-ui/**", "/v3/api-docs/**", "/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/assistant/chat").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/risk-events").permitAll()
                         .requestMatchers("/api/admin/**", "/api/jobs/**", "/api/risk-events/**", "/api/zones/**", "/job-files/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/alerts/**").hasRole("ADMIN")

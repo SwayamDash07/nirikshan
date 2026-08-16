@@ -49,6 +49,7 @@ type Alert = {
   source?: "LIVE" | "SIMULATION";
 };
 type Recommendation = { id: number; zoneId?: number | null; zoneName?: string | null; type: "OPEN_ROUTE"; message: string; severity: RiskLevel; createdAt: string; status: "PENDING" | "ACKNOWLEDGED" | "DISMISSED"; source?: "LIVE" | "SIMULATION" };
+type CitizenRoute = { routeName: string; guidance: string; exitOrGate: string; expectedTravelTimeSeconds: number; routeAvailable: boolean; source?: "LIVE" | "SIMULATION" };
 type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel; source?: "LIVE" | "SIMULATION" };
 type CitizenForecast = { zoneId: number; zoneName: string; generatedAt: string; lastTelemetryAt?: string; currentRisk: RiskLevel; projectedRisk: RiskLevel; state: "STABLE" | "RISING" | "SURGE_RISK" | "CRUSH_RISK" | "RECOVERING" | "INSUFFICIENT_DATA"; message: string; stale: boolean; source?: "LIVE" | "SIMULATION" };
 type IncidentSummary = { summary: string; language: string; scope: string; generatedAt: string };
@@ -251,6 +252,7 @@ function Citizen({ session }: { session: Session }) {
   const [zones, setZones] = useState<Zone[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [routeGuidance, setRouteGuidance] = useState<CitizenRoute>();
   const [forecasts, setForecasts] = useState<CitizenForecast[]>([]);
   const [simulationActive, setSimulationActive] = useState(false);
   const [densityHistory, setDensityHistory] = useState<number[]>([]);
@@ -280,10 +282,11 @@ function Citizen({ session }: { session: Session }) {
         api<Zone[]>(`/api/venues/${selected.id}/zones`),
         api<Alert[]>("/api/alerts?active=true"),
       ]);
-      const [routeResult, eventsResult, forecastResult] = await Promise.allSettled([
+      const [routeResult, eventsResult, forecastResult, citizenRouteResult] = await Promise.allSettled([
         api<Recommendation[]>("/api/recommendations/customer?active=true"),
         api<RiskEvent[]>(`/api/venues/${selected.id}/risk-events?limit=120`),
         api<CitizenForecast[]>(`/api/venue/risk-forecast?venueId=${selected.id}`),
+        api<CitizenRoute>(`/api/venue/routes?venueId=${selected.id}&originZoneId=${venueZones[0]?.id || ""}`),
       ]);
       const routeRecommendations = routeResult.status === "fulfilled" ? routeResult.value : [];
       const recentEvents = eventsResult.status === "fulfilled" ? eventsResult.value : [];
@@ -293,6 +296,7 @@ function Citizen({ session }: { session: Session }) {
       const zoneIds = new Set(venueZones.map((zone) => zone.id));
       setAlerts(activeAlerts.filter((alert) => zoneIds.has(alert.zoneId)));
       setRecommendations(routeRecommendations);
+      setRouteGuidance(citizenRouteResult.status === "fulfilled" ? citizenRouteResult.value : undefined);
       setSimulationActive(recentEvents[0]?.source === "SIMULATION");
       const history = recentEvents.slice().reverse().map((event) => event.densityScore).filter(Number.isFinite).slice(-30);
       const currentAverage = venueZones.length ? venueZones.reduce((sum, zone) => sum + zone.currentDensity, 0) / venueZones.length : 0;
@@ -480,7 +484,7 @@ function Citizen({ session }: { session: Session }) {
           {forecasts.filter((forecast) => forecast.state !== "STABLE" || forecast.stale).map((forecast) => <Card className={styles.forecastCard} key={forecast.zoneId}><div className={styles.cardHeader}><div><span className={styles.kicker}>EARLY SAFETY UPDATE</span><h2>{forecast.zoneName}</h2><p>{forecast.message}</p></div>{forecast.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</div><small className={styles.forecastAge}>{forecast.stale ? "Stale data" : `Updated ${ago(forecast.lastTelemetryAt || forecast.generatedAt)}`}</small></Card>)}
           <section className={styles.customerLiveGrid}>
             <Card className={styles.trendCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>LIVE SIGNAL</span><h2>Campus density trend</h2><p>Recent readings with live updates from the venue risk loop.</p></div></div><LiveDensityChart values={densityHistory} /></Card>
-            <Card className={styles.routeCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>ROUTE RECOMMENDATIONS</span><h2>Safer routes</h2><p>Actionable guidance for moving through campus.</p></div><span className={styles.routeCount}>{recommendations.length}</span></div>{recommendations.length ? <div className={styles.routeList}>{recommendations.map((recommendation) => <article key={recommendation.id}><span className={`${styles.severity} ${styles[`severity${recommendation.severity}`]}`}>{labels[recommendation.severity]}</span>{recommendation.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}<strong>{recommendation.message}</strong><small>{ago(recommendation.createdAt)}</small></article>)}</div> : <div className={styles.routeEmpty}>No route changes are recommended right now.</div>}</Card>
+            <Card className={styles.routeCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>ROUTE RECOMMENDATIONS</span><h2>Safer routes</h2><p>Simple guidance for moving through campus.</p></div><span className={styles.routeCount}>{recommendations.length}</span></div>{routeGuidance && <article className={styles.routeList}><strong>{routeGuidance.guidance}</strong><span>{routeGuidance.routeName}</span><small>{routeGuidance.routeAvailable ? `About ${routeGuidance.expectedTravelTimeSeconds}s · ${routeGuidance.exitOrGate}` : "Follow staff directions."}{routeGuidance.source === "SIMULATION" && " · SIMULATION"}</small></article>}{recommendations.length ? <div className={styles.routeList}>{recommendations.map((recommendation) => <article key={recommendation.id}><span className={`${styles.severity} ${styles[`severity${recommendation.severity}`]}`}>{labels[recommendation.severity]}</span>{recommendation.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}<strong>{recommendation.message}</strong><small>{ago(recommendation.createdAt)}</small></article>)}</div> : !routeGuidance && <div className={styles.routeEmpty}>No route changes are recommended right now.</div>}</Card>
           </section>
           <section id="alerts" className={styles.alertSection}>
             <div className={styles.sectionHeading}>

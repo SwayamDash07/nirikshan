@@ -30,7 +30,14 @@ import torch
 from ultralytics import YOLO
 
 from risk_scoring import ZoneRisk, calculate_zone_risk
-from signal_utils import detect_hotspots_from_centroids, derive_signal_values
+from signal_utils import (
+    BehaviorStateTracker,
+    behavior_candidate,
+    detect_hotspots_from_centroids,
+    derive_signal_values,
+    estimate_flow_direction_from_vectors,
+    temporal_reverse_ratio,
+)
 
 
 RISK_COLORS = {
@@ -58,20 +65,26 @@ class CentroidTracker:
         self.max_distance = max_distance_pixels
         self.previous: list[tuple[float, float]] = []
 
-    def average_displacement(self, current: list[Detection]) -> float:
+    def matched_displacements(self, current: list[Detection]) -> list[tuple[float, float]]:
         current_points = [d.centroid for d in current]
+        previous_points = self.previous
         available = set(range(len(self.previous)))
-        distances: list[float] = []
+        vectors: list[tuple[float, float]] = []
         for point in current_points:
             if not available:
                 break
             nearest = min(available, key=lambda index: math.dist(point, self.previous[index]))
             distance = math.dist(point, self.previous[nearest])
             if distance <= self.max_distance:
-                distances.append(distance)
+                vectors.append((point[0] - self.previous[nearest][0], point[1] - self.previous[nearest][1]))
                 available.remove(nearest)
+        if len(vectors) < 3 and len(previous_points) >= 3 and len(current_points) >= 3:
+            dx = sum(point[0] for point in current_points) / len(current_points) - sum(point[0] for point in previous_points) / len(previous_points)
+            dy = sum(point[1] for point in current_points) / len(current_points) - sum(point[1] for point in previous_points) / len(previous_points)
+            if math.hypot(dx, dy) >= 2:
+                vectors = [(dx, dy)] * min(len(previous_points), len(current_points))
         self.previous = current_points
-        return sum(distances) / len(distances) if distances else 0.0
+        return vectors
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -307,6 +320,10 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     visible_area = max(float(calibration.get("visibleAreaSqMeters", 100.0)), 0.001)
     max_history = max(10, round((lookback + smoothing_window + 5.0) * fps / process_every))
     tracker = CentroidTracker(float(thresholds.get("maxTrackDistancePixels", 120.0)))
+    behavior_tracker = BehaviorStateTracker(
+        min_samples=int(thresholds.get("flowMinStateSamples", 2)),
+        min_duration_seconds=float(thresholds.get("flowMinStateDurationSeconds", 10.0)),
+    )
     raw_history: deque[tuple[float, float, float]] = deque(maxlen=max_history)
     smoothed_history: deque[tuple[float, float, float]] = deque(maxlen=max_history)
     events: list[dict[str, Any]] = []
@@ -346,6 +363,10 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     latest_trend = "→"
     latest_density = 0.0
     latest_speed = 0.0
+    previous_speed: float | None = None
+    latest_flow: dict[str, Any] = estimate_flow_direction_from_vectors([])
+    latest_behavior_state = "INSUFFICIENT_DATA"
+    previous_direction_degrees: float | None = None
     latest_hotspots: list[dict[str, Any]] = []
     hotspot_started_at: float | None = None
     hotspot_persistence_seconds = 0.0
@@ -366,6 +387,7 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 loop_iteration += 1
                 frame_index = 0
                 tracker.previous = []
+                previous_direction_degrees = None
                 raw_history.clear()
                 smoothed_history.clear()
                 print(f"LOOP_ITERATION {loop_iteration}", flush=True)
@@ -397,7 +419,8 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 )
                 detection_log.flush()
                 raw_density = weighted_people / visible_area
-                displacement_pixels = tracker.average_displacement(detections)
+                movement_vectors = tracker.matched_displacements(detections)
+                displacement_pixels = sum(math.hypot(dx, dy) for dx, dy in movement_vectors) / len(movement_vectors) if movement_vectors else 0.0
                 raw_speed = displacement_pixels * meters_per_pixel * fps / process_every
                 raw_history.append((timestamp_seconds, raw_density, raw_speed))
                 latest_density, latest_speed = rolling_average(raw_history, timestamp_seconds, smoothing_window)
@@ -412,6 +435,21 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                     latest_density, density_increase, latest_speed, thresholds, speed_drop=speed_drop
                 )
                 latest_trend = density_trend(smoothed_history, timestamp_seconds)
+                latest_flow = estimate_flow_direction_from_vectors(
+                    movement_vectors,
+                    min_tracked=int(thresholds.get("flowMinTrackedPeople", 3)),
+                    min_displacement=float(thresholds.get("flowMinDisplacementPixels", 2.0)),
+                )
+                if latest_flow.get("directionDegrees") is not None:
+                    latest_flow["reverseMovementRatio"] = round(temporal_reverse_ratio(
+                        previous_direction_degrees,
+                        float(latest_flow["directionDegrees"]),
+                        float(latest_flow.get("reverseMovementRatio", 0.0)),
+                    ), 3)
+                    previous_direction_degrees = float(latest_flow["directionDegrees"])
+                candidate = behavior_candidate(latest_flow, latest_speed, previous_speed, density_increase)
+                latest_behavior_state = behavior_tracker.update(candidate, timestamp_seconds)
+                previous_speed = latest_speed
 
                 if args.debug_calibration and not debug_reported and current_total_people > 0:
                     print("CALIBRATION DEBUG (first non-empty sample frame)")
@@ -439,6 +477,18 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                         "movementSlowdown": round(latest_risk.speed_drop, 4),
                         "hotspotPersistenceSeconds": round(hotspot_persistence_seconds, 1),
                         "hotspotRegions": latest_hotspots,
+                        "dominantDirection": latest_flow.get("dominantDirection", "Unknown"),
+                        "directionDegrees": latest_flow.get("directionDegrees"),
+                        "directionConfidence": latest_flow.get("directionConfidence", 0.0),
+                        "directionalConsistency": latest_flow.get("directionalConsistency", 0.0),
+                        "reverseMovementRatio": latest_flow.get("reverseMovementRatio", 0.0),
+                        "conflictingMovementRatio": latest_flow.get("conflictingMovementRatio", 0.0),
+                        "behaviorState": latest_behavior_state,
+                        "behaviorExplanation": (
+                            "Direction estimate is insufficient for a reliable flow state."
+                            if latest_behavior_state == "INSUFFICIENT_DATA"
+                            else f"Observed {latest_behavior_state.lower().replace('_', ' ')} from smoothed tracked-person motion."
+                        ),
                         "sourceClipId": args.source_clip_id or Path(args.input).stem,
                         "source": "LIVE",
                     })
@@ -511,9 +561,14 @@ def post_events(events: list[dict[str, Any]], url: str, timeout: float) -> None:
 
 
 def post_event(event: dict[str, Any], url: str, timeout: float) -> None:
-    response = requests.post(url, json=event, timeout=timeout)
-    response.raise_for_status()
-    print(f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} timestamp={event['timestamp']}")
+    try:
+        response = requests.post(url, json=event, timeout=timeout)
+        response.raise_for_status()
+        print(f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} timestamp={event['timestamp']}")
+    except requests.RequestException as error:
+        # A temporary backend/network failure must not stop the camera loop or
+        # make the persisted upload look deleted. The next live event retries.
+        print(f"Warning: risk event POST failed; keeping camera loop alive: {error}", file=sys.stderr, flush=True)
 
 
 def parse_args() -> argparse.Namespace:

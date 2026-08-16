@@ -38,6 +38,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/assistant/chat").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/zones/*/incident-summary", "/api/venue/incident-summary").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/zones/*/risk-forecast", "/api/venue/risk-forecast").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/zones/*/flow-status").hasAnyRole("ADMIN", "SECURITY")
+                        .requestMatchers(HttpMethod.GET, "/api/venue/routes").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/risk-events").permitAll()
                         .requestMatchers("/api/admin/**", "/api/jobs/**", "/api/risk-events/**", "/api/zones/**", "/job-files/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/alerts/**").hasRole("ADMIN")

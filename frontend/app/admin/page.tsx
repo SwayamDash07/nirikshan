@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Client, IMessage } from "@stomp/stompjs";
 import AppShell, { NavItem } from "../components/AppShell";
 import Icon from "../components/Icon";
@@ -83,10 +83,14 @@ function AdminUpload({ user }: { user: UserInfo }) {
   const [busyZoneId, setBusyZoneId] = useState<number>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const feedMutationVersion = useRef(0);
 
   const loadZones = useCallback(async () => {
+    const requestVersion = feedMutationVersion.current;
     const next = await api<Zone[]>("/api/admin/zones");
-    setZones(next);
+    // A poll can have started before an upload finished and return after it.
+    // Do not let that stale response roll another zone back to its old feed.
+    if (requestVersion === feedMutationVersion.current) setZones(next);
   }, []);
 
   useEffect(() => {
@@ -112,21 +116,25 @@ function AdminUpload({ user }: { user: UserInfo }) {
   }, []);
 
   async function connect(zoneId: number, file: File) {
+    feedMutationVersion.current += 1;
     setBusyZoneId(zoneId); setError(""); setNotice("");
     try {
       const body = new FormData(); body.append("file", file);
       const connected = await api<Zone>(`/api/admin/zones/${zoneId}/connect-footage`, { method: "POST", body });
       setZones((current) => current.map((zone) => zone.id === zoneId ? connected : zone));
+      await loadZones();
       setNotice(`${connected.name} is online. Continuous coverage is now running.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect camera footage."); }
     finally { setBusyZoneId(undefined); }
   }
 
   async function stop(zoneId: number) {
+    feedMutationVersion.current += 1;
     setBusyZoneId(zoneId); setError(""); setNotice("");
     try {
       const stopped = await api<Zone>(`/api/admin/zones/${zoneId}/stop-coverage`, { method: "POST" });
       setZones((current) => current.map((zone) => zone.id === zoneId ? stopped : zone));
+      await loadZones();
       setNotice(`${stopped.name} coverage stopped. The camera is offline.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not stop camera coverage."); }
     finally { setBusyZoneId(undefined); }

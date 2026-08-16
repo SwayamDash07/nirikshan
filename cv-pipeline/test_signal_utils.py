@@ -1,7 +1,18 @@
 import unittest
 
 from risk_scoring import calculate_zone_risk
-from signal_utils import bottleneck_detected, detect_hotspots_from_centroids, detect_hotspots_from_counts, derive_signal_values, sustained_pattern
+from signal_utils import (
+    BehaviorStateTracker,
+    behavior_candidate,
+    bottleneck_detected,
+    detect_hotspots_from_centroids,
+    detect_hotspots_from_counts,
+    derive_signal_values,
+    estimate_flow_direction,
+    estimate_flow_direction_from_vectors,
+    sustained_pattern,
+    temporal_reverse_ratio,
+)
 
 
 CONFIG = {
@@ -32,6 +43,26 @@ class SignalTests(unittest.TestCase):
     def test_sustained_pattern_and_recovery(self):
         self.assertTrue(sustained_pattern(["MEDIUM"] * 4, [1, 1.2, 1.5, 1.7], 20))
         self.assertFalse(sustained_pattern(["LOW"] * 4, [.3, .3, .3, .3], 20))
+
+    def test_direction_estimation_and_insufficient_data(self):
+        estimate = estimate_flow_direction([(10, 10), (20, 10), (30, 10)], [(15, 10), (25, 10), (35, 10)])
+        self.assertEqual(estimate["dominantDirection"], "E")
+        self.assertGreater(estimate["directionConfidence"], .8)
+        insufficient = estimate_flow_direction([(10, 10)], [(15, 10)])
+        self.assertEqual(insufficient["state"], "INSUFFICIENT_DATA")
+
+    def test_reverse_conflicting_and_behavior_hysteresis(self):
+        reverse = estimate_flow_direction_from_vectors([(-10, 0)] * 4)
+        self.assertEqual(reverse["dominantDirection"], "W")
+        conflict = estimate_flow_direction_from_vectors([(10, 0), (10, 0), (10, 0), (0, -10)])
+        self.assertGreaterEqual(conflict["conflictingMovementRatio"], .25)
+        self.assertEqual(temporal_reverse_ratio(90, 270), 1.0)
+        tracker = BehaviorStateTracker()
+        flow = {"state": "OK", "reverseMovementRatio": 0.0, "conflictingMovementRatio": 0.0}
+        self.assertEqual(tracker.update(behavior_candidate(flow, 1.0, None), 0), "INSUFFICIENT_DATA")
+        self.assertEqual(tracker.update("REVERSE_FLOW", 5), "INSUFFICIENT_DATA")
+        self.assertEqual(tracker.update("REVERSE_FLOW", 10), "INSUFFICIENT_DATA")
+        self.assertEqual(tracker.update("REVERSE_FLOW", 15), "REVERSE_FLOW")
 
 
 if __name__ == "__main__":

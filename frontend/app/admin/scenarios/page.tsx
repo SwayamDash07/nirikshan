@@ -7,7 +7,7 @@ import { api, clearSession, readSession, type UserInfo } from "../../lib/auth";
 import styles from "./scenarios.module.css";
 
 type Zone = { id: number; name: string };
-type ScenarioType = "buildup" | "surge" | "persistent_hotspot" | "slowdown" | "recovery";
+type ScenarioType = "buildup" | "surge" | "persistent_hotspot" | "slowdown" | "recovery" | "normal_one_way" | "slowing_flow" | "reverse_movement" | "conflicting_movement" | "blocked_route" | "alternate_exit_recovery";
 type Run = { runId: string; scenarioType: ScenarioType; zoneId: number; status: "PENDING" | "RUNNING" | "COMPLETE" | "STOPPED"; speed: number; message: string; startedAt: string; completedAt?: string };
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/console", icon: "grid" },
@@ -22,6 +22,12 @@ const scenarios: Array<{ value: ScenarioType; label: string; description: string
   { value: "persistent_hotspot", label: "Persistent Hotspot", description: "Sustained localized congestion tests bottleneck handling." },
   { value: "slowdown", label: "Slowdown With Rising Density", description: "Density rises while movement slows, exercising early-warning thresholds." },
   { value: "recovery", label: "Recovery", description: "Risk subsides back to normal and clears stale actions." },
+  { value: "normal_one_way", label: "Normal one-way flow", description: "SIMULATION: consistent eastbound movement with sufficient direction data." },
+  { value: "slowing_flow", label: "Slowing flow", description: "SIMULATION: movement slows while density rises." },
+  { value: "reverse_movement", label: "Reverse movement", description: "SIMULATION: a sustained reversal against the dominant direction." },
+  { value: "conflicting_movement", label: "Conflicting movement", description: "SIMULATION: crossing flows compete in one zone." },
+  { value: "blocked_route", label: "Blocked route", description: "SIMULATION: the primary route becomes blocked and Exit B is evaluated." },
+  { value: "alternate_exit_recovery", label: "Alternate-exit recovery", description: "SIMULATION: Exit B recovery after a primary route disruption." },
 ];
 
 function Simulator({ user }: { user: UserInfo }) {

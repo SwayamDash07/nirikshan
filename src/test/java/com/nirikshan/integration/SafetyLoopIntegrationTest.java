@@ -101,6 +101,47 @@ class SafetyLoopIntegrationTest {
     }
 
     @Test
+    void insufficientFlowNeverExposesDirectionOrConfidence() {
+        base = Instant.now().minusSeconds(5);
+        RiskEventResponse event = ingest(0, .5, 10, 1.2, RiskLevel.LOW, List.of(), "LIVE");
+        assertEquals(FlowBehaviorState.INSUFFICIENT_DATA, event.behaviorState());
+        assertNull(event.dominantDirection());
+        assertNull(event.directionDegrees());
+        assertEquals(0, event.directionConfidence());
+        assertEquals(0, event.reverseMovementRatio());
+        assertEquals(0, event.conflictingMovementRatio());
+
+        var forecast = forecasts.forecast(zoneId);
+        assertEquals(FlowBehaviorState.INSUFFICIENT_DATA, forecast.flowState());
+        assertEquals("Unknown", forecast.dominantDirection());
+        assertNull(forecast.direction());
+        assertNull(forecast.directionDegrees());
+        assertEquals(0, forecast.directionConfidence());
+    }
+
+    @Test
+    void validFlowRequiresConfiguredSampleCountAndTimeSpan() {
+        base = Instant.now().minusSeconds(20);
+        ingestFlow(0);
+        ingestFlow(5);
+        ingestFlow(10);
+        var sufficient = forecasts.forecast(zoneId);
+        assertEquals("SUFFICIENT", sufficient.dataSufficiency());
+        assertEquals("E", sufficient.direction());
+        assertEquals(90, sufficient.directionDegrees(), .01);
+        assertTrue(sufficient.directionConfidence() > 0);
+
+        events.deleteAll();
+        ingestFlow(0);
+        ingestFlow(2);
+        ingestFlow(4);
+        var shortWindow = forecasts.forecast(zoneId);
+        assertEquals(FlowBehaviorState.INSUFFICIENT_DATA, shortWindow.flowState());
+        assertNull(shortWindow.direction());
+        assertEquals(0, shortWindow.directionConfidence());
+    }
+
+    @Test
     void risingLiveReadingsCreateProjectedActionsWithoutContradictoryRouteAdvice() {
         base = Instant.now().minusSeconds(40);
         ingest(0, 1.0, 20, 1.0, RiskLevel.LOW, List.of(), "LIVE");
@@ -135,12 +176,14 @@ class SafetyLoopIntegrationTest {
         assertEquals(first.projectedDensity(), second.projectedDensity());
         assertEquals(first.estimatedSecondsToProjectedRisk(), second.estimatedSecondsToProjectedRisk());
         assertEquals(first.explanation(), second.explanation());
-        assertNotEquals(first.generatedAt(), second.generatedAt());
+        assertEquals(first.generatedAt(), second.generatedAt());
+        assertEquals(first.analysisGeneratedAt(), second.analysisGeneratedAt());
+        assertTrue(second.nextAnalysisAt().isAfter(second.analysisGeneratedAt()));
     }
 
     @Test
-    void oneNoisyReadingDoesNotFlipStateButTwoQualifyingReadingsCan() {
-        base = Instant.now().minusSeconds(70);
+    void oneNoisyReadingDoesNotFlipStateBeforeTheNextAnalysisWindow() {
+        base = Instant.now().minusSeconds(50);
         ingest(0, .5, 10, 1.2, RiskLevel.LOW, List.of(), "LIVE");
         ingest(10, .51, 10, 1.2, RiskLevel.LOW, List.of(), "LIVE");
         ingest(20, .50, 10, 1.2, RiskLevel.LOW, List.of(), "LIVE");
@@ -151,7 +194,10 @@ class SafetyLoopIntegrationTest {
         assertEquals(RiskForecastState.STABLE, forecasts.forecast(zoneId).state());
         ingest(60, 4.8, 100, .2, RiskLevel.HIGH, List.of(new HotspotRegion("2,2", 2.4)), "LIVE");
         var transitioned = forecasts.forecast(zoneId);
-        assertTrue(transitioned.state() == RiskForecastState.RISING || transitioned.state() == RiskForecastState.SURGE_RISK || transitioned.state() == RiskForecastState.CRUSH_RISK, transitioned.toString());
+        assertEquals(RiskForecastState.STABLE, transitioned.state(), "Non-critical changes remain held until the next analysis window");
+        ingest(80, 6.5, 130, .1, RiskLevel.CRITICAL, List.of(new HotspotRegion("2,2", 3)), "LIVE");
+        var critical = forecasts.forecast(zoneId);
+        assertTrue(critical.state() == RiskForecastState.SURGE_RISK || critical.state() == RiskForecastState.CRUSH_RISK, critical.toString());
     }
 
     @Test
@@ -181,11 +227,18 @@ class SafetyLoopIntegrationTest {
         ingest(50, .52, 10, 1.2, RiskLevel.LOW, List.of(), "LIVE");
         var after = forecasts.forecast(zoneId);
         assertNotEquals(before.lastTelemetryAt(), after.lastTelemetryAt());
-        assertNotEquals(before.confidence(), after.confidence());
+        assertEquals(before.confidence(), after.confidence());
+        assertEquals(before.analysisGeneratedAt(), after.analysisGeneratedAt());
     }
 
     private RiskEventResponse ingest(long seconds, double density, int people, double speed, RiskLevel risk, List<HotspotRegion> hotspots, String source) {
         return riskEvents.ingest(new RiskEventRequest(zoneId, base.plusSeconds(seconds), density, people, speed, risk,
                 "test signal", hotspots, "test-clip", null, null, null, source));
+    }
+
+    private RiskEventResponse ingestFlow(long seconds) {
+        return riskEvents.ingest(new RiskEventRequest(zoneId, base.plusSeconds(seconds), .5, 10, 1.2, RiskLevel.LOW,
+                "test flow", List.of(), "test-flow", 0.0, 0.0, 0.0, "LIVE", "E", 90.0, .8, .8, 0.0, 0.0,
+                FlowBehaviorState.NORMAL_FLOW, "Stable eastbound movement."));
     }
 }

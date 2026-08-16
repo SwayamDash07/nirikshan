@@ -28,6 +28,13 @@ nirikshan:
     pipeline-dir: ${NIRIKSHAN_CV_PIPELINE_DIR:cv-pipeline}
     python-executable: ${NIRIKSHAN_PYTHON:python}
     risk-event-url: ${NIRIKSHAN_RISK_EVENT_URL:http://localhost:8080/api/risk-events}
+  routes:
+    default-capacity: ${NIRIKSHAN_ROUTE_DEFAULT_CAPACITY:600}
+    exit-b-capacity: ${NIRIKSHAN_EXIT_B_CAPACITY:450}
+  analysis:
+    interval-seconds: ${NIRIKSHAN_ANALYSIS_INTERVAL_SECONDS:30}
+    flow-min-samples: ${NIRIKSHAN_FLOW_MIN_SAMPLES:3}
+    flow-min-span-seconds: ${NIRIKSHAN_FLOW_MIN_SPAN_SECONDS:10}
 
 springdoc:
   swagger-ui:

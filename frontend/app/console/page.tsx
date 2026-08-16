@@ -2,6 +2,7 @@
 
 import {
   CSSProperties,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -62,6 +63,14 @@ type RiskEvent = {
   densityChange?: number;
   movementSlowdown?: number;
   hotspotPersistenceSeconds?: number;
+  dominantDirection?: string;
+  directionDegrees?: number;
+  directionConfidence?: number;
+  directionalConsistency?: number;
+  reverseMovementRatio?: number;
+  conflictingMovementRatio?: number;
+  behaviorState?: FlowBehaviorState;
+  behaviorExplanation?: string;
 };
 type HotspotRegion = { gridPosition: string; relativeDensity: number };
 type HotspotSummary = { regions: HotspotRegion[]; durationSeconds: number };
@@ -80,6 +89,7 @@ type Health = {
   activeAlerts: number;
 };
 type ForecastState = "STABLE" | "RISING" | "SURGE_RISK" | "CRUSH_RISK" | "RECOVERING" | "INSUFFICIENT_DATA";
+type FlowBehaviorState = "NORMAL_FLOW" | "RISING_FLOW" | "SLOWING_FLOW" | "REVERSE_FLOW" | "CONFLICTING_FLOW" | "UNUSUAL_BEHAVIOR" | "INSUFFICIENT_DATA";
 type RiskForecast = {
   zoneId: number;
   zoneName: string;
@@ -103,7 +113,36 @@ type RiskForecast = {
   source: "LIVE" | "SIMULATION";
   stale: boolean;
   projections: Array<{ horizonSeconds: number; projectedDensity: number }>;
+  dominantDirection?: string;
+  directionDegrees?: number;
+  directionConfidence?: number;
+  directionalConsistency?: number;
+  reverseMovementRatio?: number;
+  conflictingMovementRatio?: number;
+  behaviorState?: FlowBehaviorState;
+  behaviorExplanation?: string;
+  analysisGeneratedAt?: string;
+  analysisWindowStart?: string;
+  analysisWindowEnd?: string;
+  nextAnalysisAt?: string;
+  analysisIntervalSeconds?: number;
+  dataSufficiency?: "SUFFICIENT" | "INSUFFICIENT_DATA" | "STALE";
+  flowState?: FlowBehaviorState;
+  direction?: string;
+  analysisPeopleCount?: number;
+  analysisHotspotRegions?: HotspotRegion[];
 };
+type RouteRecommendation = {
+  recommendedRoute?: { routeId: string; routeName: string; exitOrGate: string; expectedTravelTimeSeconds: number; riskScore: number; reason: string; nodeLabels: string[] };
+  rejectedRoutes: Array<{ routeName: string; exitOrGate: string; expectedTravelTimeSeconds: number; riskScore: number; reason: string; blocked: boolean }>;
+  reason: string;
+  expectedTravelTimeSeconds: number;
+  riskScore: number;
+  gateAction: string;
+  gateActionReason: string;
+  source: "LIVE" | "SIMULATION";
+};
+type RouteGraph = { nodes: Array<{ id: string; label: string; kind: string }>; paths: Array<{ id: string; fromNodeId: string; toNodeId: string; capacity: number; travelTimeSeconds: number; open: boolean; blocked: boolean }> };
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
 const riskMeta: Record<
@@ -164,6 +203,18 @@ function formatAge(value?: string, now = Date.now()) {
     Math.round((now - new Date(value).valueOf()) / 1000),
   );
   return seconds < 60 ? `${seconds}s ago` : `${Math.floor(seconds / 60)}m ago`;
+}
+function formatCountdown(value?: string, now = Date.now()) {
+  if (!value) return "Unavailable";
+  const seconds = Math.max(0, Math.ceil((new Date(value).valueOf() - now) / 1000));
+  return seconds === 0 ? "now" : `in ${seconds}s`;
+}
+function analysisWindowLabel(start?: string, end?: string) {
+  if (!start || !end) return "Unavailable";
+  return `${formatTime(start)}–${formatTime(end)}`;
+}
+function flowDataIsSufficient(forecast?: RiskForecast) {
+  return Boolean(forecast && (forecast.flowState || forecast.behaviorState) !== "INSUFFICIENT_DATA" && forecast.dataSufficiency === "SUFFICIENT");
 }
 function highestRisk(zones: Zone[]): RiskLevel {
   return zones.reduce<RiskLevel>(
@@ -262,6 +313,51 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forec
   </Card>;
 }
 
+function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, compact = false, onViewMore }: { forecast?: RiskForecast; route?: RouteRecommendation; graph?: RouteGraph; now: number; compact?: boolean; onViewMore?: () => void }) {
+  const forecast = inputForecast && !flowDataIsSufficient(inputForecast)
+    ? { ...inputForecast, dominantDirection: "Unknown", direction: "Unknown", directionDegrees: undefined, directionConfidence: 0, directionalConsistency: 0, reverseMovementRatio: 0, conflictingMovementRatio: 0 }
+    : inputForecast;
+  const state = forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
+  const sufficient = flowDataIsSufficient(forecast);
+  const stateLabel = state.replaceAll("_", " ");
+  const reverseWarning = sufficient && (forecast?.reverseMovementRatio || 0) >= 0.45;
+  const conflictWarning = sufficient && (forecast?.conflictingMovementRatio || 0) >= 0.30;
+  const resultLabel = forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : "INSUFFICIENT_DATA";
+  if (compact) {
+    return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
+      <div className={styles.cardHeader}>
+        <div><span className={styles.kicker}>VENUE FLOW</span><h2>Flow intelligence</h2></div>
+        <span className={forecast?.source === "SIMULATION" ? styles.simulationBadge : styles.forecastHeld}>{resultLabel}</span>
+      </div>
+      <div className={styles.contextStats}>
+        <div><span>Behavior</span><strong>{stateLabel}</strong></div>
+        <div><span>Direction</span><strong>{forecast?.dominantDirection || "Unknown"}{forecast?.directionDegrees != null ? ` · ${Math.round(forecast.directionDegrees)}°` : ""}</strong></div>
+        <div><span>Confidence</span><strong>{sufficient && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
+      </div>
+      <div className={styles.summaryRow}>
+        <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
+        <span>Gate action</span><strong>{route?.gateAction?.replaceAll("_", " ") || "Unavailable"}</strong>
+      </div>
+      <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
+    </Card>;
+  }
+  return <Card className={styles.zoneContext}>
+     <div className={styles.cardHeader}><div><span className={styles.kicker}>VENUE FLOW INTELLIGENCE</span><h2>Observed flow & route action</h2><p>Observed behavior, predicted risk, and recommended action are shown separately.</p></div><span className={forecast?.source === "SIMULATION" ? styles.simulationBadge : styles.forecastHeld}>{resultLabel}</span></div>
+    <div className={styles.contextStats}>
+      <div><span>Observed behavior</span><strong>{stateLabel}</strong></div>
+      <div><span>Dominant direction</span><strong>{forecast?.dominantDirection || "Unknown"}{forecast?.directionDegrees != null ? ` · ${Math.round(forecast.directionDegrees)}°` : ""}</strong></div>
+      <div><span>Flow confidence</span><strong>{sufficient && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
+    </div>
+    <p className={styles.signalFacts}>{forecast?.behaviorExplanation || "No tracked-person movement is available for a reliable flow estimate."}</p>
+    <div className={styles.forecastMeta}><span>Last analysis: {formatTime(forecast?.analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(forecast?.analysisWindowStart, forecast?.analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(forecast?.nextAnalysisAt, now)}</span><span>Interval: {forecast?.analysisIntervalSeconds || 30}s</span></div>
+    {(reverseWarning || conflictWarning) && <p className={styles.forecastNotice}>{reverseWarning ? "Reverse movement warning." : "Conflicting movement warning."} {conflictWarning ? "Crossing flow is elevated." : "People are moving against the dominant direction."}</p>}
+    <div className={styles.signalFacts}><span className={styles.kicker}>PREDICTED RISK</span><p>{forecast ? `${forecast.currentRisk} now → ${forecast.projectedRisk} projected. ${forecast.explanation}` : "Forecast unavailable."}</p></div>
+    <div className={styles.signalFacts}><span className={styles.kicker}>RECOMMENDED ACTION</span>{route?.recommendedRoute ? <><p><strong>{route.recommendedRoute.routeName}</strong> · {route.expectedTravelTimeSeconds}s · risk score {route.riskScore.toFixed(2)}</p><p>{route.reason}</p><p><strong>Gate action:</strong> {route.gateAction} · {route.gateActionReason}</p></> : <p>{route?.reason || "Route recommendation unavailable."}</p>}</div>
+    {route?.rejectedRoutes?.length ? <div className={styles.signalFacts}><span className={styles.kicker}>REJECTED ROUTES</span>{route.rejectedRoutes.map((item) => <p key={item.routeName}><strong>{item.routeName}</strong> · {item.blocked ? "BLOCKED" : item.reason}</p>)}</div> : null}
+    {graph && <div className={styles.signalFacts}><span className={styles.kicker}>LOCAL ROUTE GRAPH</span><p>{graph.nodes.filter((node) => node.kind === "ZONE").length} zones · {graph.nodes.filter((node) => node.kind === "EXIT").length} exits · {graph.paths.length} directed paths</p></div>}
+  </Card>;
+}
+
 function HotspotDetail({ summary }: { summary: HotspotSummary }) {
   const active = new Map(summary.regions.map((region) => [region.gridPosition, region]));
   return <section className={styles.hotspotDetail}>
@@ -275,6 +371,79 @@ function HotspotDetail({ summary }: { summary: HotspotSummary }) {
     </div>
     <div className={styles.hotspotRegionList}>{summary.regions.map((region) => <span key={region.gridPosition}><b>{gridPositionLabel(region.gridPosition)}</b><small>{region.relativeDensity.toFixed(1)}x zone average · {region.relativeDensity >= 2 ? "severe" : "elevated"}</small></span>)}</div>
   </section>;
+}
+
+function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSummary, analysisBottleneck, liveTelemetryAt, now, compact = false, onViewMore }: {
+  selectedZone?: Zone;
+  selectedAnalysis?: RiskForecast;
+  selectedHotspotSummary?: HotspotSummary;
+  analysisBottleneck: boolean;
+  liveTelemetryAt?: string;
+  now: number;
+  compact?: boolean;
+  onViewMore?: () => void;
+}) {
+  const analysisPeopleCount = selectedAnalysis?.analysisPeopleCount ?? 0;
+  if (compact) {
+    return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
+      <div className={styles.cardHeader}>
+        <div><span className={styles.kicker}>SELECTED ZONE</span><h2>{selectedZone?.name || "No zone selected"}</h2></div>
+        <StatusBadge level={selectedAnalysis?.currentRisk || selectedZone?.currentRiskLevel || "LOW"} />
+      </div>
+      {selectedZone ? <>
+        {analysisBottleneck && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
+        <div className={styles.contextStats}>
+          <div><span>Headcount</span><strong>{selectedAnalysis ? analysisPeopleCount : selectedZone.currentPeopleCount ?? 0}</strong></div>
+          <div><span>Density</span><strong>{(selectedAnalysis?.currentDensity ?? selectedZone.currentDensity).toFixed(2)}</strong></div>
+          <div><span>Last telemetry</span><strong>{formatTime(liveTelemetryAt)}</strong></div>
+        </div>
+        <div className={styles.summaryRow}><span>Risk</span><strong>{selectedAnalysis?.currentRisk || selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{formatTime(selectedAnalysis?.analysisGeneratedAt)}</strong></div>
+        <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
+      </> : <p className={styles.noDataNotice}>Select a zone from the map.</p>}
+    </Card>;
+  }
+  return <Card className={styles.zoneContext}>
+    <div className={styles.cardHeader}>
+      <div>
+        <span className={styles.kicker}>SELECTED ZONE</span>
+        <h2>{selectedZone?.name || "No zone selected"}</h2>
+        {selectedZone?.simulationActive && <span className={styles.simulationBadge}>SIMULATION MODE</span>}
+      </div>
+      <StatusBadge level={selectedAnalysis?.currentRisk || selectedZone?.currentRiskLevel || "LOW"} />
+    </div>
+    {selectedZone ? (
+      <>
+        {analysisBottleneck && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
+        <div className={styles.contextStats}>
+          <div><span>Headcount</span><strong>{selectedAnalysis ? analysisPeopleCount : selectedZone.currentPeopleCount ?? 0}</strong></div>
+          <div><span>Density</span><strong>{(selectedAnalysis?.currentDensity ?? selectedZone.currentDensity).toFixed(2)}</strong></div>
+          <div><span>Last telemetry</span><strong>{formatTime(liveTelemetryAt)}</strong></div>
+        </div>
+        {selectedAnalysis ? <div className={styles.signalFacts}>
+          <span className={styles.kicker}>DETECTED FACTS</span>
+          <p>{selectedAnalysis.explanation}</p>
+          <div><span>Density change</span><strong>{(selectedAnalysis.densityTrendPerMinute >= 0 ? "+" : "")}{selectedAnalysis.densityTrendPerMinute.toFixed(2)} / min</strong><span>Movement slowdown</span><strong>{(selectedAnalysis.movementSlowdown * 100).toFixed(0)}%</strong><span>Hotspot persistence</span><strong>{selectedAnalysis.hotspotPersistenceSeconds}s</strong></div>
+          <div className={styles.forecastMeta}><span>Last analysis: {formatTime(selectedAnalysis.analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(selectedAnalysis.analysisWindowStart, selectedAnalysis.analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(selectedAnalysis.nextAnalysisAt, now)}</span></div>
+        </div> : <div className={styles.noDataNotice}>No recent data for this zone.</div>}
+        {analysisBottleneck && selectedHotspotSummary && <HotspotDetail summary={selectedHotspotSummary} />}
+      </>
+    ) : <p>Select a zone from the map or register below.</p>}
+    <a className={styles.cardLink} href="#zones">View all zones <Icon name="arrow" /></a>
+  </Card>;
+}
+
+function DetailModal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={onClose}>
+    <div className={styles.detailModal} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+      <div className={styles.modalHeader}><div><span className={styles.kicker}>DETAIL VIEW</span><h2>{title}</h2></div><button type="button" className={styles.modalClose} onClick={onClose} aria-label="Close detail view">×</button></div>
+      {children}
+    </div>
+  </div>;
 }
 
 function Metric({
@@ -542,8 +711,12 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const [forecastUpdatedAt, setForecastUpdatedAt] = useState<number>();
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState("");
+  const [liveTelemetryAtByZone, setLiveTelemetryAtByZone] = useState<Record<number, string>>({});
+  const [route, setRoute] = useState<RouteRecommendation>();
+  const [routeGraph, setRouteGraph] = useState<RouteGraph>();
   const [hotspotEventsByZone, setHotspotEventsByZone] = useState<Record<number, RiskEvent[]>>({});
   const [selectedZoneId, setSelectedZoneId] = useState<number>();
+  const [detailView, setDetailView] = useState<"flow" | "zone">();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
@@ -551,7 +724,9 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const stompRef = useRef<Client | null>(null);
   const forecastRef = useRef<RiskForecast | undefined>(undefined);
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
-  const selectedHotspotSummary = summarizeHotspots(events, now);
+  const selectedHotspotSummary = forecast?.analysisHotspotRegions?.length
+    ? { regions: forecast.analysisHotspotRegions, durationSeconds: forecast.hotspotPersistenceSeconds }
+    : undefined;
   const zonesRequiringAttention = zones.filter((zone) => riskRank[zone.currentRiskLevel] >= riskRank.MEDIUM).length;
   const freshSignals = zones.filter((zone) => zone.lastUpdated && now - new Date(zone.lastUpdated).valueOf() <= 15000).length;
   const totalHeadcount = zones.reduce(
@@ -561,8 +736,10 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const overallRisk = highestRisk(zones);
   const overallMeta = riskMeta[overallRisk];
   const simulationZoneIds = new Set(zones.filter((zone) => zone.simulationActive).map((zone) => zone.id));
-  const latestEvent = events[0];
-  const telemetryStale = Boolean(selectedZone?.lastUpdated) && now - new Date(selectedZone!.lastUpdated).valueOf() > 15000;
+  const liveTelemetryAt = selectedZoneId ? liveTelemetryAtByZone[selectedZoneId] || selectedZone?.lastUpdated : selectedZone?.lastUpdated;
+  const telemetryStale = Boolean(liveTelemetryAt) && now - new Date(liveTelemetryAt!).valueOf() > 15000;
+  const selectedAnalysis = forecast?.zoneId === selectedZoneId ? forecast : undefined;
+  const analysisBottleneck = selectedAnalysis?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
   useEffect(() => { forecastRef.current = forecast; }, [forecast]);
   const loadInitial = useCallback(async () => {
     setLoading(true);
@@ -626,6 +803,16 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     catch (reason) { setForecast(undefined); setForecastError(reason instanceof Error ? reason.message : "Could not load the risk forecast."); }
     finally { setForecastLoading(false); }
   }, []);
+  const loadRoutes = useCallback(async (zoneId: number, venueId?: number) => {
+    if (!venueId) return;
+    try {
+      const [nextRoute, nextGraph] = await Promise.all([
+        api<RouteRecommendation>(`/api/venues/${venueId}/route-recommendation?originZoneId=${zoneId}`),
+        api<RouteGraph>(`/api/venues/${venueId}/route-graph`),
+      ]);
+      setRoute(nextRoute); setRouteGraph(nextGraph);
+    } catch { setRoute(undefined); setRouteGraph(undefined); }
+  }, []);
   useEffect(() => {
     if (user.mustChangePassword) {
       window.location.replace("/alerts/security");
@@ -643,6 +830,9 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   useEffect(() => {
     if (selectedZoneId) loadForecast(selectedZoneId);
   }, [selectedZoneId, loadForecast]);
+  useEffect(() => {
+    if (selectedZoneId && venue?.id) loadRoutes(selectedZoneId, venue.id);
+  }, [selectedZoneId, venue?.id, loadRoutes]);
   useEffect(() => {
     const client = new Client({
       brokerURL: WS_URL,
@@ -672,6 +862,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               ? { ...current, totalRiskEvents: current.totalRiskEvents + 1 }
               : current,
           );
+          setLiveTelemetryAtByZone((current) => ({ ...current, [event.zoneId]: event.timestamp }));
           if (event.zoneId === selectedZoneId)
             setEvents((current) => [event, ...current].slice(0, 50));
           setHotspotEventsByZone((current) => ({
@@ -683,12 +874,13 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           const nextForecast = JSON.parse(message.body) as RiskForecast;
           const selected = nextForecast.zoneId === selectedZoneId;
           const currentForecast = forecastRef.current;
-          const changedTelemetry = currentForecast?.lastTelemetryAt !== nextForecast.lastTelemetryAt || currentForecast?.source !== nextForecast.source || currentForecast?.stale !== nextForecast.stale;
-          if (selected && changedTelemetry) setForecastUpdatedAt(Date.now());
-          setForecast((current) => {
-            const changedTelemetry = current?.lastTelemetryAt !== nextForecast.lastTelemetryAt || current?.source !== nextForecast.source || current?.stale !== nextForecast.stale;
-            return selected && changedTelemetry ? nextForecast : current;
-          });
+          if (!selected) return;
+          if (nextForecast.lastTelemetryAt) setLiveTelemetryAtByZone((current) => ({ ...current, [nextForecast.zoneId]: nextForecast.lastTelemetryAt! }));
+          const committedSnapshotChanged = !currentForecast || currentForecast.analysisGeneratedAt !== nextForecast.analysisGeneratedAt;
+          if (committedSnapshotChanged) {
+            setForecast(nextForecast);
+            setForecastUpdatedAt(Date.now());
+          }
         });
       },
       onDisconnect: () => setConnected(false),
@@ -865,46 +1057,12 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           </div>
         </Card>
         <EarlyWarningPanel forecast={forecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} />
-        <Card className={styles.zoneContext}>
-            <div className={styles.cardHeader}>
-              <div>
-                <span className={styles.kicker}>SELECTED ZONE</span>
-                <h2>{selectedZone?.name || "No zone selected"}</h2>
-                {selectedZone?.simulationActive && <span className={styles.simulationBadge}>SIMULATION MODE</span>}
-              </div>
-              <StatusBadge level={selectedZone?.currentRiskLevel || "LOW"} />
-            </div>
-            {selectedZone ? (
-              <>
-              {selectedZone.bottleneckDetected && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
-              <div className={styles.contextStats}>
-                <div>
-                  <span>Headcount</span>
-                  <strong>{selectedZone.currentPeopleCount ?? 0}</strong>
-                </div>
-                <div>
-                  <span>Density</span>
-                  <strong>{selectedZone.currentDensity.toFixed(2)}</strong>
-                </div>
-                <div>
-                  <span>Updated</span>
-                  <strong>{formatTime(selectedZone.lastUpdated)}</strong>
-                </div>
-              </div>
-              {latestEvent ? <div className={styles.signalFacts}>
-                <span className={styles.kicker}>DETECTED FACTS</span>
-                <p>{latestEvent.explanation}</p>
-                <div><span>Density change</span><strong>{((latestEvent.densityChange ?? 0) * 100).toFixed(0)}%</strong><span>Movement slowdown</span><strong>{((latestEvent.movementSlowdown ?? 0) * 100).toFixed(0)}%</strong><span>Hotspot persistence</span><strong>{latestEvent.hotspotPersistenceSeconds ?? 0}s</strong></div>
-              </div> : <div className={styles.noDataNotice}>No recent data for this zone.</div>}
-              {selectedZone.bottleneckDetected && selectedHotspotSummary && <HotspotDetail summary={selectedHotspotSummary} />}
-              </>
-            ) : (
-              <p>Select a zone from the map or register below.</p>
-            )}
-            <a className={styles.cardLink} href="#zones">
-              View all zones <Icon name="arrow" />
-            </a>
-        </Card>
+        <div className={styles.insightGrid}>
+          <FlowIntelligencePanel compact forecast={forecast} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
+          <SelectedZonePanel compact selectedZone={selectedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
+        </div>
+        {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={forecast} route={route} graph={routeGraph} now={now} /></DetailModal>}
+        {detailView === "zone" && <DetailModal title="Selected zone" onClose={() => setDetailView(undefined)}><SelectedZonePanel selectedZone={selectedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} /></DetailModal>}
         <div className={styles.lowerGrid}>
           <Card className={styles.zoneTableCard} id="zones">
           <div className={styles.cardHeader}>

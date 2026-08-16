@@ -2,7 +2,138 @@
 
 from __future__ import annotations
 
+from collections import Counter, deque
+from math import atan2, cos, degrees, hypot, radians, sin
 from typing import Iterable
+
+
+FLOW_STATES = (
+    "NORMAL_FLOW", "RISING_FLOW", "SLOWING_FLOW", "REVERSE_FLOW",
+    "CONFLICTING_FLOW", "UNUSUAL_BEHAVIOR", "INSUFFICIENT_DATA",
+)
+
+
+def _angular_difference(left: float, right: float) -> float:
+    return abs((left - right + 180.0) % 360.0 - 180.0)
+
+
+def direction_name(degrees_from_north: float) -> str:
+    names = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    return names[int(((degrees_from_north % 360.0) + 22.5) // 45) % 8]
+
+
+def estimate_flow_direction_from_vectors(vectors: Iterable[tuple[float, float]],
+                                         min_tracked: int = 3,
+                                         min_displacement: float = 2.0) -> dict[str, float | str | int]:
+    """Estimate camera-frame direction using matched centroid displacement vectors.
+
+    Degrees are compass-like: 0=N, 90=E, 180=S, 270=W. Image y increases
+    downward, so the y component is inverted for the compass conversion.
+    """
+    vectors = [(float(dx), float(dy)) for dx, dy in vectors if hypot(dx, dy) >= min_displacement]
+    if len(vectors) < min_tracked:
+        return {"state": "INSUFFICIENT_DATA", "trackedPeople": len(vectors),
+                "directionDegrees": None, "dominantDirection": "Unknown",
+                "directionConfidence": 0.0, "directionalConsistency": 0.0,
+                "reverseMovementRatio": 0.0, "conflictingMovementRatio": 0.0}
+
+    angles = [degrees(atan2(dx, -dy)) % 360.0 for dx, dy in vectors]
+    resultant_x = sum(cos(radians(angle)) for angle in angles)
+    resultant_y = sum(sin(radians(angle)) for angle in angles)
+    dominant = degrees(atan2(resultant_y, resultant_x)) % 360.0
+    consistency = hypot(resultant_x, resultant_y) / len(angles)
+    reverse = sum(_angular_difference(angle, dominant) >= 120.0 for angle in angles) / len(angles)
+    conflicting = sum(60.0 <= _angular_difference(angle, dominant) < 120.0 for angle in angles) / len(angles)
+    confidence = max(0.0, min(1.0, consistency * min(1.0, len(vectors) / float(min_tracked))))
+    return {"state": "OK", "trackedPeople": len(vectors), "directionDegrees": round(dominant, 2),
+            "dominantDirection": direction_name(dominant), "directionConfidence": round(confidence, 3),
+            "directionalConsistency": round(consistency, 3),
+            "reverseMovementRatio": round(reverse, 3), "conflictingMovementRatio": round(conflicting, 3)}
+
+
+def estimate_flow_direction(previous_centroids: Iterable[tuple[float, float]],
+                            current_centroids: Iterable[tuple[float, float]],
+                            max_distance: float = 120.0, min_tracked: int = 3,
+                            min_displacement: float = 2.0) -> dict[str, float | str | int]:
+    """Match current centroids to the nearest previous centroids and estimate flow."""
+    previous = [(float(x), float(y)) for x, y in previous_centroids]
+    current = [(float(x), float(y)) for x, y in current_centroids]
+    available = set(range(len(previous)))
+    vectors: list[tuple[float, float]] = []
+    for x, y in current:
+        if not available:
+            break
+        index = min(available, key=lambda candidate: hypot(x - previous[candidate][0], y - previous[candidate][1]))
+        dx, dy = x - previous[index][0], y - previous[index][1]
+        if hypot(dx, dy) <= max_distance:
+            vectors.append((dx, dy))
+            available.remove(index)
+    result = estimate_flow_direction_from_vectors(vectors, min_tracked, min_displacement)
+    # Nearest-neighbour matching can pair people at the same spacing during a
+    # uniform crowd translation. Use the tracked-set centroid shift as a
+    # conservative fallback rather than claiming insufficient data.
+    if result["state"] == "INSUFFICIENT_DATA" and len(previous) >= min_tracked and len(current) >= min_tracked:
+        dx = sum(x for x, _ in current) / len(current) - sum(x for x, _ in previous) / len(previous)
+        dy = sum(y for _, y in current) / len(current) - sum(y for _, y in previous) / len(previous)
+        result = estimate_flow_direction_from_vectors([(dx, dy)] * min(len(previous), len(current)), min_tracked, min_displacement)
+    return result
+
+
+def temporal_reverse_ratio(previous_direction_degrees: float | None,
+                           current_direction_degrees: float | None,
+                           current_reverse_ratio: float = 0.0) -> float:
+    """Treat a sustained 120°+ turn from the prior flow as temporal reversal."""
+    if previous_direction_degrees is None or current_direction_degrees is None:
+        return current_reverse_ratio
+    if _angular_difference(previous_direction_degrees, current_direction_degrees) >= 120.0:
+        return max(current_reverse_ratio, 1.0)
+    return current_reverse_ratio
+
+
+class BehaviorStateTracker:
+    """Hold a behavior state until a candidate persists for two samples/10 seconds."""
+
+    def __init__(self, min_samples: int = 2, min_duration_seconds: float = 10.0) -> None:
+        self.min_samples = min_samples
+        self.min_duration_seconds = min_duration_seconds
+        self.state = "INSUFFICIENT_DATA"
+        self.candidate = None
+        self.candidate_since = None
+        self.candidate_samples = 0
+
+    def update(self, candidate: str, timestamp_seconds: float) -> str:
+        if candidate not in FLOW_STATES:
+            candidate = "UNUSUAL_BEHAVIOR"
+        if candidate == self.state:
+            self.candidate = candidate
+            self.candidate_since = timestamp_seconds
+            self.candidate_samples = 1
+            return self.state
+        if candidate != self.candidate:
+            self.candidate = candidate
+            self.candidate_since = timestamp_seconds
+            self.candidate_samples = 1
+            return self.state if self.state != "INSUFFICIENT_DATA" else "INSUFFICIENT_DATA"
+        self.candidate_samples += 1
+        duration = timestamp_seconds - (self.candidate_since or timestamp_seconds)
+        if self.candidate_samples >= self.min_samples and duration >= self.min_duration_seconds:
+            self.state = candidate
+        return self.state
+
+
+def behavior_candidate(flow: dict[str, float | str | int], speed: float,
+                       previous_speed: float | None, density_change: float = 0.0) -> str:
+    if flow.get("state") != "OK":
+        return "INSUFFICIENT_DATA"
+    if float(flow.get("reverseMovementRatio", 0.0)) >= 0.45:
+        return "REVERSE_FLOW"
+    if float(flow.get("conflictingMovementRatio", 0.0)) >= 0.30:
+        return "CONFLICTING_FLOW"
+    if previous_speed and speed < previous_speed * 0.75:
+        return "SLOWING_FLOW"
+    if density_change >= 0.20 or (previous_speed and speed > previous_speed * 1.15):
+        return "RISING_FLOW"
+    return "NORMAL_FLOW"
 
 
 def detect_hotspots_from_counts(counts: list[list[int]], threshold: float = 1.5) -> list[dict[str, float | str]]:

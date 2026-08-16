@@ -22,8 +22,9 @@ public class RiskEventService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
     private final RiskForecastService forecastService;
-    public RiskEventService(RiskEventRepository eventRepository, ZoneRepository zoneRepository, AlertRepository alertRepository, RecommendationService recommendationService, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper, RiskForecastService forecastService) {
-        this.eventRepository = eventRepository; this.zoneRepository = zoneRepository; this.alertRepository = alertRepository; this.recommendationService = recommendationService; this.messagingTemplate = messagingTemplate; this.objectMapper = objectMapper; this.forecastService = forecastService;
+    private final FlowBehaviorService flowBehaviorService;
+    public RiskEventService(RiskEventRepository eventRepository, ZoneRepository zoneRepository, AlertRepository alertRepository, RecommendationService recommendationService, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper, RiskForecastService forecastService, FlowBehaviorService flowBehaviorService) {
+        this.eventRepository = eventRepository; this.zoneRepository = zoneRepository; this.alertRepository = alertRepository; this.recommendationService = recommendationService; this.messagingTemplate = messagingTemplate; this.objectMapper = objectMapper; this.forecastService = forecastService; this.flowBehaviorService = flowBehaviorService;
     }
 
     @Transactional
@@ -36,10 +37,22 @@ public class RiskEventService {
         event.setMovementSpeed(request.movementSpeed()); event.setRiskLevel(request.riskLevel());
         event.setExplanation(request.explanation()); event.setSourceClipId(request.sourceClipId());
         event.setSource(parseSource(request.source(), request.sourceClipId()));
+        event.setDominantDirection(request.dominantDirection());
+        event.setDirectionDegrees(request.directionDegrees());
+        event.setDirectionConfidence(request.directionConfidence() == null ? 0 : request.directionConfidence());
+        event.setDirectionalConsistency(request.directionalConsistency() == null ? 0 : request.directionalConsistency());
+        event.setReverseMovementRatio(request.reverseMovementRatio() == null ? 0 : request.reverseMovementRatio());
+        event.setConflictingMovementRatio(request.conflictingMovementRatio() == null ? 0 : request.conflictingMovementRatio());
         event.setHotspotRegions(writeHotspots(request.hotspotRegions()));
         event.setDensityChange(request.densityChange() == null ? relativeChange(previousEvent == null ? 0 : previousEvent.getDensityScore(), request.densityScore()) : request.densityChange());
         event.setMovementSlowdown(request.movementSlowdown() == null ? relativeDrop(previousEvent == null ? request.movementSpeed() : previousEvent.getMovementSpeed(), request.movementSpeed()) : request.movementSlowdown());
         event.setHotspotPersistenceSeconds(request.hotspotPersistenceSeconds() == null ? hotspotPersistenceSeconds(zone.getId(), request.timestamp(), request.hotspotRegions()) : Math.max(0, Math.round(request.hotspotPersistenceSeconds())));
+        FlowBehaviorService.Analysis flow = flowBehaviorService.analyze(zone.getId(), request, previousEvent);
+        event.setBehaviorState(flow.state());
+        event.setBehaviorExplanation(request.behaviorExplanation() == null || request.behaviorExplanation().isBlank() ? flow.explanation() : request.behaviorExplanation());
+        if (flow.state() == com.nirikshan.model.FlowBehaviorState.INSUFFICIENT_DATA) {
+            event.setDominantDirection(event.getDominantDirection() == null ? "INSUFFICIENT_DATA" : event.getDominantDirection());
+        }
         RiskEvent saved = eventRepository.save(event);
         zone.setCurrentDensity(request.densityScore()); zone.setCurrentPeopleCount(request.peopleCount()); zone.setCurrentRiskLevel(request.riskLevel()); zone.setLastUpdated(request.timestamp());
         updateBottleneck(zone);
@@ -127,7 +140,7 @@ public class RiskEventService {
         RiskEvent latest = eventRepository.findFirstByZoneIdAndSourceOrderByTimestampDesc(zoneId, RiskEventSource.LIVE).orElse(null);
         if (latest == null) {
             zone.setCurrentDensity(0); zone.setCurrentPeopleCount(0); zone.setCurrentRiskLevel(RiskLevel.LOW); zone.setLastUpdated(java.time.Instant.now()); zone.setBottleneckDetected(false); zoneRepository.save(zone);
-            messagingTemplate.convertAndSend("/topic/risk-updates", new RiskEventResponse(null, zoneId, zone.getLastUpdated(), 0, 0, 0, RiskLevel.LOW, "No live telemetry; simulation ended and this zone is offline.", List.of(), false, null, 0, 0, 0, "LIVE"));
+            messagingTemplate.convertAndSend("/topic/risk-updates", new RiskEventResponse(null, zoneId, zone.getLastUpdated(), 0, 0, 0, RiskLevel.LOW, "No live telemetry; simulation ended and this zone is offline.", List.of(), false, null, 0, 0, 0, "LIVE", "INSUFFICIENT_DATA", null, 0, 0, 0, 0, com.nirikshan.model.FlowBehaviorState.INSUFFICIENT_DATA, "No live telemetry is available."));
             messagingTemplate.convertAndSend("/topic/risk-forecasts", forecastService.offline(zoneId));
             return;
         }
@@ -139,6 +152,13 @@ public class RiskEventService {
         if (source != null && source.equalsIgnoreCase("SIMULATION")) return RiskEventSource.SIMULATION;
         return clipId != null && clipId.startsWith("DEMO_REPLAY_") ? RiskEventSource.SIMULATION : RiskEventSource.LIVE;
     }
-    private RiskEventResponse toResponse(RiskEvent e) { return new RiskEventResponse(e.getId(), e.getZone().getId(), e.getTimestamp(), e.getDensityScore(), e.getPeopleCount(), e.getMovementSpeed(), e.getRiskLevel(), e.getExplanation(), readHotspots(e), e.getZone().isBottleneckDetected(), e.getSourceClipId(), e.getDensityChange(), e.getMovementSlowdown(), e.getHotspotPersistenceSeconds(), e.getSource().name()); }
+    private RiskEventResponse toResponse(RiskEvent e) {
+        boolean flowAvailable = e.getBehaviorState() != null
+                && e.getBehaviorState() != FlowBehaviorState.INSUFFICIENT_DATA
+                && e.getDominantDirection() != null
+                && e.getDirectionDegrees() != null
+                && e.getDirectionConfidence() > 0;
+        return new RiskEventResponse(e.getId(), e.getZone().getId(), e.getTimestamp(), e.getDensityScore(), e.getPeopleCount(), e.getMovementSpeed(), e.getRiskLevel(), e.getExplanation(), readHotspots(e), e.getZone().isBottleneckDetected(), e.getSourceClipId(), e.getDensityChange(), e.getMovementSlowdown(), e.getHotspotPersistenceSeconds(), e.getSource().name(), flowAvailable ? e.getDominantDirection() : null, flowAvailable ? e.getDirectionDegrees() : null, flowAvailable ? e.getDirectionConfidence() : 0, flowAvailable ? e.getDirectionalConsistency() : 0, flowAvailable ? e.getReverseMovementRatio() : 0, flowAvailable ? e.getConflictingMovementRatio() : 0, flowAvailable ? e.getBehaviorState() : FlowBehaviorState.INSUFFICIENT_DATA, flowAvailable ? e.getBehaviorExplanation() : "Insufficient valid movement data is available for a reliable flow estimate.");
+    }
     private AlertResponse toResponse(Alert a) { return new AlertResponse(a.getId(), a.getZone().getId(), a.getZone().getName(), a.getTimestamp(), a.getMessage(), a.getSeverity(), a.isResolved(), a.getResolvedAt(), a.getSource()); }
 }

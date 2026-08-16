@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 public class ZoneFeedRunner {
     private static final Logger log = LoggerFactory.getLogger(ZoneFeedRunner.class);
     private static final int HEALTH_LOG_EVERY_ITERATIONS = 5;
+    private static final long RETRY_DELAY_MILLIS = 3_000L;
     private final ZoneFeedRepository feedRepository;
     private final Path pipelineDir;
     private final String pythonExecutable;
@@ -89,30 +90,37 @@ public class ZoneFeedRunner {
     @Async
     public void start(Long zoneId, String videoPath) {
         Path output = pipelineDir.resolve("outputs").resolve("live").resolve("zone-" + zoneId).resolve("events.json");
-        Process process;
         try {
-            process = launchIfCurrent(zoneId, videoPath, output);
-            if (process == null) return;
-            log.info("Started continuous camera loop for zone {} with {} (pid={})", zoneId, videoPath, process.pid());
-            try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = outputReader.readLine()) != null) {
-                    if (line.startsWith("LOOP_ITERATION ")) {
-                        try {
-                            int iteration = Integer.parseInt(line.substring("LOOP_ITERATION ".length()).trim());
-                            updateIteration(zoneId, videoPath, iteration);
-                            if (iteration > 0 && iteration % HEALTH_LOG_EVERY_ITERATIONS == 0) {
-                                log.info("Zone {} loop still running, iteration count: {}, pid={}", zoneId, iteration, process.pid());
+            while (isCurrentFeed(zoneId, videoPath)) {
+                Process activeProcess = launchIfCurrent(zoneId, videoPath, output);
+                if (activeProcess == null) return;
+                log.info("Started continuous camera loop for zone {} with {} (pid={})", zoneId, videoPath, activeProcess.pid());
+                try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(activeProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = outputReader.readLine()) != null) {
+                        if (line.startsWith("LOOP_ITERATION ")) {
+                            try {
+                                int iteration = Integer.parseInt(line.substring("LOOP_ITERATION ".length()).trim());
+                                updateIteration(zoneId, videoPath, iteration);
+                                if (iteration > 0 && iteration % HEALTH_LOG_EVERY_ITERATIONS == 0) {
+                                    log.info("Zone {} loop still running, iteration count: {}, pid={}", zoneId, iteration, activeProcess.pid());
+                                }
+                            }
+                            catch (NumberFormatException ignored) { log.debug("Could not parse loop iteration: {}", line); }
+                        } else if (!line.isBlank()) {
+                            if (line.startsWith("Error:") || line.contains("Traceback") || line.contains("Exception")) {
+                                log.warn("CV zone {}: {}", zoneId, line);
+                            } else {
+                                log.debug("CV zone {}: {}", zoneId, line);
                             }
                         }
-                        catch (NumberFormatException ignored) { log.debug("Could not parse loop iteration: {}", line); }
-                    } else if (!line.isBlank()) {
-                        log.debug("CV zone {}: {}", zoneId, line);
                     }
                 }
+                int exitCode = activeProcess.waitFor();
+                if (!isCurrentFeed(zoneId, videoPath)) break;
+                log.warn("Continuous camera loop for zone {} stopped with exit code {} (pid={}); retrying", zoneId, exitCode, activeProcess.pid());
+                Thread.sleep(RETRY_DELAY_MILLIS);
             }
-            int exitCode = process.waitFor();
-            log.warn("Continuous camera loop for zone {} stopped with exit code {} (pid={})", zoneId, exitCode, process.pid());
         } catch (Exception error) {
             log.error("Continuous camera loop for zone {} failed", zoneId, error);
         } finally {

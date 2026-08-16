@@ -19,6 +19,14 @@ public class RiskEvent {
     @Column(nullable = false) private double densityChange;
     @Column(nullable = false) private double movementSlowdown;
     @Column(nullable = false) private long hotspotPersistenceSeconds;
+    private String dominantDirection;
+    private Double directionDegrees;
+    @Column(nullable = false) private double directionConfidence;
+    @Column(nullable = false) private double directionalConsistency;
+    @Column(nullable = false) private double reverseMovementRatio;
+    @Column(nullable = false) private double conflictingMovementRatio;
+    @Enumerated(EnumType.STRING) @Column(nullable = false) private FlowBehaviorState behaviorState = FlowBehaviorState.INSUFFICIENT_DATA;
+    @Column(columnDefinition = "TEXT") private String behaviorExplanation;
     private String sourceClipId;
     public RiskEvent() {}
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
@@ -35,4 +43,12 @@ public class RiskEvent {
     public double getMovementSlowdown() { return movementSlowdown; } public void setMovementSlowdown(double value) { movementSlowdown = value; }
     public long getHotspotPersistenceSeconds() { return hotspotPersistenceSeconds; } public void setHotspotPersistenceSeconds(long value) { hotspotPersistenceSeconds = value; }
     public String getSourceClipId() { return sourceClipId; } public void setSourceClipId(String sourceClipId) { this.sourceClipId = sourceClipId; }
+    public String getDominantDirection() { return dominantDirection; } public void setDominantDirection(String value) { dominantDirection = value; }
+    public Double getDirectionDegrees() { return directionDegrees; } public void setDirectionDegrees(Double value) { directionDegrees = value; }
+    public double getDirectionConfidence() { return directionConfidence; } public void setDirectionConfidence(double value) { directionConfidence = value; }
+    public double getDirectionalConsistency() { return directionalConsistency; } public void setDirectionalConsistency(double value) { directionalConsistency = value; }
+    public double getReverseMovementRatio() { return reverseMovementRatio; } public void setReverseMovementRatio(double value) { reverseMovementRatio = value; }
+    public double getConflictingMovementRatio() { return conflictingMovementRatio; } public void setConflictingMovementRatio(double value) { conflictingMovementRatio = value; }
+    public FlowBehaviorState getBehaviorState() { return behaviorState; } public void setBehaviorState(FlowBehaviorState value) { behaviorState = value == null ? FlowBehaviorState.INSUFFICIENT_DATA : value; }
+    public String getBehaviorExplanation() { return behaviorExplanation; } public void setBehaviorExplanation(String value) { behaviorExplanation = value; }
 }

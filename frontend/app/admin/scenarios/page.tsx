@@ -26,8 +26,8 @@ const scenarios: Array<{ value: ScenarioType; label: string; description: string
   { value: "slowing_flow", label: "Slowing flow", description: "SIMULATION: movement slows while density rises." },
   { value: "reverse_movement", label: "Reverse movement", description: "SIMULATION: a sustained reversal against the dominant direction." },
   { value: "conflicting_movement", label: "Conflicting movement", description: "SIMULATION: crossing flows compete in one zone." },
-  { value: "blocked_route", label: "Blocked route", description: "SIMULATION: the route to the C Block Gate exit becomes blocked." },
-  { value: "alternate_exit_recovery", label: "Exit-gate recovery", description: "SIMULATION: the C Block Gate exit recovers after a route disruption." },
+  { value: "blocked_route", label: "Blocked route", description: "SIMULATION: the route to Main Gate Exit becomes blocked." },
+  { value: "alternate_exit_recovery", label: "Exit-gate recovery", description: "SIMULATION: Main Gate Exit recovers after a route disruption." },
 ];
 
 function Simulator({ user }: { user: UserInfo }) {

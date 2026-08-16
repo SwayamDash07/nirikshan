@@ -48,7 +48,7 @@ The default person confidence is `0.28`, configurable as `personConfidence` in `
 
 The whole visible frame is treated as the camera's physical zone. `thresholds_config.json` contains an explicit `zoneCalibration` entry for each backend zone. These initial visible-area figures are conservative starting calibrations for the actual camera views; refine them from site measurements or counted reference frames, never to artificially increase alert levels.
 
-Campus route semantics are fixed to the site layout: Main Gate is the inbound entrance, and C Block Gate is the designated outbound exit. Route recommendations therefore never send people to Main Gate as an exit and no longer invent synthetic Exit A/Exit B locations.
+Campus route semantics are fixed to the site layout: Main Gate is the inbound entrance at `20.36366814775126, 85.81626264649513`, and the separate Main Gate Exit zone is the designated outbound exit at `20.36360968378996, 85.81631763177884`. The existing C Block Gate camera zone remains unchanged. Route recommendations therefore never send people to Main Gate as an exit and no longer invent synthetic Exit A/Exit B locations.
 
 Each zone also has a `cameraHeadingDegrees` value: the compass direction represented by the top edge of that video's frame (`0` = N, `90` = E, `180` = S, `270` = W). The detector first measures movement in camera coordinates, then adds this heading so emitted `directionDegrees` and `dominantDirection` use the standard north-up map orientation. The current values are based on the north-up map arrows supplied for the five camera angles.
 
@@ -68,8 +68,8 @@ Store original footage under `real_footage/` and keep every generated asset in i
 | Hostel 25 Gate | `real_footage/hostel_25.mp4` | 2 | `python process_video.py --input real_footage/hostel_25.mp4 --zone-id 2 --thresholds thresholds_config.json --output outputs/hostel_25/events.json --annotate --annotation-output outputs/hostel_25/annotated.mp4` |
 | Cafeteria | `real_footage/cafe.mp4` | 3 | `python process_video.py --input real_footage/cafe.mp4 --zone-id 3 --thresholds thresholds_config.json --output outputs/cafe/events.json --annotate --annotation-output outputs/cafe/annotated.mp4` |
 | A Block Entrance | `real_footage/a_block.mp4` | 4 | `python process_video.py --input real_footage/a_block.mp4 --zone-id 4 --thresholds thresholds_config.json --output outputs/a_block/events.json --annotate --annotation-output outputs/a_block/annotated.mp4` |
-| C Block Gate (exit) | `real_footage/c_block.mp4` | 5 | `python process_video.py --input real_footage/c_block.mp4 --zone-id 5 --thresholds thresholds_config.json --output outputs/c_block/events.json --annotate --annotation-output outputs/c_block/annotated.mp4` |
-| C Block Gate (exit, camera 2) | `real_footage/c_block_2.mp4` | 5 | `python process_video.py --input real_footage/c_block_2.mp4 --zone-id 5 --thresholds thresholds_config.json --output outputs/c_block_2/events.json --annotate --annotation-output outputs/c_block_2/annotated.mp4` |
+| C Block Gate camera | `real_footage/c_block.mp4` | 5 | `python process_video.py --input real_footage/c_block.mp4 --zone-id 5 --thresholds thresholds_config.json --output outputs/c_block/events.json --annotate --annotation-output outputs/c_block/annotated.mp4` |
+| C Block Gate camera 2 | `real_footage/c_block_2.mp4` | 5 | `python process_video.py --input real_footage/c_block_2.mp4 --zone-id 5 --thresholds thresholds_config.json --output outputs/c_block_2/events.json --annotate --annotation-output outputs/c_block_2/annotated.mp4` |
 
 After any run, create the pitch-ready summary without processing the video again:
 

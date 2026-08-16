@@ -43,7 +43,7 @@ public class RouteRecommendationService {
         boolean simulatedPrimaryRouteBlocked = latest != null && latest.getSourceClipId() != null
                 && latest.getSourceClipId().toUpperCase().contains("BLOCKED_ROUTE");
         List<RouteRecommendationResponse.RouteOption> options = new ArrayList<>();
-        for (String exit : List.of(VenueGraphService.C_BLOCK_GATE)) {
+        for (String exit : List.of(VenueGraphService.MAIN_GATE_EXIT)) {
             VenueGraphResponse.RoutePathResponse path = graph.paths().stream()
                     .filter(item -> item.fromNodeId().equals(VenueGraphService.zoneNode(origin.getId())) && item.toNodeId().equals(exit))
                     .findFirst().orElseThrow();
@@ -70,10 +70,10 @@ public class RouteRecommendationService {
         String gateReason;
         if (selected == null) {
             gateAction = "KEEP_MAIN_GATE_CLOSED";
-            gateReason = "No open route to the designated C Block Gate exit is currently available.";
-        } else if (selected.exitOrGate().equals("C Block Gate") && origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
-            gateAction = "OPEN_C_BLOCK_GATE";
-            gateReason = "C Block Gate is the designated outbound gate for this venue.";
+            gateReason = "No open route to the designated Main Gate Exit is currently available.";
+        } else if (selected.exitOrGate().equals("Main Gate Exit") && origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
+            gateAction = "OPEN_MAIN_GATE_EXIT";
+            gateReason = "Main Gate Exit is the designated outbound gate for this venue.";
         } else if (origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
             gateAction = "CLOSE_" + origin.getName().toUpperCase().replace(' ', '_');
             gateReason = "Reduce inflow while the origin zone is high risk.";
@@ -81,7 +81,7 @@ public class RouteRecommendationService {
             gateAction = "KEEP_GATES_OPEN";
             gateReason = "No gate change is required for the current score.";
         }
-        String reason = selected == null ? "No safe route to C Block Gate is currently available; keep the Main Gate for entry only." :
+        String reason = selected == null ? "No safe route to Main Gate Exit is currently available; keep the Main Gate for entry only." :
                 "Selected " + selected.routeName() + " because it has the lowest non-blocked route score.";
         return new RouteRecommendationResponse(venueId, origin.getId(), selected, rejected, reason,
                 selected == null ? 0 : selected.expectedTravelTimeSeconds(), selected == null ? 1 : selected.riskScore(),
@@ -92,9 +92,9 @@ public class RouteRecommendationService {
         RouteRecommendationResponse detailed = recommend(venueId, originZoneId);
         var route = detailed.recommendedRoute();
         if (route == null) return new CitizenRouteGuidanceResponse(venueId, detailed.originZoneId(), "No safe route available",
-                citizenMessage("C Block Gate", false), "C Block Gate", 0, false, detailed.generatedAt(), detailed.source());
+                citizenMessage("Main Gate Exit", false), "Main Gate Exit", 0, false, detailed.generatedAt(), detailed.source());
         String guidance = citizenMessage(route.exitOrGate(), true);
-        if (detailed.gateAction().equals("OPEN_C_BLOCK_GATE")) guidance = "Use C Block Gate.";
+        if (detailed.gateAction().equals("OPEN_MAIN_GATE_EXIT")) guidance = "Use Main Gate Exit.";
         return new CitizenRouteGuidanceResponse(venueId, detailed.originZoneId(), route.routeName(), guidance,
                 route.exitOrGate(), route.expectedTravelTimeSeconds(), true, detailed.generatedAt(), detailed.source());
     }
@@ -113,13 +113,13 @@ public class RouteRecommendationService {
     }
 
     public static String citizenMessage(String exitOrGate, boolean available) {
-        if (!available) return "C Block Gate is unavailable; keep Main Gate for entry and follow staff directions.";
+        if (!available) return "Main Gate Exit is unavailable; keep Main Gate for entry and follow staff directions.";
         return switch (exitOrGate) {
-            case "C Block Gate" -> "Use C Block Gate.";
+            case "Main Gate Exit" -> "Use Main Gate Exit.";
             default -> "Use the alternate route shown.";
         };
     }
 
-    private static String label(String id) { return id.equals(VenueGraphService.C_BLOCK_GATE) ? "C Block Gate" : "Main Gate"; }
+    private static String label(String id) { return id.equals(VenueGraphService.MAIN_GATE_EXIT) ? "Main Gate Exit" : "Main Gate"; }
     private static double round(double value) { return Math.round(value * 100.0) / 100.0; }
 }

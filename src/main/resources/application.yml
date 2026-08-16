@@ -30,7 +30,7 @@ nirikshan:
     risk-event-url: ${NIRIKSHAN_RISK_EVENT_URL:http://localhost:8080/api/risk-events}
   routes:
     default-capacity: ${NIRIKSHAN_ROUTE_DEFAULT_CAPACITY:600}
-    c-block-gate-capacity: ${NIRIKSHAN_C_BLOCK_GATE_CAPACITY:450}
+    main-gate-exit-capacity: ${NIRIKSHAN_MAIN_GATE_EXIT_CAPACITY:450}
   analysis:
     interval-seconds: ${NIRIKSHAN_ANALYSIS_INTERVAL_SECONDS:30}
     flow-min-samples: ${NIRIKSHAN_FLOW_MIN_SAMPLES:3}

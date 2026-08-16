@@ -14,19 +14,18 @@ import java.util.List;
 /** Builds a small local graph from venue/zone coordinates; no external map service is used. */
 @Service
 public class VenueGraphService {
-    public static final String EXIT_A = "EXIT_A";
-    public static final String EXIT_B = "EXIT_B";
     public static final String MAIN_GATE = "MAIN_GATE";
+    public static final String C_BLOCK_GATE = "C_BLOCK_GATE";
 
     private final VenueRepository venues;
     private final ZoneRepository zones;
     private final int defaultCapacity;
-    private final int exitBCapacity;
+    private final int cBlockGateCapacity;
 
     public VenueGraphService(VenueRepository venues, ZoneRepository zones,
                              @Value("${nirikshan.routes.default-capacity:600}") int defaultCapacity,
-                             @Value("${nirikshan.routes.exit-b-capacity:450}") int exitBCapacity) {
-        this.venues = venues; this.zones = zones; this.defaultCapacity = defaultCapacity; this.exitBCapacity = exitBCapacity;
+                             @Value("${nirikshan.routes.c-block-gate-capacity:450}") int cBlockGateCapacity) {
+        this.venues = venues; this.zones = zones; this.defaultCapacity = defaultCapacity; this.cBlockGateCapacity = cBlockGateCapacity;
     }
 
     public Graph graph(Long venueId) {
@@ -34,20 +33,22 @@ public class VenueGraphService {
         List<Zone> zoneList = zones.findByVenueId(venueId);
         List<VenueGraphResponse.RouteNodeResponse> nodes = new ArrayList<>();
         List<VenueGraphResponse.RoutePathResponse> paths = new ArrayList<>();
-        nodes.add(new VenueGraphResponse.RouteNodeResponse(MAIN_GATE, "Main Gate", "GATE", null, venue.getLatitude(), venue.getLongitude()));
         double baseLat = venue.getLatitude() == null ? zoneList.stream().map(Zone::getLatitude).filter(v -> v != null).mapToDouble(Double::doubleValue).average().orElse(0) : venue.getLatitude();
         double baseLng = venue.getLongitude() == null ? zoneList.stream().map(Zone::getLongitude).filter(v -> v != null).mapToDouble(Double::doubleValue).average().orElse(0) : venue.getLongitude();
-        nodes.add(new VenueGraphResponse.RouteNodeResponse(EXIT_A, "Exit A", "EXIT", null, baseLat + .00045, baseLng - .00035));
-        nodes.add(new VenueGraphResponse.RouteNodeResponse(EXIT_B, "Exit B", "EXIT", null, baseLat - .00035, baseLng + .00055));
         Zone mainGate = zoneList.stream().filter(zone -> zone.getName().toLowerCase().contains("main gate")).findFirst().orElse(zoneList.isEmpty() ? null : zoneList.get(0));
+        Zone cBlockGate = zoneList.stream().filter(zone -> zone.getName().toLowerCase().contains("c block gate")).findFirst()
+                .orElseGet(() -> zoneList.stream().filter(zone -> zone.getName().toLowerCase().contains("c block")).findFirst().orElse(null));
+        double mainGateLat = coordinate(mainGate == null ? null : mainGate.getLatitude(), baseLat);
+        double mainGateLng = coordinate(mainGate == null ? null : mainGate.getLongitude(), baseLng);
+        double cBlockGateLat = coordinate(cBlockGate == null ? null : cBlockGate.getLatitude(), baseLat - .00035);
+        double cBlockGateLng = coordinate(cBlockGate == null ? null : cBlockGate.getLongitude(), baseLng + .00055);
+        nodes.add(new VenueGraphResponse.RouteNodeResponse(MAIN_GATE, "Main Gate", "ENTRANCE", null, mainGateLat, mainGateLng));
+        nodes.add(new VenueGraphResponse.RouteNodeResponse(C_BLOCK_GATE, "C Block Gate", "EXIT", cBlockGate == null ? null : cBlockGate.getId(), cBlockGateLat, cBlockGateLng));
         for (Zone zone : zoneList) {
             String nodeId = zoneNode(zone.getId());
             nodes.add(new VenueGraphResponse.RouteNodeResponse(nodeId, zone.getName(), "ZONE", zone.getId(), zone.getLatitude(), zone.getLongitude()));
-            int timeA = travelSeconds(zone.getLatitude(), zone.getLongitude(), baseLat + .00045, baseLng - .00035);
-            int timeB = travelSeconds(zone.getLatitude(), zone.getLongitude(), baseLat - .00035, baseLng + .00055);
-            paths.add(path(nodeId + "_TO_EXIT_A", nodeId, EXIT_A, defaultCapacity, timeA, "OUTBOUND"));
-            paths.add(path(nodeId + "_TO_EXIT_B", nodeId, EXIT_B, exitBCapacity, timeB, "OUTBOUND"));
-            paths.add(path(nodeId + "_TO_MAIN_GATE", nodeId, MAIN_GATE, defaultCapacity, travelSeconds(zone.getLatitude(), zone.getLongitude(), baseLat, baseLng), "OUTBOUND"));
+            int timeToExit = travelSeconds(zone.getLatitude(), zone.getLongitude(), cBlockGateLat, cBlockGateLng);
+            paths.add(path(nodeId + "_TO_C_BLOCK_GATE", nodeId, C_BLOCK_GATE, cBlockGateCapacity, timeToExit, "OUTBOUND"));
         }
         if (mainGate != null) paths.add(path(MAIN_GATE + "_TO_" + zoneNode(mainGate.getId()), MAIN_GATE, zoneNode(mainGate.getId()), defaultCapacity, 20, "INBOUND"));
         return new Graph(venue, zoneList, nodes, paths);
@@ -59,6 +60,7 @@ public class VenueGraphService {
     }
 
     public static String zoneNode(Long zoneId) { return "ZONE_" + zoneId; }
+    private static double coordinate(Double value, double fallback) { return value == null ? fallback : value; }
     private VenueGraphResponse.RoutePathResponse path(String id, String from, String to, int capacity, int seconds, String direction) {
         return new VenueGraphResponse.RoutePathResponse(id, from, to, Math.max(1, capacity), Math.max(1, seconds), direction, true, false);
     }

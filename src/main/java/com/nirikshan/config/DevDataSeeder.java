@@ -61,7 +61,7 @@ public class DevDataSeeder {
                 new ZoneSeed("Hostel 25 Gate", 20.364145031341526, 85.81619190942068, 70),
                 new ZoneSeed("Cafeteria", 20.36461975435873, 85.81587627107363, 75),
                 new ZoneSeed("A Block Entrance", 20.364354947887005, 85.81617608892412, 80),
-                new ZoneSeed("C Block Entrance", 20.36376025781561, 85.81713519590612, 70));
+                new ZoneSeed("C Block Gate", 20.36376025781561, 85.81713519590612, 70));
 
         for (ZoneSeed seed : zones) {
             if (!zoneRepository.existsByVenueIdAndNameIgnoreCase(venue.getId(), seed.name())) {

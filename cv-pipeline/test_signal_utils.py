@@ -3,6 +3,7 @@ import unittest
 from risk_scoring import calculate_zone_risk
 from signal_utils import (
     BehaviorStateTracker,
+    FlowSignalSmoother,
     behavior_candidate,
     bottleneck_detected,
     detect_hotspots_from_centroids,
@@ -10,6 +11,7 @@ from signal_utils import (
     derive_signal_values,
     estimate_flow_direction,
     estimate_flow_direction_from_vectors,
+    rotate_flow_direction,
     sustained_pattern,
     temporal_reverse_ratio,
 )
@@ -63,6 +65,49 @@ class SignalTests(unittest.TestCase):
         self.assertEqual(tracker.update("REVERSE_FLOW", 5), "INSUFFICIENT_DATA")
         self.assertEqual(tracker.update("REVERSE_FLOW", 10), "INSUFFICIENT_DATA")
         self.assertEqual(tracker.update("REVERSE_FLOW", 15), "REVERSE_FLOW")
+
+    def test_flow_smoother_ignores_small_direction_jitter(self):
+        smoother = FlowSignalSmoother(window_samples=5, min_valid_samples=2)
+        for index, direction in enumerate((88, 92, 90, 94, 89)):
+            result = smoother.update({
+                "state": "OK",
+                "trackedPeople": 4,
+                "directionDegrees": direction,
+                "dominantDirection": "E",
+                "directionConfidence": .85,
+                "directionalConsistency": .85,
+                "reverseMovementRatio": 0,
+                "conflictingMovementRatio": 0,
+            })
+        self.assertEqual(result["state"], "OK")
+        self.assertEqual(result["dominantDirection"], "E")
+        self.assertGreater(result["directionConfidence"], .75)
+
+    def test_flow_smoother_rejects_conflicting_recent_directions(self):
+        smoother = FlowSignalSmoother(window_samples=3, min_valid_samples=2)
+        result = None
+        for direction in (0, 180, 0):
+            result = smoother.update({
+                "state": "OK",
+                "trackedPeople": 3,
+                "directionDegrees": direction,
+                "dominantDirection": "N",
+                "directionConfidence": .9,
+                "directionalConsistency": .9,
+                "reverseMovementRatio": 0,
+                "conflictingMovementRatio": 0,
+            })
+        self.assertEqual(result["state"], "INSUFFICIENT_DATA")
+
+    def test_camera_heading_rotates_video_direction_to_map_direction(self):
+        flow = estimate_flow_direction_from_vectors([(0, -10)] * 4)
+        rotated = rotate_flow_direction(flow, 135)
+        self.assertEqual(rotated["directionDegrees"], 135.0)
+        self.assertEqual(rotated["dominantDirection"], "SE")
+
+    def test_camera_heading_preserves_insufficient_direction(self):
+        flow = estimate_flow_direction_from_vectors([])
+        self.assertEqual(rotate_flow_direction(flow, 180), flow)
 
 
 if __name__ == "__main__":

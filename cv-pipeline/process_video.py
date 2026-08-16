@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import socket
 import shutil
 import subprocess
 import sys
@@ -32,10 +33,12 @@ from ultralytics import YOLO
 from risk_scoring import ZoneRisk, calculate_zone_risk
 from signal_utils import (
     BehaviorStateTracker,
+    FlowSignalSmoother,
     behavior_candidate,
     detect_hotspots_from_centroids,
     derive_signal_values,
     estimate_flow_direction_from_vectors,
+    rotate_flow_direction,
     temporal_reverse_ratio,
 )
 
@@ -50,6 +53,37 @@ RISK_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 HOTSPOT_GRID_SIZE = 3
 HOTSPOT_THRESHOLD = 1.5
 HOTSPOT_COLOR = (255, 0, 210)
+FLOW_LOCK_PORT_BASE = 43_700
+
+
+class ZoneProcessLock:
+    """Prevent two local CV workers from publishing the same zone telemetry."""
+
+    def __init__(self, zone_id: int) -> None:
+        self.port = FLOW_LOCK_PORT_BASE + zone_id
+        self._socket: socket.socket | None = None
+
+    def acquire(self) -> None:
+        lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        except (AttributeError, OSError):
+            pass
+        try:
+            lock_socket.bind(("127.0.0.1", self.port))
+            lock_socket.listen(1)
+        except OSError as error:
+            lock_socket.close()
+            raise RuntimeError(
+                f"Another CV worker already owns zone {self.port - FLOW_LOCK_PORT_BASE}; "
+                "refusing to publish duplicate telemetry"
+            ) from error
+        self._socket = lock_socket
+
+    def release(self) -> None:
+        if self._socket is not None:
+            self._socket.close()
+            self._socket = None
 
 
 @dataclass
@@ -316,6 +350,7 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     smoothing_window = float(thresholds.get("rollingAverageSeconds", 3.0))
     zone_calibration = thresholds.get("zoneCalibration", {}).get(str(args.zone_id), {})
     calibration = {**thresholds, **zone_calibration}
+    camera_heading_degrees = float(calibration.get("cameraHeadingDegrees", 0.0))
     meters_per_pixel = float(calibration.get("metersPerPixel", 0.02))
     visible_area = max(float(calibration.get("visibleAreaSqMeters", 100.0)), 0.001)
     max_history = max(10, round((lookback + smoothing_window + 5.0) * fps / process_every))
@@ -323,6 +358,11 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     behavior_tracker = BehaviorStateTracker(
         min_samples=int(thresholds.get("flowMinStateSamples", 2)),
         min_duration_seconds=float(thresholds.get("flowMinStateDurationSeconds", 10.0)),
+    )
+    flow_smoother = FlowSignalSmoother(
+        window_samples=int(thresholds.get("flowSmoothingSamples", 5)),
+        min_valid_samples=int(thresholds.get("flowSmoothingMinSamples", 2)),
+        min_consistency=float(thresholds.get("flowSmoothingMinConsistency", 0.35)),
     )
     raw_history: deque[tuple[float, float, float]] = deque(maxlen=max_history)
     smoothed_history: deque[tuple[float, float, float]] = deque(maxlen=max_history)
@@ -388,6 +428,9 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 frame_index = 0
                 tracker.previous = []
                 previous_direction_degrees = None
+                previous_speed = None
+                behavior_tracker.reset()
+                flow_smoother.reset()
                 raw_history.clear()
                 smoothed_history.clear()
                 print(f"LOOP_ITERATION {loop_iteration}", flush=True)
@@ -435,10 +478,13 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                     latest_density, density_increase, latest_speed, thresholds, speed_drop=speed_drop
                 )
                 latest_trend = density_trend(smoothed_history, timestamp_seconds)
-                latest_flow = estimate_flow_direction_from_vectors(
+                raw_flow = estimate_flow_direction_from_vectors(
                     movement_vectors,
                     min_tracked=int(thresholds.get("flowMinTrackedPeople", 3)),
                     min_displacement=float(thresholds.get("flowMinDisplacementPixels", 2.0)),
+                )
+                latest_flow = rotate_flow_direction(
+                    flow_smoother.update(raw_flow), camera_heading_degrees
                 )
                 if latest_flow.get("directionDegrees") is not None:
                     latest_flow["reverseMovementRatio"] = round(temporal_reverse_ratio(
@@ -596,8 +642,13 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    process_args = parse_args()
+    process_lock = ZoneProcessLock(process_args.zone_id)
     try:
-        process_video(parse_args())
+        process_lock.acquire()
+        process_video(process_args)
     except (OSError, RuntimeError, ValueError, requests.RequestException) as error:
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(1)
+    finally:
+        process_lock.release()

@@ -5,6 +5,11 @@
   "personConfidence": 0.28,
   "augment": true,
   "maxTrackDistancePixels": 120.0,
+  "flowSmoothingSamples": 5,
+  "flowSmoothingMinSamples": 2,
+  "flowSmoothingMinConsistency": 0.35,
+  "flowMinStateSamples": 2,
+  "flowMinStateDurationSeconds": 10.0,
   "metersPerPixel": 0.02,
   "visibleAreaSqMeters": 100.0,
   "perspectiveCorrection": {
@@ -14,11 +19,11 @@
     "maxWeight": 1.60
   },
   "zoneCalibration": {
-    "1": { "zoneName": "Main Gate", "visibleAreaSqMeters": 18.0, "assumption": "~6m active gate width x ~3m visible depth" },
-    "2": { "zoneName": "Hostel 25 Gate", "visibleAreaSqMeters": 12.0, "assumption": "~4m gate width x ~3m visible depth" },
-    "3": { "zoneName": "Cafeteria", "visibleAreaSqMeters": 30.0, "assumption": "~10m active footfall width x ~3m visible depth; not the whole courtyard" },
-    "4": { "zoneName": "A Block Entrance", "visibleAreaSqMeters": 18.0, "assumption": "~6m entrance width x ~3m visible depth" },
-    "5": { "zoneName": "C Block Entrance", "visibleAreaSqMeters": 15.0, "assumption": "~5m entrance width x ~3m visible depth" }
+    "1": { "zoneName": "Main Gate", "cameraHeadingDegrees": 180.0, "visibleAreaSqMeters": 18.0, "assumption": "~6m active gate width x ~3m visible depth" },
+    "2": { "zoneName": "Hostel 25 Gate", "cameraHeadingDegrees": 135.0, "visibleAreaSqMeters": 12.0, "assumption": "~4m gate width x ~3m visible depth" },
+    "3": { "zoneName": "Cafeteria", "cameraHeadingDegrees": 135.0, "visibleAreaSqMeters": 30.0, "assumption": "~10m active footfall width x ~3m visible depth; not the whole courtyard" },
+    "4": { "zoneName": "A Block Entrance", "cameraHeadingDegrees": 225.0, "visibleAreaSqMeters": 18.0, "assumption": "~6m entrance width x ~3m visible depth" },
+    "5": { "zoneName": "C Block Gate", "cameraHeadingDegrees": 90.0, "visibleAreaSqMeters": 15.0, "assumption": "~5m exit-gate width x ~3m visible depth" }
   },
   "rollingAverageSeconds": 3.0,
   "riskWeights": {

@@ -31,8 +31,8 @@ class FlowAndRouteIntelligenceTest {
         double open = RouteRecommendationService.score(RiskLevel.LOW, RiskLevel.MEDIUM, false, 600, 20, false, true, 60);
         assertEquals(1.0, blocked);
         assertTrue(open < blocked);
-        assertEquals("Use Exit B.", RouteRecommendationService.citizenMessage("Exit B", true));
-        assertEquals("Avoid Main Gate and follow staff directions.", RouteRecommendationService.citizenMessage("Main Gate", false));
+        assertEquals("Use C Block Gate.", RouteRecommendationService.citizenMessage("C Block Gate", true));
+        assertEquals("C Block Gate is unavailable; keep Main Gate for entry and follow staff directions.", RouteRecommendationService.citizenMessage("C Block Gate", false));
     }
 
     private static RiskEventRequest request(double confidence, double reverse, FlowBehaviorState state) {

@@ -22,6 +22,23 @@ def direction_name(degrees_from_north: float) -> str:
     return names[int(((degrees_from_north % 360.0) + 22.5) // 45) % 8]
 
 
+def rotate_flow_direction(flow: dict[str, float | str | int], camera_heading_degrees: float = 0.0) -> dict[str, float | str | int]:
+    """Convert a camera-frame direction into the north-up map frame.
+
+    The detector reports 0 degrees as the top edge of the video and increases
+    clockwise. ``camera_heading_degrees`` is the compass heading represented by
+    that top edge, so the world/map direction is their clockwise sum.
+    """
+    direction = flow.get("directionDegrees")
+    if direction is None:
+        return flow
+    rotated = (float(direction) + float(camera_heading_degrees)) % 360.0
+    adjusted = dict(flow)
+    adjusted["directionDegrees"] = round(rotated, 2)
+    adjusted["dominantDirection"] = direction_name(rotated)
+    return adjusted
+
+
 def estimate_flow_direction_from_vectors(vectors: Iterable[tuple[float, float]],
                                          min_tracked: int = 3,
                                          min_displacement: float = 2.0) -> dict[str, float | str | int]:
@@ -101,6 +118,12 @@ class BehaviorStateTracker:
         self.candidate_since = None
         self.candidate_samples = 0
 
+    def reset(self) -> None:
+        self.state = "INSUFFICIENT_DATA"
+        self.candidate = None
+        self.candidate_since = None
+        self.candidate_samples = 0
+
     def update(self, candidate: str, timestamp_seconds: float) -> str:
         if candidate not in FLOW_STATES:
             candidate = "UNUSUAL_BEHAVIOR"
@@ -119,6 +142,60 @@ class BehaviorStateTracker:
         if self.candidate_samples >= self.min_samples and duration >= self.min_duration_seconds:
             self.state = candidate
         return self.state
+
+
+class FlowSignalSmoother:
+    """Aggregate recent per-frame flow estimates before behavior classification.
+
+    Centroid matching is intentionally lightweight, but individual frame
+    estimates can jump when people cross or detections are briefly reassigned.
+    Keeping a short weighted vector history makes the direction and the
+    reverse/conflict ratios represent the recent movement pattern instead of
+    one noisy frame.
+    """
+
+    def __init__(self, window_samples: int = 5, min_valid_samples: int = 2, min_consistency: float = 0.35) -> None:
+        self.samples: deque[dict[str, float | str | int]] = deque(maxlen=max(1, window_samples))
+        self.min_valid_samples = max(1, min_valid_samples)
+        self.min_consistency = max(0.0, min(1.0, min_consistency))
+
+    def reset(self) -> None:
+        self.samples.clear()
+
+    def update(self, flow: dict[str, float | str | int]) -> dict[str, float | str | int]:
+        if flow.get("state") == "OK" and flow.get("directionDegrees") is not None:
+            self.samples.append(dict(flow))
+        if len(self.samples) < self.min_valid_samples:
+            return flow
+
+        x = y = total_weight = confidence = reverse = conflicting = tracked = 0.0
+        for sample in self.samples:
+            direction = float(sample["directionDegrees"])
+            weight = max(0.05, float(sample.get("directionConfidence", 0.0)))
+            radians_value = radians(direction)
+            x += cos(radians_value) * weight
+            y += sin(radians_value) * weight
+            total_weight += weight
+            confidence += float(sample.get("directionConfidence", 0.0))
+            reverse += float(sample.get("reverseMovementRatio", 0.0))
+            conflicting += float(sample.get("conflictingMovementRatio", 0.0))
+            tracked += float(sample.get("trackedPeople", 0))
+
+        if total_weight <= 0:
+            return flow
+        consistency = min(1.0, hypot(x, y) / total_weight)
+        direction = degrees(atan2(y, x)) % 360.0
+        smoothed_confidence = min(1.0, max(0.0, confidence / len(self.samples) * consistency))
+        return {
+            "state": "OK" if consistency >= self.min_consistency else "INSUFFICIENT_DATA",
+            "trackedPeople": round(tracked / len(self.samples)),
+            "directionDegrees": round(direction, 2) if consistency >= self.min_consistency else None,
+            "dominantDirection": direction_name(direction) if consistency >= self.min_consistency else "Unknown",
+            "directionConfidence": round(smoothed_confidence, 3),
+            "directionalConsistency": round(consistency, 3),
+            "reverseMovementRatio": round(max(0.0, min(1.0, reverse / len(self.samples))), 3),
+            "conflictingMovementRatio": round(max(0.0, min(1.0, conflicting / len(self.samples))), 3),
+        }
 
 
 def behavior_candidate(flow: dict[str, float | str | int], speed: float,

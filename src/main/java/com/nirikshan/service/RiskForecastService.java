@@ -237,6 +237,21 @@ public class RiskForecastService {
                 forecast.analysisIntervalSeconds(), "INSUFFICIENT_DATA", FlowBehaviorState.INSUFFICIENT_DATA, null, forecast.analysisPeopleCount(), List.of());
     }
 
+    private static RiskForecastResponse withPartialFlow(RiskForecastResponse forecast, String direction, double degrees,
+                                                         double directionConfidence, double directionalConsistency,
+                                                         double reverseMovementRatio, double conflictingMovementRatio,
+                                                         String explanation, int analysisPeopleCount, List<com.nirikshan.dto.HotspotRegion> hotspots) {
+        return new RiskForecastResponse(forecast.zoneId(), forecast.zoneName(), forecast.generatedAt(), forecast.lastTelemetryAt(),
+                forecast.currentRisk(), forecast.projectedRisk(), forecast.forecastHorizonSeconds(), forecast.estimatedSecondsToProjectedRisk(),
+                forecast.currentDensity(), forecast.projectedDensity(), forecast.densityTrendPerMinute(), forecast.currentMovementSpeed(),
+                forecast.movementSlowdown(), forecast.movementSlowdownTrendPerMinute(), forecast.hotspotPersistenceSeconds(),
+                forecast.bottleneckDetected(), forecast.confidence(), forecast.state(), forecast.explanation(), forecast.source(), forecast.stale(),
+                forecast.projections(), direction, degrees, directionConfidence, directionalConsistency,
+                reverseMovementRatio, conflictingMovementRatio, FlowBehaviorState.INSUFFICIENT_DATA, explanation,
+                forecast.analysisGeneratedAt(), forecast.analysisWindowStart(), forecast.analysisWindowEnd(), forecast.nextAnalysisAt(),
+                forecast.analysisIntervalSeconds(), "PARTIAL", FlowBehaviorState.INSUFFICIENT_DATA, direction, analysisPeopleCount, hotspots);
+    }
+
     private RiskForecastResponse withFlowSnapshot(RiskForecastResponse forecast, List<RiskEvent> readings, Instant now) {
         List<RiskEvent> flowReadings = readings.stream().filter(RiskForecastService::validFlowReading).toList();
         if (forecast.stale() || flowReadings.size() < flowMinSamples) {
@@ -268,6 +283,7 @@ public class RiskForecastService {
         double degrees = Math.toDegrees(Math.atan2(y, x));
         if (degrees < 0) degrees += 360;
         String direction = directionName(degrees);
+        double averageConfidence = Math.min(1, Math.max(0, confidence / flowReadings.size() * averageConsistency));
         RiskEvent stableBehaviorReading = flowReadings.stream()
                 .filter(event -> event.getBehaviorState() != null && event.getBehaviorState() != FlowBehaviorState.INSUFFICIENT_DATA)
                 .reduce((first, second) -> second)
@@ -275,12 +291,13 @@ public class RiskForecastService {
         FlowBehaviorState behavior = stableBehaviorReading == null
                 ? FlowBehaviorState.INSUFFICIENT_DATA : stableBehaviorReading.getBehaviorState();
         if (behavior == FlowBehaviorState.INSUFFICIENT_DATA) {
-            return withFlowUnavailable(withStableFacts(forecast, readings),
-                    "Movement direction is present, but behavior has not remained stable for the minimum duration.");
+            return withPartialFlow(withStableFacts(forecast, readings), direction, degrees, averageConfidence,
+                    averageConsistency, reverse / flowReadings.size(), conflicting / flowReadings.size(),
+                    "Movement direction is available, but behavior is still stabilizing.",
+                    flowReadings.get(flowReadings.size() - 1).getPeopleCount(), stableHotspots(readings));
         }
         String explanation = stableBehaviorReading.getBehaviorExplanation();
         if (explanation == null || explanation.isBlank()) explanation = "Valid tracked-person movement is consistent across the analysis window.";
-        double averageConfidence = Math.min(1, Math.max(0, confidence / flowReadings.size() * averageConsistency));
         return new RiskForecastResponse(forecast.zoneId(), forecast.zoneName(), forecast.generatedAt(), forecast.lastTelemetryAt(),
                 forecast.currentRisk(), forecast.projectedRisk(), forecast.forecastHorizonSeconds(), forecast.estimatedSecondsToProjectedRisk(),
                 forecast.currentDensity(), forecast.projectedDensity(), forecast.densityTrendPerMinute(), forecast.currentMovementSpeed(),

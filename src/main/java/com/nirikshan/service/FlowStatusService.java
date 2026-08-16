@@ -16,10 +16,12 @@ public class FlowStatusService {
         var forecast = forecasts.forecast(zoneId);
         boolean sufficient = forecast.flowState() != FlowBehaviorState.INSUFFICIENT_DATA
                 && "SUFFICIENT".equals(forecast.dataSufficiency());
+        boolean directionAvailable = forecast.direction() != null && forecast.directionDegrees() != null
+                && forecast.directionConfidence() > 0 && !forecast.stale();
         return new FlowStatusResponse(zoneId, zone.getName(), forecast.lastTelemetryAt(),
-                sufficient ? forecast.direction() : null, sufficient ? forecast.directionDegrees() : null,
-                sufficient ? forecast.directionConfidence() : 0, sufficient ? forecast.directionalConsistency() : 0,
-                sufficient ? forecast.reverseMovementRatio() : 0, sufficient ? forecast.conflictingMovementRatio() : 0,
+                directionAvailable ? forecast.direction() : null, directionAvailable ? forecast.directionDegrees() : null,
+                directionAvailable ? forecast.directionConfidence() : 0, directionAvailable ? forecast.directionalConsistency() : 0,
+                directionAvailable ? forecast.reverseMovementRatio() : 0, directionAvailable ? forecast.conflictingMovementRatio() : 0,
                 sufficient ? forecast.flowState() : FlowBehaviorState.INSUFFICIENT_DATA,
                 forecast.behaviorExplanation(), sufficient,
                 forecast.analysisGeneratedAt(), forecast.analysisWindowStart(), forecast.analysisWindowEnd(),

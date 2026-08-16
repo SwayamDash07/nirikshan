@@ -126,7 +126,7 @@ type RiskForecast = {
   analysisWindowEnd?: string;
   nextAnalysisAt?: string;
   analysisIntervalSeconds?: number;
-  dataSufficiency?: "SUFFICIENT" | "INSUFFICIENT_DATA" | "STALE";
+  dataSufficiency?: "SUFFICIENT" | "PARTIAL" | "INSUFFICIENT_DATA" | "STALE";
   flowState?: FlowBehaviorState;
   direction?: string;
   analysisPeopleCount?: number;
@@ -215,6 +215,17 @@ function analysisWindowLabel(start?: string, end?: string) {
 }
 function flowDataIsSufficient(forecast?: RiskForecast) {
   return Boolean(forecast && (forecast.flowState || forecast.behaviorState) !== "INSUFFICIENT_DATA" && forecast.dataSufficiency === "SUFFICIENT");
+}
+function directionDataIsAvailable(forecast?: RiskForecast) {
+  return Boolean(
+    forecast &&
+      !forecast.stale &&
+      forecast.directionDegrees != null &&
+      forecast.directionConfidence != null &&
+      forecast.directionConfidence > 0 &&
+      forecast.dominantDirection &&
+      forecast.dominantDirection !== "Unknown",
+  );
 }
 function highestRisk(zones: Zone[]): RiskLevel {
   return zones.reduce<RiskLevel>(
@@ -314,15 +325,15 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forec
 }
 
 function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, compact = false, onViewMore }: { forecast?: RiskForecast; route?: RouteRecommendation; graph?: RouteGraph; now: number; compact?: boolean; onViewMore?: () => void }) {
-  const forecast = inputForecast && !flowDataIsSufficient(inputForecast)
-    ? { ...inputForecast, dominantDirection: "Unknown", direction: "Unknown", directionDegrees: undefined, directionConfidence: 0, directionalConsistency: 0, reverseMovementRatio: 0, conflictingMovementRatio: 0 }
-    : inputForecast;
+  const forecast = inputForecast;
   const state = forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
   const sufficient = flowDataIsSufficient(forecast);
-  const stateLabel = state.replaceAll("_", " ");
+  const directionAvailable = directionDataIsAvailable(forecast);
+  const behaviorStabilizing = !sufficient && directionAvailable && state === "INSUFFICIENT_DATA";
+  const stateLabel = behaviorStabilizing ? "STABILIZING" : state.replaceAll("_", " ");
   const reverseWarning = sufficient && (forecast?.reverseMovementRatio || 0) >= 0.45;
   const conflictWarning = sufficient && (forecast?.conflictingMovementRatio || 0) >= 0.30;
-  const resultLabel = forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : "INSUFFICIENT_DATA";
+  const resultLabel = forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable ? "PARTIAL" : "INSUFFICIENT_DATA";
   if (compact) {
     return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
       <div className={styles.cardHeader}>
@@ -332,7 +343,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
       <div className={styles.contextStats}>
         <div><span>Behavior</span><strong>{stateLabel}</strong></div>
         <div><span>Direction</span><strong>{forecast?.dominantDirection || "Unknown"}{forecast?.directionDegrees != null ? ` · ${Math.round(forecast.directionDegrees)}°` : ""}</strong></div>
-        <div><span>Confidence</span><strong>{sufficient && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
+        <div><span>Confidence</span><strong>{directionAvailable && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
       </div>
       <div className={styles.summaryRow}>
         <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
@@ -346,7 +357,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
     <div className={styles.contextStats}>
       <div><span>Observed behavior</span><strong>{stateLabel}</strong></div>
       <div><span>Dominant direction</span><strong>{forecast?.dominantDirection || "Unknown"}{forecast?.directionDegrees != null ? ` · ${Math.round(forecast.directionDegrees)}°` : ""}</strong></div>
-      <div><span>Flow confidence</span><strong>{sufficient && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
+      <div><span>Flow confidence</span><strong>{directionAvailable && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
     </div>
     <p className={styles.signalFacts}>{forecast?.behaviorExplanation || "No tracked-person movement is available for a reliable flow estimate."}</p>
     <div className={styles.forecastMeta}><span>Last analysis: {formatTime(forecast?.analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(forecast?.analysisWindowStart, forecast?.analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(forecast?.nextAnalysisAt, now)}</span><span>Interval: {forecast?.analysisIntervalSeconds || 30}s</span></div>

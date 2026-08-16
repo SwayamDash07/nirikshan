@@ -43,15 +43,15 @@ public class RouteRecommendationService {
         boolean simulatedPrimaryRouteBlocked = latest != null && latest.getSourceClipId() != null
                 && latest.getSourceClipId().toUpperCase().contains("BLOCKED_ROUTE");
         List<RouteRecommendationResponse.RouteOption> options = new ArrayList<>();
-        for (String exit : List.of(VenueGraphService.EXIT_A, VenueGraphService.EXIT_B)) {
+        for (String exit : List.of(VenueGraphService.C_BLOCK_GATE)) {
             VenueGraphResponse.RoutePathResponse path = graph.paths().stream()
                     .filter(item -> item.fromNodeId().equals(VenueGraphService.zoneNode(origin.getId())) && item.toNodeId().equals(exit))
                     .findFirst().orElseThrow();
-            boolean blocked = (simulatedPrimaryRouteBlocked && exit.equals(VenueGraphService.EXIT_A))
-                    || (origin.isBottleneckDetected() && exit.equals(VenueGraphService.EXIT_A))
-                    || (origin.getCurrentRiskLevel() == RiskLevel.CRITICAL && exit.equals(VenueGraphService.EXIT_A));
-            boolean directionCompatible = behavior != FlowBehaviorState.REVERSE_FLOW && behavior != FlowBehaviorState.CONFLICTING_FLOW
-                    || exit.equals(VenueGraphService.EXIT_B);
+            boolean blocked = simulatedPrimaryRouteBlocked
+                    || origin.isBottleneckDetected()
+                    || origin.getCurrentRiskLevel() == RiskLevel.CRITICAL;
+            boolean directionCompatible = behavior != FlowBehaviorState.REVERSE_FLOW
+                    && behavior != FlowBehaviorState.CONFLICTING_FLOW;
             double score = score(origin.getCurrentRiskLevel(), forecast.projectedRisk(), origin.isBottleneckDetected(),
                     path.capacity(), origin.getCurrentPeopleCount(), blocked, directionCompatible, path.travelTimeSeconds());
             String reason = blocked ? "Route is blocked by the current bottleneck/critical state."
@@ -69,11 +69,11 @@ public class RouteRecommendationService {
         String gateAction;
         String gateReason;
         if (selected == null) {
-            gateAction = "CLOSE_MAIN_GATE";
-            gateReason = "No open direction-compatible exit route is currently available.";
-        } else if (selected.exitOrGate().equals("Exit B") && origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
-            gateAction = "OPEN_EXIT_B";
-            gateReason = "Exit B is the lower-risk open route for this zone.";
+            gateAction = "KEEP_MAIN_GATE_CLOSED";
+            gateReason = "No open route to the designated C Block Gate exit is currently available.";
+        } else if (selected.exitOrGate().equals("C Block Gate") && origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
+            gateAction = "OPEN_C_BLOCK_GATE";
+            gateReason = "C Block Gate is the designated outbound gate for this venue.";
         } else if (origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
             gateAction = "CLOSE_" + origin.getName().toUpperCase().replace(' ', '_');
             gateReason = "Reduce inflow while the origin zone is high risk.";
@@ -81,7 +81,7 @@ public class RouteRecommendationService {
             gateAction = "KEEP_GATES_OPEN";
             gateReason = "No gate change is required for the current score.";
         }
-        String reason = selected == null ? "Avoid the Main Gate; no safe local route is available." :
+        String reason = selected == null ? "No safe route to C Block Gate is currently available; keep the Main Gate for entry only." :
                 "Selected " + selected.routeName() + " because it has the lowest non-blocked route score.";
         return new RouteRecommendationResponse(venueId, origin.getId(), selected, rejected, reason,
                 selected == null ? 0 : selected.expectedTravelTimeSeconds(), selected == null ? 1 : selected.riskScore(),
@@ -92,9 +92,9 @@ public class RouteRecommendationService {
         RouteRecommendationResponse detailed = recommend(venueId, originZoneId);
         var route = detailed.recommendedRoute();
         if (route == null) return new CitizenRouteGuidanceResponse(venueId, detailed.originZoneId(), "No safe route available",
-                citizenMessage("Main Gate", false), "Main Gate", 0, false, detailed.generatedAt(), detailed.source());
+                citizenMessage("C Block Gate", false), "C Block Gate", 0, false, detailed.generatedAt(), detailed.source());
         String guidance = citizenMessage(route.exitOrGate(), true);
-        if (detailed.gateAction().equals("OPEN_EXIT_B")) guidance = "Use Exit B.";
+        if (detailed.gateAction().equals("OPEN_C_BLOCK_GATE")) guidance = "Use C Block Gate.";
         return new CitizenRouteGuidanceResponse(venueId, detailed.originZoneId(), route.routeName(), guidance,
                 route.exitOrGate(), route.expectedTravelTimeSeconds(), true, detailed.generatedAt(), detailed.source());
     }
@@ -113,14 +113,13 @@ public class RouteRecommendationService {
     }
 
     public static String citizenMessage(String exitOrGate, boolean available) {
-        if (!available) return "Avoid Main Gate and follow staff directions.";
+        if (!available) return "C Block Gate is unavailable; keep Main Gate for entry and follow staff directions.";
         return switch (exitOrGate) {
-            case "Exit B" -> "Use Exit B.";
-            case "Exit A" -> "Use Exit A.";
+            case "C Block Gate" -> "Use C Block Gate.";
             default -> "Use the alternate route shown.";
         };
     }
 
-    private static String label(String id) { return id.equals(VenueGraphService.EXIT_B) ? "Exit B" : id.equals(VenueGraphService.EXIT_A) ? "Exit A" : "Main Gate"; }
+    private static String label(String id) { return id.equals(VenueGraphService.C_BLOCK_GATE) ? "C Block Gate" : "Main Gate"; }
     private static double round(double value) { return Math.round(value * 100.0) / 100.0; }
 }

@@ -20,6 +20,7 @@ import {
   saveSession,
   type Session,
 } from "../lib/auth";
+import { useAiLanguage } from "../lib/aiLanguageContext";
 import styles from "./citizen.module.css";
 
 const CitizenMiniMap = dynamic(() => import("./CitizenMiniMap"), {
@@ -45,9 +46,12 @@ type Alert = {
   message: string;
   severity: RiskLevel;
   resolved: boolean;
+  source?: "LIVE" | "SIMULATION";
 };
-type Recommendation = { id: number; zoneId?: number | null; zoneName?: string | null; type: "OPEN_ROUTE"; message: string; severity: RiskLevel; createdAt: string; status: "PENDING" | "ACKNOWLEDGED" | "DISMISSED" };
-type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel };
+type Recommendation = { id: number; zoneId?: number | null; zoneName?: string | null; type: "OPEN_ROUTE"; message: string; severity: RiskLevel; createdAt: string; status: "PENDING" | "ACKNOWLEDGED" | "DISMISSED"; source?: "LIVE" | "SIMULATION" };
+type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel; source?: "LIVE" | "SIMULATION" };
+type CitizenForecast = { zoneId: number; zoneName: string; generatedAt: string; lastTelemetryAt?: string; currentRisk: RiskLevel; projectedRisk: RiskLevel; state: "STABLE" | "RISING" | "SURGE_RISK" | "CRUSH_RISK" | "RECOVERING" | "INSUFFICIENT_DATA"; message: string; stale: boolean; source?: "LIVE" | "SIMULATION" };
+type IncidentSummary = { summary: string; language: string; scope: string; generatedAt: string };
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
 type Point = { lat: number; lng: number };
 const labels: Record<RiskLevel, string> = {
@@ -208,12 +212,47 @@ function Auth({ done }: { done: (session: Session) => void }) {
   );
 }
 
+function CitizenSummary({ enabled }: { enabled: boolean }) {
+  const { language } = useAiLanguage();
+  const [summary, setSummary] = useState<IncidentSummary>();
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+
+  async function generateSummary() {
+    setSummaryLoading(true);
+    setSummaryError("");
+    try {
+      const next = await api<IncidentSummary>(`/api/venue/incident-summary?language=${language}`);
+      setSummary(next);
+    } catch (reason) {
+      setSummaryError(reason instanceof Error ? reason.message : "Could not generate a campus summary");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  return <section className={styles.aiSummaryCard} aria-live="polite">
+    <div>
+      <span className={styles.kicker}>AI CAMPUS SUMMARY</span>
+      <h2>Current safety overview</h2>
+      <p>Generate a concise, live overview in the selected language.</p>
+    </div>
+    <button className={styles.refreshButton} type="button" onClick={generateSummary} disabled={summaryLoading || !enabled}>
+      {summaryLoading ? "Generating" : "Generate summary"}
+    </button>
+    {summary && <p className={styles.aiSummaryText}>{summary.summary}</p>}
+    {summaryError && <p className={styles.aiSummaryError} role="alert">{summaryError}</p>}
+  </section>;
+}
+
 function Citizen({ session }: { session: Session }) {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [forecasts, setForecasts] = useState<CitizenForecast[]>([]);
+  const [simulationActive, setSimulationActive] = useState(false);
   const [densityHistory, setDensityHistory] = useState<number[]>([]);
   const [location, setLocation] = useState<Point>();
   const [selectionSource, setSelectionSource] =
@@ -241,17 +280,20 @@ function Citizen({ session }: { session: Session }) {
         api<Zone[]>(`/api/venues/${selected.id}/zones`),
         api<Alert[]>("/api/alerts?active=true"),
       ]);
-      const [routeResult, eventsResult] = await Promise.allSettled([
+      const [routeResult, eventsResult, forecastResult] = await Promise.allSettled([
         api<Recommendation[]>("/api/recommendations/customer?active=true"),
         api<RiskEvent[]>(`/api/venues/${selected.id}/risk-events?limit=120`),
+        api<CitizenForecast[]>(`/api/venue/risk-forecast?venueId=${selected.id}`),
       ]);
       const routeRecommendations = routeResult.status === "fulfilled" ? routeResult.value : [];
       const recentEvents = eventsResult.status === "fulfilled" ? eventsResult.value : [];
+      setForecasts(forecastResult.status === "fulfilled" ? forecastResult.value : []);
       setVenue(selected);
       setZones(venueZones);
       const zoneIds = new Set(venueZones.map((zone) => zone.id));
       setAlerts(activeAlerts.filter((alert) => zoneIds.has(alert.zoneId)));
       setRecommendations(routeRecommendations);
+      setSimulationActive(recentEvents[0]?.source === "SIMULATION");
       const history = recentEvents.slice().reverse().map((event) => event.densityScore).filter(Number.isFinite).slice(-30);
       const currentAverage = venueZones.length ? venueZones.reduce((sum, zone) => sum + zone.currentDensity, 0) / venueZones.length : 0;
       setDensityHistory(history.length ? history : currentAverage > 0 ? [currentAverage] : []);
@@ -265,6 +307,13 @@ function Citizen({ session }: { session: Session }) {
       setLoading(false);
     }
   }, [venue, venues]);
+  useEffect(() => {
+    if (!venue) return;
+    const timer = window.setInterval(() => {
+      api<CitizenForecast[]>(`/api/venue/risk-forecast?venueId=${venue.id}`).then(setForecasts).catch(() => undefined);
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [venue?.id]);
   useEffect(() => {
     load();
   }, []);
@@ -284,6 +333,7 @@ function Citizen({ session }: { session: Session }) {
     const client = new Client({ brokerURL: WS_URL, reconnectDelay: 5000, onConnect: () => {
       client.subscribe("/topic/risk-updates", (message: IMessage) => {
         const event = JSON.parse(message.body) as RiskEvent;
+        setSimulationActive(event.source === "SIMULATION");
         setZones((current) => {
           const next = current.map((zone) => zone.id === event.zoneId ? { ...zone, currentDensity: event.densityScore, currentPeopleCount: event.peopleCount, currentRiskLevel: event.riskLevel, lastUpdated: event.timestamp } : zone);
           const average = next.length ? next.reduce((sum, zone) => sum + zone.currentDensity, 0) / next.length : event.densityScore;
@@ -352,6 +402,7 @@ function Citizen({ session }: { session: Session }) {
           {loading ? "Refreshing" : "Refresh data"}
         </button>
       </div>
+      <CitizenSummary enabled={Boolean(venue)} />
       <CampusLocationPicker
         venues={venues}
         selectedVenue={venue}
@@ -425,9 +476,11 @@ function Citizen({ session }: { session: Session }) {
               </a>
             </Card>
           </section>
+          {simulationActive || alerts.some((alert) => alert.source === "SIMULATION") || recommendations.some((recommendation) => recommendation.source === "SIMULATION") || forecasts.some((forecast) => forecast.source === "SIMULATION") ? <div className={styles.simulationBanner} role="status">SIMULATION MODE: Deterministic drill data is being shown. It is not live camera telemetry.</div> : null}
+          {forecasts.filter((forecast) => forecast.state !== "STABLE" || forecast.stale).map((forecast) => <Card className={styles.forecastCard} key={forecast.zoneId}><div className={styles.cardHeader}><div><span className={styles.kicker}>EARLY SAFETY UPDATE</span><h2>{forecast.zoneName}</h2><p>{forecast.message}</p></div>{forecast.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</div><small className={styles.forecastAge}>{forecast.stale ? "Stale data" : `Updated ${ago(forecast.lastTelemetryAt || forecast.generatedAt)}`}</small></Card>)}
           <section className={styles.customerLiveGrid}>
             <Card className={styles.trendCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>LIVE SIGNAL</span><h2>Campus density trend</h2><p>Recent readings with live updates from the venue risk loop.</p></div></div><LiveDensityChart values={densityHistory} /></Card>
-            <Card className={styles.routeCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>ROUTE RECOMMENDATIONS</span><h2>Safer routes</h2><p>Actionable guidance for moving through campus.</p></div><span className={styles.routeCount}>{recommendations.length}</span></div>{recommendations.length ? <div className={styles.routeList}>{recommendations.map((recommendation) => <article key={recommendation.id}><span className={`${styles.severity} ${styles[`severity${recommendation.severity}`]}`}>{labels[recommendation.severity]}</span><strong>{recommendation.message}</strong><small>{ago(recommendation.createdAt)}</small></article>)}</div> : <div className={styles.routeEmpty}>No route changes are recommended right now.</div>}</Card>
+            <Card className={styles.routeCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>ROUTE RECOMMENDATIONS</span><h2>Safer routes</h2><p>Actionable guidance for moving through campus.</p></div><span className={styles.routeCount}>{recommendations.length}</span></div>{recommendations.length ? <div className={styles.routeList}>{recommendations.map((recommendation) => <article key={recommendation.id}><span className={`${styles.severity} ${styles[`severity${recommendation.severity}`]}`}>{labels[recommendation.severity]}</span>{recommendation.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}<strong>{recommendation.message}</strong><small>{ago(recommendation.createdAt)}</small></article>)}</div> : <div className={styles.routeEmpty}>No route changes are recommended right now.</div>}</Card>
           </section>
           <section id="alerts" className={styles.alertSection}>
             <div className={styles.sectionHeading}>
@@ -447,6 +500,7 @@ function Citizen({ session }: { session: Session }) {
                       >
                         {labels[alert.severity]}
                       </span>
+                      {alert.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}
                       {location && (
                         <span className={styles.distance}>
                           {distanceBetween(

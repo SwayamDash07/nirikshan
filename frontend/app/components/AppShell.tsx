@@ -5,6 +5,9 @@ import { clearSession, type Role, type UserInfo } from "../lib/auth";
 import Icon, { IconName } from "./Icon";
 import ThemeToggle from "./ThemeToggle";
 import AssistantChatWidget, { type AssistantZone } from "./AssistantChatWidget";
+import LanguageSelector from "./LanguageSelector";
+import { AI_LANGUAGE_STORAGE_KEY, type AiLanguage } from "../lib/aiLanguage";
+import { AiLanguageProvider } from "../lib/aiLanguageContext";
 import styles from "./shell.module.css";
 
 export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
@@ -17,6 +20,7 @@ const sidebarKey = "nirikshan.sidebar-collapsed";
 export function AppShell({ user, title, subtitle, active, navItems, previewRole, assistantZones, children }: { user: UserInfo; title: string; subtitle?: string; active: string; navItems: NavItem[]; previewRole?: PreviewRole; assistantZones?: AssistantZone[]; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [language, setLanguage] = useState<AiLanguage>("en");
   const [queryPreview, setQueryPreview] = useState<PreviewRole | undefined>(() => {
     if (typeof window === "undefined") return undefined;
     const preview = new URLSearchParams(window.location.search).get("preview");
@@ -27,10 +31,17 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarKey) === "true");
+    const savedLanguage = window.localStorage.getItem(AI_LANGUAGE_STORAGE_KEY);
+    if (savedLanguage === "en" || savedLanguage === "hi" || savedLanguage === "or") setLanguage(savedLanguage);
     const preview = new URLSearchParams(window.location.search).get("preview");
     if (preview === "security") setQueryPreview("SECURITY");
     if (preview === "customer") setQueryPreview("CITIZEN");
   }, []);
+
+  function changeLanguage(next: AiLanguage) {
+    setLanguage(next);
+    window.localStorage.setItem(AI_LANGUAGE_STORAGE_KEY, next);
+  }
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -62,7 +73,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   const mainClass = `${styles.main} ${collapsed ? styles.mainCollapsed : ""}`;
   const decoratedHomeHref = previewHref(homeHref);
 
-  return <div className={`${styles.app} ${workspaceRole === "CITIZEN" ? styles.citizenApp : ""}`}>
+  return <AiLanguageProvider value={{ language, setLanguage: changeLanguage }}><div className={`${styles.app} ${workspaceRole === "CITIZEN" ? styles.citizenApp : ""}`}>
     <aside className={sidebarClass} aria-label="Application sidebar">
       <div className={styles.sidebarTop}>
         <div className={styles.brandRow}>
@@ -78,15 +89,15 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
       </div>
     </aside>
     {mobileOpen && <button className={styles.mobileBackdrop} type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-    <header className={styles.mobileHeader}><a className={styles.brand} href={decoratedHomeHref}><span className={styles.brandMark}>N</span><b>Nirikshan</b></a><ThemeToggle /><button className={styles.mobileMenu} type="button" onClick={() => setMobileOpen((current) => !current)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen}><Icon name="menu" /></button></header>
+    <header className={styles.mobileHeader}><a className={styles.brand} href={decoratedHomeHref}><span className={styles.brandMark}>N</span><b>Nirikshan</b></a><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /><button className={styles.mobileMenu} type="button" onClick={() => setMobileOpen((current) => !current)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen}><Icon name="menu" /></button></header>
     <main className={mainClass}>
       <div className={styles.mobileNav}>{navItems.slice(0, 5).map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={previewHref(item.href)}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
-      <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><ThemeToggle /></div></header>
+      <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /></div></header>
       {queryPreview && <div className={styles.previewBanner} role="status">{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</div>}
       {children}
-      <AssistantChatWidget zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />
+      <AssistantChatWidget language={language} onLanguageChange={changeLanguage} zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />
     </main>
-  </div>;
+  </div></AiLanguageProvider>;
 }
 
 export default AppShell;

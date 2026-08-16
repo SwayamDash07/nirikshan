@@ -11,4 +11,5 @@ public class RiskEventController {
     public RiskEventController(RiskEventService service) { this.service = service; }
     @PostMapping("/api/risk-events") public RiskEventResponse ingest(@Valid @RequestBody RiskEventRequest request) { return service.ingest(request); }
     @GetMapping("/api/zones/{zoneId}/risk-events") public List<RiskEventResponse> recent(@PathVariable Long zoneId, @RequestParam(defaultValue = "50") int limit) { return service.recent(zoneId, limit); }
+    @GetMapping("/api/zones/{zoneId}/hotspots") public List<RiskEventResponse> hotspots(@PathVariable Long zoneId, @RequestParam(defaultValue = "20") int limit) { return service.hotspots(zoneId, limit); }
 }

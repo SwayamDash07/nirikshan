@@ -24,7 +24,6 @@ import java.util.*;
 @Service
 public class AssistantService {
     private static final Logger log = LoggerFactory.getLogger(AssistantService.class);
-    private static final String REDIRECT = "I can only help with campus safety and crowd monitoring questions. Is there something about current conditions I can help with?";
     private static final String UNAVAILABLE = "I can’t reach the Nirikshan safety service right now. Please try again shortly.";
     private static final int MAX_CONTEXT_CHARACTERS = 10000;
     private static final int MAX_HISTORY_MESSAGES = 8;
@@ -53,15 +52,24 @@ public class AssistantService {
     }
 
     @Transactional(readOnly = true)
-    public String chat(AssistantChatRequest request) {
+    public AiLanguage resolveLanguage(AssistantChatRequest request) {
+        if (request.language() != null && !request.language().isBlank()) return AiLanguage.fromCode(request.language());
+        String message = request.message();
+        if (message.chars().anyMatch(character -> character >= 0x0B00 && character <= 0x0B7F)) return AiLanguage.OR;
+        if (message.chars().anyMatch(character -> character >= 0x0900 && character <= 0x097F)) return AiLanguage.HI;
+        return AiLanguage.EN;
+    }
+
+    @Transactional(readOnly = true)
+    public String chat(AssistantChatRequest request, AiLanguage language) {
         User user = currentUser.get();
         SummaryAudience audience = SummaryAudience.valueOf(user.getRole().name());
-        if (!isCampusSafetyQuestion(request.message())) return REDIRECT;
+        if (!isCampusSafetyQuestion(request.message())) return redirect(language);
 
         boolean specificZone = request.zoneId() != null;
         List<Zone> scopedZones = resolveZones(request.zoneId(), user, audience);
         String context = buildContext(scopedZones, audience, specificZone);
-        String system = systemPrompt(audience, specificZone);
+        String system = systemPrompt(audience, specificZone, language);
         String userPrompt = "Authoritative live Nirikshan context:\n" + context +
                 "\n\nConversation so far:\n" + history(request.conversationHistory()) +
                 "\n\nLatest user question:\n" + compact(request.message(), 1200);
@@ -121,7 +129,7 @@ public class AssistantService {
         return context.length() == 0 ? "No current zone data is available." : context.toString();
     }
 
-    private String systemPrompt(SummaryAudience audience, boolean specificZone) {
+    private String systemPrompt(SummaryAudience audience, boolean specificZone, AiLanguage language) {
         String tone = switch (audience) {
             case ADMIN -> "Use a precise, technical operational tone.";
             case SECURITY -> "Use an action-oriented tone focused on what field staff should do next.";
@@ -130,7 +138,8 @@ public class AssistantService {
         String scope = specificZone
                 ? "This is a SINGLE-ZONE request. Give a detailed summary for the named zone, using the supplied real numbers, timestamps, alerts, and recommendations where useful."
                 : "This is a CAMPUS-WIDE request. Synthesize the overall safety picture in 3 to 5 sentences maximum. Do not enumerate every zone or list raw stats sequentially. Only name zones at MEDIUM, HIGH, or CRITICAL risk, with a brief reason. If every zone is LOW, say that all campus zones are showing normal activity with no elevated risk detected. If any zone is elevated, mention that zone by its actual name and say that all other zones remain normal when applicable.";
-        return "You are the Nirikshan campus safety assistant. " + tone + "\n" + scope + "\n" +
+        String languageInstruction = "Respond entirely in " + language.displayName() + " (language code " + language.code() + "). Keep proper nouns such as Nirikshan and official zone names unchanged when useful.";
+        return "You are the Nirikshan campus safety assistant. " + tone + "\n" + languageInstruction + "\n" + scope + "\n" +
                 "You may answer ONLY questions about Nirikshan, campus safety, crowd monitoring, current zone conditions, alerts, incidents, routes, and safety recommendations. " +
                 "Politely decline any unrelated question using this idea: you can only help with campus safety and crowd monitoring questions. " +
                 "Use only the authoritative context supplied by the application. Never invent numbers, events, locations, alerts, recommendations, or certainty. " +
@@ -146,7 +155,19 @@ public class AssistantService {
 
     private static boolean isCampusSafetyQuestion(String message) {
         String value = message.toLowerCase(Locale.ROOT);
-        return List.of("nirikshan", "campus", "safety", "safe", "unsafe", "crowd", "condition", "happening", "summary", "overview", "status", "latest", "zone", "alert", "incident", "risk", "density", "people", "route", "recommendation", "security", "gate", "cafeteria", "hostel", "emergency", "evacuation", "danger").stream().anyMatch(value::contains);
+        return List.of(
+                "nirikshan", "campus", "safety", "safe", "unsafe", "crowd", "condition", "happening", "summary", "overview", "status", "latest", "zone", "alert", "incident", "risk", "density", "people", "route", "recommendation", "security", "gate", "cafeteria", "hostel", "emergency", "evacuation", "danger",
+                "सुरक्षा", "सुरक्षित", "असुरक्षित", "भीड़", "स्थिति", "सारांश", "क्षेत्र", "जोन", "अलर्ट", "घटना", "जोखिम", "घनत्व", "लोग", "मार्ग", "सिफारिश", "सुरक्षा", "आपातकाल", "खतरा", "कैंपस", "कैम्पस",
+                "ସୁରକ୍ଷା", "ନିରାପଦ", "ଅସୁରକ୍ଷିତ", "ଭିଡ଼", "ସ୍ଥିତି", "ସାରାଂଶ", "ଜୋନ", "ସତର୍କ", "ଘଟଣା", "ବିପଦ", "ଘନତା", "ଲୋକ", "ମାର୍ଗ", "ସୁପାରିଶ", "ଜରୁରୀ", "କ୍ୟାମ୍ପସ"
+        ).stream().anyMatch(value::contains);
+    }
+
+    private static String redirect(AiLanguage language) {
+        return switch (language) {
+            case HI -> "मैं केवल कैंपस सुरक्षा और भीड़ निगरानी से जुड़े सवालों में मदद कर सकता हूँ। क्या आप वर्तमान स्थितियों के बारे में कुछ जानना चाहते हैं?";
+            case OR -> "ମୁଁ କେବଳ କ୍ୟାମ୍ପସ ସୁରକ୍ଷା ଏବଂ ଭିଡ଼ ନିରୀକ୍ଷଣ ସମ୍ବନ୍ଧୀୟ ପ୍ରଶ୍ନରେ ସାହାଯ୍ୟ କରିପାରିବି। ବର୍ତ୍ତମାନ ସ୍ଥିତି ବିଷୟରେ କିଛି ଜାଣିବାକୁ ଚାହୁଁଛନ୍ତି କି?";
+            case EN -> "I can only help with campus safety and crowd monitoring questions. Is there something about current conditions I can help with?";
+        };
     }
 
     private static String compact(String value, int limit) {

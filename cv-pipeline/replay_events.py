@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,11 +33,14 @@ def post_with_retry(event: dict[str, Any], url: str, timeout: float) -> bool:
     return False
 
 
-def replay(events: list[dict[str, Any]], url: str, speed: float, timeout: float) -> tuple[int, int]:
+def replay(events: list[dict[str, Any]], url: str, speed: float, timeout: float, rebase_now: bool = False) -> tuple[int, int]:
     ordered = sorted(events, key=lambda event: parse_timestamp(event["timestamp"]))
     successful = 0
     skipped = 0
     previous_time: datetime | None = None
+    original_start = parse_timestamp(ordered[0]["timestamp"]) if ordered else None
+    original_end = parse_timestamp(ordered[-1]["timestamp"]) if ordered else None
+    rebased_start = datetime.now(timezone.utc) - (original_end - original_start) if rebase_now and original_start and original_end else None
     for index, event in enumerate(ordered, start=1):
         event_time = parse_timestamp(event["timestamp"])
         if previous_time is not None:
@@ -46,7 +49,10 @@ def replay(events: list[dict[str, Any]], url: str, speed: float, timeout: float)
                 print(f"Waiting {delay:.2f}s before event {index}/{len(ordered)}...")
                 time.sleep(delay)
         print(f"Replaying event {index}/{len(ordered)}")
-        if post_with_retry(event, url, timeout):
+        payload = dict(event)
+        if rebased_start is not None and original_start is not None:
+            payload["timestamp"] = (rebased_start + (event_time - original_start)).isoformat().replace("+00:00", "Z")
+        if post_with_retry(payload, url, timeout):
             successful += 1
         else:
             skipped += 1
@@ -60,6 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="http://localhost:8080/api/risk-events", help="Backend ingestion URL")
     parser.add_argument("--speed", type=float, default=1.0, help="Replay speed multiplier; 2.0 is twice as fast")
     parser.add_argument("--timeout", type=float, default=10.0, help="HTTP request timeout in seconds")
+    parser.add_argument("--rebase-now", action="store_true", help="Rebase logical event timestamps into the current wall-clock window")
     return parser.parse_args()
 
 
@@ -70,7 +77,7 @@ def main() -> None:
     events = json.loads(Path(args.events).read_text(encoding="utf-8"))
     if not isinstance(events, list):
         raise SystemExit("events JSON must contain an array")
-    successful, skipped = replay(events, args.url, args.speed, args.timeout)
+    successful, skipped = replay(events, args.url, args.speed, args.timeout, args.rebase_now)
     print(f"Replay complete: {successful} posted, {skipped} skipped")
 
 

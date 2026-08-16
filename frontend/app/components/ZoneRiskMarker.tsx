@@ -13,6 +13,7 @@ export type ZoneMarkerData = {
   currentPeopleCount?: number;
   currentRiskLevel: RiskLevel;
   lastUpdated: string;
+  simulationActive?: boolean;
 };
 
 export const riskColors: Record<RiskLevel, string> = {
@@ -36,5 +37,6 @@ export function ZoneRiskMarker({ zone, maxScale, riskLevel = zone.currentRiskLev
   const glowRadius = coreRadius * (compact ? 1.75 : 1.85);
   const eventHandlers = onSelect ? { click: onSelect } : undefined;
 
-  return <Fragment><CircleMarker center={[zone.latitude, zone.longitude]} radius={glowRadius} pathOptions={{ color, fillColor: color, fillOpacity: 0.11, weight: 1, className: "nirikshan-heat-marker" }} eventHandlers={eventHandlers}>{popup && <Popup>{popup}</Popup>}</CircleMarker><CircleMarker center={[zone.latitude, zone.longitude]} radius={coreRadius} pathOptions={{ color, fillColor: color, fillOpacity: 0.96, weight: 1.5, className: "nirikshan-core-marker" }} eventHandlers={eventHandlers} /></Fragment>;
+  const markerClass = zone.simulationActive ? "nirikshan-simulation-marker" : "nirikshan-core-marker";
+  return <Fragment><CircleMarker center={[zone.latitude, zone.longitude]} radius={glowRadius} pathOptions={{ color, fillColor: color, fillOpacity: 0.11, weight: 1, className: "nirikshan-heat-marker" }} eventHandlers={eventHandlers}>{popup && <Popup>{popup}</Popup>}</CircleMarker><CircleMarker center={[zone.latitude, zone.longitude]} radius={coreRadius} pathOptions={{ color: zone.simulationActive ? "#a855f7" : color, fillColor: color, fillOpacity: 0.96, weight: zone.simulationActive ? 3 : 1.5, className: markerClass }} eventHandlers={eventHandlers} /></Fragment>;
 }

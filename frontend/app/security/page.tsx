@@ -17,6 +17,7 @@ type SecurityAlert = {
   message: string;
   severity: RiskLevel;
   resolved: boolean;
+  source?: "LIVE" | "SIMULATION";
 };
 type Instruction = { id: number; message: string; createdAt: string };
 const labels: Record<RiskLevel, string> = {
@@ -141,6 +142,7 @@ function SecurityWorkspace({
           {error}
         </div>
       )}
+      {!error && alerts.some((alert) => alert.source === "SIMULATION") && <div className={styles.simulationBanner} role="status">SIMULATION MODE: This alert is deterministic drill data, not a live camera alert.</div>}
       <section className={styles.securityGrid}>
         <Card className={styles.queue}>
           <div className={styles.cardHeader}>
@@ -165,6 +167,7 @@ function SecurityWorkspace({
                       >
                         {labels[alert.severity]}
                       </span>
+                      {alert.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}
                       <small>{ago(alert.timestamp)}</small>
                     </div>
                     <h3>{alert.zoneName}</h3>

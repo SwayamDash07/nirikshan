@@ -98,6 +98,24 @@
 .focusFooter a {
   color: var(--accent);
 }
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  margin: 0 auto 18px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--surface);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 650;
+}
+.backLink:hover {
+  color: var(--text);
+  background: var(--surface-subtle);
+}
 .focusFooter svg,
 .cardLink svg {
   width: 14px;
@@ -135,12 +153,52 @@
 .metricSuccess strong {
   color: var(--success);
 }
-.workspaceGrid {
+.bottleneckBadge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, #d946ef 38%, var(--border));
+  border-radius: 999px;
+  color: #c026d3;
+  background: color-mix(in srgb, #d946ef 10%, transparent);
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.bottleneckBadge i { width: 6px; height: 6px; border-radius: 50%; background: #d946ef; }
+.rowStatus { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.bottleneckBadge:focus-visible { outline: 2px solid #d946ef; outline-offset: 2px; }
+.hotspotTooltip { position: absolute; z-index: 5; bottom: calc(100% + 8px); left: 0; display: grid; gap: 5px; min-width: 210px; padding: 10px 11px; border: 1px solid color-mix(in srgb, #d946ef 35%, var(--border)); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface); box-shadow: var(--shadow-md); font-size: 10px; font-weight: 550; opacity: 0; pointer-events: none; transform: translateY(3px); transition: opacity .15s ease, transform .15s ease; }
+.hotspotTooltip small { color: var(--text-muted); font-size: 10px; }
+.bottleneckBadge:hover .hotspotTooltip, .bottleneckBadge:focus .hotspotTooltip { opacity: 1; transform: translateY(0); }
+.zoneContext > .bottleneckBadge { margin-top: 16px; }
+.hotspotDetail { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.hotspotDetailHeader { display: flex; align-items: end; justify-content: space-between; gap: 10px; }
+.hotspotDetailHeader div { display: grid; gap: 4px; }
+.hotspotDetailHeader span { color: var(--text-muted); font-size: 9px; font-weight: 750; letter-spacing: .1em; }
+.hotspotDetailHeader strong { color: var(--text); font-size: 12px; }
+.hotspotDetailHeader small { color: var(--text-muted); font-size: 10px; }
+.hotspotGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 116px; margin: 12px 0; }
+.hotspotCell, .hotspotCellActive { display: grid; place-items: center; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 4px; color: transparent; background: var(--surface-subtle); font-size: 9px; font-weight: 750; }
+.hotspotCellActive { border-color: #d946ef; color: #a21caf; background: color-mix(in srgb, #d946ef 25%, var(--surface)); }
+.hotspotRegionList { display: grid; gap: 6px; }
+.hotspotRegionList span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--text); font-size: 10px; }
+.hotspotRegionList small { color: var(--text-muted); font-size: 10px; text-align: right; }
+.dashboardStack {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
-  gap: 16px;
-  max-width: 1240px;
-  margin: 16px auto 0;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  width: min(100%, 1240px);
+  margin: 24px auto 0;
+}
+.lowerGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(330px, 0.7fr);
+  align-items: start;
+  gap: 24px;
+  min-width: 0;
 }
 .mapCard,
 .queueCard,
@@ -158,6 +216,9 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+.cardHeader > div {
+  min-width: 0;
 }
 .cardHeader h2 {
   margin: 7px 0 4px;
@@ -192,17 +253,12 @@
 .mapLoading {
   display: grid;
   place-items: center;
-  min-height: 350px;
+  min-height: 430px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--text-muted);
   background: var(--surface-subtle);
   font-size: 12px;
-}
-.sideStack {
-  display: grid;
-  align-content: start;
-  gap: 16px;
 }
 .queueCard,
 .recommendationCard,
@@ -370,13 +426,6 @@
   border-radius: 50%;
   background: currentColor;
 }
-.lowerGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(330px, 0.7fr);
-  gap: 16px;
-  max-width: 1240px;
-  margin: 16px auto 0;
-}
 .zoneTableCard,
 .trendCard {
   min-width: 0;
@@ -475,10 +524,6 @@
   color: var(--text-muted);
   font-size: 11px;
 }
-.alertSection {
-  max-width: 1240px;
-  margin: 45px auto 0;
-}
 .sectionHeading {
   display: flex;
   align-items: end;
@@ -523,12 +568,10 @@
   font-size: 12px;
 }
 .fullAlertBody p {
-  overflow: hidden;
   margin: 5px 0 3px;
   color: var(--text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .fullAlertBody small {
   color: var(--text-muted);
@@ -560,7 +603,6 @@
   .metricGrid {
     grid-template-columns: repeat(4, 1fr);
   }
-  .workspaceGrid,
   .lowerGrid {
     grid-template-columns: 1fr;
   }
@@ -574,7 +616,7 @@
 }
 .leafletMap {
   width: 100%;
-  height: 350px;
+  height: 430px;
 }
 .leafletPanel .mapTopline {
   display: flex;
@@ -648,7 +690,7 @@
   border-radius: 50%;
 }
 .mapScale {
-  top: 12px;
+  top: 58px;
   right: 12px;
   padding: 8px 9px;
   text-align: right;
@@ -728,6 +770,9 @@
   .leafletMap {
     height: 300px;
   }
+  .mapLoading {
+    min-height: 300px;
+  }
   .mapCoordinates {
     display: none;
   }
@@ -753,13 +798,13 @@
     grid-column: 1;
     grid-row: 3;
   }
-  .zoneRow > .statusBadge {
+  .zoneRow > .rowStatus {
     grid-column: 2;
     grid-row: 1;
   }
-  .rowAge {
+  .zoneRow > .rowAge {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 4;
   }
   .fullAlert {
     align-items: flex-start;
@@ -838,3 +883,116 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
+
+/* Single-column dashboard containment: every section owns its natural height. */
+.overviewGrid,
+.dashboardStack,
+.lowerGrid,
+.metricGrid,
+.zoneTable,
+.alertPreview,
+.recommendationPreview {
+  min-width: 0;
+}
+.overviewGrid > *,
+.dashboardStack > *,
+.lowerGrid > *,
+.metricGrid > *,
+.zoneTable > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.mapCard,
+.recommendationCard,
+.queueCard,
+.zoneContext,
+.zoneTableCard,
+.trendCard {
+  min-width: 0;
+  max-width: 100%;
+}
+.mapWrap,
+.leafletPanel,
+.leafletMap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.recommendationPreview article,
+.recommendationPreview article > div,
+.recommendationPreview .alertPreviewTop {
+  min-width: 0;
+  max-width: 100%;
+}
+.recommendationPreview article > div {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.alertPreviewTop strong,
+.recommendationPreview .alertPreviewTop strong {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alertPreview p,
+.recommendationPreview p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.alertPreviewTop .statusBadge,
+.recommendationPreview .alertPreviewTop .statusBadge {
+  flex: 0 0 auto;
+}
+.contextStats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.contextStats div,
+.hotspotRegionList span {
+  min-width: 0;
+}
+.contextStats strong,
+.hotspotRegionList small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.staleNotice { color: var(--risk-high); font-weight: 700; }
+.signalFacts { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.signalFacts p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+.signalFacts > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.signalFacts > div span { color: var(--text-muted); font-size: 9px; }
+.signalFacts > div strong { color: var(--text); font-size: 12px; }
+.noDataNotice { margin-top: 16px; padding: 10px; color: var(--text-muted); background: var(--surface-subtle); font-size: 11px; }
+.simulationBadge { display: inline-block; margin: 5px 0; padding: 4px 6px; border: 1px dashed #a855f7; border-radius: 999px; color: #7e22ce; background: #faf5ff; font-size: 9px; letter-spacing: .08em; }
+.simulationLegend { border: 2px dashed #a855f7; background: transparent !important; }
+.simulationBanner { margin: 0 0 16px; padding: 11px 13px; border: 1px dashed #a855f7; border-radius: var(--radius-md); color: #7e22ce; background: #faf5ff; font-size: 11px; font-weight: 750; letter-spacing: .04em; }
+.queueHeaderActions { display: flex; align-items: center; gap: 9px; }
+.forecastCard { padding: 20px; border-left: 4px solid var(--border-strong); }
+.forecastBadges { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.forecastUpdated, .forecastHeld, .forecastStale { padding: 5px 7px; border-radius: 999px; font-size: 9px; letter-spacing: .06em; font-weight: 700; }
+.forecastUpdated { color: var(--risk-low); background: var(--risk-low-soft); }
+.forecastHeld { color: var(--risk-medium); background: var(--risk-medium-soft); }
+.forecastStale { color: var(--risk-critical); background: var(--risk-critical-soft); }
+.forecastStable, .forecastRecovering { border-left-color: var(--risk-low); }
+.forecastRising { border-left-color: var(--risk-medium); }
+.forecastSurge { border-left-color: var(--risk-high); }
+.forecastCrush { border-left-color: var(--risk-critical); }
+.forecastInsufficient { border-left-color: var(--text-muted); }
+.forecastHeadline { display: flex; align-items: center; gap: 18px; margin-top: 18px; }
+.forecastHeadline div { display: grid; gap: 4px; }
+.forecastHeadline span { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.forecastHeadline strong { color: var(--text); font-size: 22px; }
+.forecastArrow { color: var(--text-muted); font-size: 24px !important; }
+.forecastState { margin-left: auto; padding: 7px 9px; border-radius: 999px; color: var(--text); background: var(--surface-subtle); font-size: 10px; letter-spacing: .05em; }
+.forecastNotice { margin-top: 16px; padding: 12px 13px; border-radius: var(--radius-sm); color: var(--text); background: var(--surface-subtle); font-size: 12px; line-height: 1.5; }
+.forecastStats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+.forecastStats div { display: grid; gap: 5px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.forecastStats span { color: var(--text-muted); font-size: 9px; }
+.forecastStats strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.forecastExplanation { margin: 14px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.forecastMeta { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; color: var(--text-muted); font-size: 10px; }
+.forecastEmpty { display: grid; gap: 5px; margin-top: 15px; padding: 14px; color: var(--text-muted); background: var(--surface-subtle); font-size: 11px; }
+.forecastEmpty strong { color: var(--text); }
+@media (max-width: 700px) { .forecastHeadline { align-items: flex-start; flex-wrap: wrap; gap: 11px; }.forecastState { margin-left: 0; }.forecastStats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

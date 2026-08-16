@@ -182,6 +182,7 @@
   font-weight: 650;
   cursor: pointer;
 }
+.aiSummaryCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 20px; max-width: 1240px; margin: 0 auto 18px; padding: 18px 20px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); }.aiSummaryCard h2 { margin: 7px 0 4px; color: var(--text); font-size: 18px; letter-spacing: -.035em; }.aiSummaryCard > div p { margin: 0; color: var(--text-secondary); font-size: 12px; }.aiSummaryText { grid-column: 1 / -1; margin: 2px 0 0; padding-top: 13px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 13px; line-height: 1.65; white-space: pre-wrap; }.aiSummaryError { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 12px; }
 .refreshButton:hover {
   background: var(--surface-subtle);
 }
@@ -557,3 +558,9 @@
   font-size: 13px;
   line-height: 1.6;
 }
+.simulationBanner { margin: 0 0 16px; padding: 12px 14px; border: 1px dashed #d08b2f; border-radius: var(--radius-sm); color: #f0b35a; background: color-mix(in srgb, #d08b2f 10%, transparent); font-size: 11px; font-weight: 750; letter-spacing: .03em; }
+.simulationBadge { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; margin-right: 6px; border: 1px dashed #d08b2f; border-radius: 999px; color: #f0b35a; background: color-mix(in srgb, #d08b2f 10%, transparent); font-size: 9px; font-weight: 750; letter-spacing: .04em; }
+.forecastCard { margin: 0 0 16px; padding: 17px; border-left: 3px solid var(--risk-medium); }
+.forecastCard h2 { margin: 7px 0 4px; color: var(--text); font-size: 18px; }
+.forecastCard p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.forecastAge { display: block; margin-top: 12px; color: var(--text-muted); font-size: 10px; }

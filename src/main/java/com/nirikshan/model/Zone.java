@@ -22,6 +22,7 @@ public class Zone {
     @Column(nullable = false) private int currentPeopleCount;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private RiskLevel currentRiskLevel = RiskLevel.LOW;
     @Column(nullable = false) private Instant lastUpdated;
+    @Column(nullable = false) private boolean bottleneckDetected;
 
     public Zone() {}
     public Zone(Venue venue, String name, double latitude, double longitude, double radiusMeters) {
@@ -39,5 +40,6 @@ public class Zone {
     public int getCurrentPeopleCount() { return currentPeopleCount; } public void setCurrentPeopleCount(int currentPeopleCount) { this.currentPeopleCount = currentPeopleCount; }
     public RiskLevel getCurrentRiskLevel() { return currentRiskLevel; } public void setCurrentRiskLevel(RiskLevel currentRiskLevel) { this.currentRiskLevel = currentRiskLevel; }
     public Instant getLastUpdated() { return lastUpdated; } public void setLastUpdated(Instant lastUpdated) { this.lastUpdated = lastUpdated; }
+    public boolean isBottleneckDetected() { return bottleneckDetected; } public void setBottleneckDetected(boolean bottleneckDetected) { this.bottleneckDetected = bottleneckDetected; }
     @PrePersist @PreUpdate void touch() { if (lastUpdated == null) lastUpdated = Instant.now(); }
 }

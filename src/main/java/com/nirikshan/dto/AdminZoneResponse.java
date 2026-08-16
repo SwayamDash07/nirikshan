@@ -19,5 +19,6 @@ public record AdminZoneResponse(
         String videoFilename,
         String videoUrl,
         Instant feedStartedAt,
-        int currentLoopIteration
+        int currentLoopIteration,
+        boolean bottleneckDetected
 ) {}

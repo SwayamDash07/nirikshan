@@ -30,6 +30,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/console", icon: "grid" },
   { label: "Administration", href: "/console/admin", icon: "users" },
   { label: "Video ingestion", href: "/admin", icon: "upload" },
+  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
   { label: "Security", href: "/alerts/security", icon: "lock" },
 ];
 const riskLabels: Record<RiskLevel, string> = { LOW: "Normal", MEDIUM: "Watch", HIGH: "High", CRITICAL: "Critical" };

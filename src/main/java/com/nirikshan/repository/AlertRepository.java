@@ -8,4 +8,6 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
     List<Alert> findAllByOrderByTimestampDesc();
     long countByResolvedFalse();
     List<Alert> findByZoneIdAndTimestampAfterOrderByTimestampAsc(Long zoneId, Instant timestamp);
+    List<Alert> findByZoneIdAndResolvedFalse(Long zoneId);
+    List<Alert> findByZoneIdAndResolvedFalseOrderByTimestampDesc(Long zoneId);
 }

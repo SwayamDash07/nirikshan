@@ -6,5 +6,5 @@ public final class AuthResponses { private AuthResponses(){}
  public record LoginResult(String token,UserInfo user){}
  public record CreatedUser(UserInfo user,String temporaryPassword){}
  public record InstructionInfo(Long id,String message,Long targetZoneId,Long targetSecurityUserId,Instant createdAt){}
- public record SecurityAlertInfo(Long id,Long zoneId,String zoneName,double latitude,double longitude,Instant timestamp,String message,String severity,boolean resolved){}
+ public record SecurityAlertInfo(Long id,Long zoneId,String zoneName,double latitude,double longitude,Instant timestamp,String message,String severity,boolean resolved,String source){}
 }

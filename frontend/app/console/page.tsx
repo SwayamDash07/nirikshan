@@ -42,6 +42,8 @@ type Zone = {
   currentRiskLevel: RiskLevel;
   lastUpdated: string;
   feedStatus?: "OFFLINE" | "LIVE";
+  bottleneckDetected?: boolean;
+  simulationActive?: boolean;
 };
 type Venue = { id: number; name: string; description?: string };
 type RiskEvent = {
@@ -54,34 +56,15 @@ type RiskEvent = {
   riskLevel: RiskLevel;
   explanation: string;
   sourceClipId?: string;
+  source?: "LIVE" | "SIMULATION";
+  hotspotRegions?: HotspotRegion[];
+  bottleneckDetected?: boolean;
+  densityChange?: number;
+  movementSlowdown?: number;
+  hotspotPersistenceSeconds?: number;
 };
-type Alert = {
-  id: number;
-  zoneId: number;
-  zoneName?: string;
-  timestamp: string;
-  message: string;
-  severity: RiskLevel;
-  resolved: boolean;
-  resolvedAt?: string;
-};
-type Recommendation = {
-  id: number;
-  zoneId?: number | null;
-  zoneName?: string | null;
-  type:
-    | "REDIRECT"
-    | "DEPLOY_SECURITY"
-    | "OPEN_ROUTE"
-    | "CLOSE_ENTRY"
-    | "ANNOUNCEMENT"
-    | "REASSIGN_PERSONNEL";
-  message: string;
-  severity: RiskLevel;
-  createdAt: string;
-  status: "PENDING" | "ACKNOWLEDGED" | "DISMISSED";
-  acknowledgedByUserId?: number | null;
-};
+type HotspotRegion = { gridPosition: string; relativeDensity: number };
+type HotspotSummary = { regions: HotspotRegion[]; durationSeconds: number };
 type CitizenReport = {
   id: number;
   zoneId: number;
@@ -95,6 +78,31 @@ type Health = {
   totalZones: number;
   totalRiskEvents: number;
   activeAlerts: number;
+};
+type ForecastState = "STABLE" | "RISING" | "SURGE_RISK" | "CRUSH_RISK" | "RECOVERING" | "INSUFFICIENT_DATA";
+type RiskForecast = {
+  zoneId: number;
+  zoneName: string;
+  generatedAt: string;
+  lastTelemetryAt?: string;
+  currentRisk: RiskLevel;
+  projectedRisk: RiskLevel;
+  forecastHorizonSeconds: number;
+  estimatedSecondsToProjectedRisk?: number | null;
+  currentDensity: number;
+  projectedDensity: number;
+  densityTrendPerMinute: number;
+  currentMovementSpeed: number;
+  movementSlowdown: number;
+  movementSlowdownTrendPerMinute: number;
+  hotspotPersistenceSeconds: number;
+  bottleneckDetected: boolean;
+  confidence: number;
+  state: ForecastState;
+  explanation: string;
+  source: "LIVE" | "SIMULATION";
+  stale: boolean;
+  projections: Array<{ horizonSeconds: number; projectedDensity: number }>;
 };
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
@@ -134,6 +142,7 @@ const navItems: NavItem[] = [
   { label: "Citizen reports", href: "/console/reports", icon: "activity" },
   { label: "Administration", href: "/console/admin", icon: "users" },
   { label: "Video ingestion", href: "/admin", icon: "upload" },
+  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
   { label: "Security", href: "/alerts/security", icon: "lock" },
 ];
 
@@ -183,6 +192,90 @@ function StatusBadge({ level }: { level: RiskLevel }) {
     </span>
   );
 }
+function gridPositionLabel(position: string) {
+  const [row, column] = position.split(",").map(Number);
+  return `${row === 1 ? "top" : row === 3 ? "bottom" : "center"}-${column === 1 ? "left" : column === 3 ? "right" : "center"}`;
+}
+function summarizeHotspots(events: RiskEvent[], now = Date.now()): HotspotSummary | undefined {
+  const ordered = [...events].sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf());
+  const latest = ordered[0];
+  if (!latest?.hotspotRegions?.length) return undefined;
+  const latestTime = new Date(latest.timestamp).valueOf();
+  const anchor = now - latestTime <= 15000 ? now : latestTime;
+  let oldest = latest;
+  for (const event of ordered.slice(1)) {
+    if (!event.hotspotRegions?.length || latestTime - new Date(event.timestamp).valueOf() > 15000) break;
+    oldest = event;
+  }
+  return {
+    regions: latest.hotspotRegions,
+    durationSeconds: Math.max(0, Math.round((anchor - new Date(oldest.timestamp).valueOf()) / 1000)),
+  };
+}
+
+function InformativeBottleneckBadge({ summary }: { summary?: HotspotSummary }) {
+  const detail = summary?.regions.length
+    ? `${summary.regions.map((region) => `${gridPositionLabel(region.gridPosition)} ${region.relativeDensity.toFixed(1)}x`).join(", ")} · detected for ${summary.durationSeconds}s`
+    : "Recent hotspot detail is unavailable";
+  return <span className={styles.bottleneckBadge} tabIndex={0} title={detail} aria-label={detail}>
+    <i />Bottleneck detected
+    <span className={styles.hotspotTooltip} role="tooltip">{summary?.regions.map((region) => <span key={region.gridPosition}>{gridPositionLabel(region.gridPosition)} · {region.relativeDensity.toFixed(1)}x zone average</span>)}<small>{summary ? `Detected for ${summary.durationSeconds} seconds` : "Recent hotspot detail unavailable"}</small></span>
+  </span>;
+}
+
+function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forecast?: RiskForecast; loading: boolean; error?: string; now: number; updatedAt?: number }) {
+  const stateLabel: Record<ForecastState, string> = {
+    STABLE: "Stable",
+    RISING: "Rising",
+    SURGE_RISK: "Surge risk",
+    CRUSH_RISK: "Projected crush risk",
+    RECOVERING: "Recovering",
+    INSUFFICIENT_DATA: "Insufficient data",
+  };
+  const stateClass: Record<ForecastState, string> = {
+    STABLE: styles.forecastStable,
+    RISING: styles.forecastRising,
+    SURGE_RISK: styles.forecastSurge,
+    CRUSH_RISK: styles.forecastCrush,
+    RECOVERING: styles.forecastRecovering,
+    INSUFFICIENT_DATA: styles.forecastInsufficient,
+  };
+  const analysisUpdated = Boolean(updatedAt && now - updatedAt < 5000);
+  const hysteresisHeld = Boolean(forecast?.explanation.toLowerCase().includes("held by"));
+  return <Card className={`${styles.forecastCard} ${forecast ? stateClass[forecast.state] : styles.forecastInsufficient}`} id="forecast">
+    <div className={styles.cardHeader}>
+      <div><span className={styles.kicker}>EARLY WARNING</span><h2>Risk forecast</h2><p>Projected risk is decision support, not a confirmed incident.</p></div>
+      <div className={styles.forecastBadges}>
+        {analysisUpdated && <span className={styles.forecastUpdated}>UPDATED FROM NEW READING</span>}
+        {hysteresisHeld && <span className={styles.forecastHeld}>HYSTERESIS HOLD</span>}
+        {forecast?.stale && <span className={styles.forecastStale}>STALE</span>}
+        {forecast?.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}
+      </div>
+    </div>
+    {loading ? <div className={styles.forecastEmpty}>Calculating forecast from recent readings…</div> : error ? <div className={styles.forecastEmpty}><strong>Forecast unavailable</strong><span>{error}</span></div> : !forecast ? <div className={styles.forecastEmpty}>Select a zone to calculate its forecast.</div> : <>
+      <div className={styles.forecastHeadline}><div><span>Current</span><strong>{riskMeta[forecast.currentRisk].label}</strong></div><span className={styles.forecastArrow}>→</span><div><span>Projected</span><strong>{riskMeta[forecast.projectedRisk].label}</strong></div><b className={styles.forecastState}>{stateLabel[forecast.state]}</b></div>
+      {forecast.stale || forecast.state === "INSUFFICIENT_DATA" ? <div className={styles.forecastNotice}>{forecast.explanation}</div> : <div className={styles.forecastNotice}>{forecast.estimatedSecondsToProjectedRisk != null && forecast.projectedRisk !== forecast.currentRisk ? `Projected ${riskMeta[forecast.projectedRisk].label.toLowerCase()} risk in approximately ${Math.max(0, Math.round(forecast.estimatedSecondsToProjectedRisk / 60))} minutes.` : forecast.explanation}</div>}
+      <div className={styles.forecastStats}><div><span>Density now → projected</span><strong>{forecast.currentDensity.toFixed(2)} → {forecast.projectedDensity.toFixed(2)}</strong></div><div><span>Density trend</span><strong>{forecast.densityTrendPerMinute >= 0 ? "+" : ""}{forecast.densityTrendPerMinute.toFixed(2)} / min</strong></div><div><span>Confidence</span><strong>{Math.round(forecast.confidence * 100)}%</strong></div><div><span>Telemetry</span><strong>{forecast.lastTelemetryAt ? `${formatAge(forecast.lastTelemetryAt, now)}${forecast.stale ? " · STALE" : ""}` : "No recent data"}</strong></div></div>
+      <div className={styles.forecastMeta}><span>Forecast age: {formatAge(forecast.generatedAt, now)}</span><span>{hysteresisHeld ? "State held by hysteresis" : analysisUpdated ? "Updated from new reading" : "Analysis unchanged"}</span>{forecast.stale && <span>Forecast based on last telemetry</span>}</div>
+      <p className={styles.forecastExplanation}>{forecast.explanation}</p>
+    </>}
+  </Card>;
+}
+
+function HotspotDetail({ summary }: { summary: HotspotSummary }) {
+  const active = new Map(summary.regions.map((region) => [region.gridPosition, region]));
+  return <section className={styles.hotspotDetail}>
+    <div className={styles.hotspotDetailHeader}><div><span>HOTSPOT DETAIL</span><strong>{summary.regions.length} active region{summary.regions.length === 1 ? "" : "s"}</strong></div><small>Persisting for {summary.durationSeconds}s</small></div>
+    <div className={styles.hotspotGrid} aria-label="3 by 3 hotspot map">
+      {Array.from({ length: 9 }, (_, index) => {
+        const position = `${Math.floor(index / 3) + 1},${(index % 3) + 1}`;
+        const region = active.get(position);
+        return <span className={region ? styles.hotspotCellActive : styles.hotspotCell} key={position} title={region ? `${gridPositionLabel(position)} · ${region.relativeDensity.toFixed(1)}x zone average` : "No hotspot"}>{region ? `${region.relativeDensity.toFixed(1)}x` : ""}</span>;
+      })}
+    </div>
+    <div className={styles.hotspotRegionList}>{summary.regions.map((region) => <span key={region.gridPosition}><b>{gridPositionLabel(region.gridPosition)}</b><small>{region.relativeDensity.toFixed(1)}x zone average · {region.relativeDensity >= 2 ? "severe" : "elevated"}</small></span>)}</div>
+  </section>;
+}
 
 function Metric({
   label,
@@ -209,11 +302,13 @@ function ZoneRow({
   selected,
   onSelect,
   now,
+  hotspotSummary,
 }: {
   zone: Zone;
   selected: boolean;
   onSelect: () => void;
   now: number;
+  hotspotSummary?: HotspotSummary;
 }) {
   return (
     <button
@@ -224,10 +319,14 @@ function ZoneRow({
       <span className={styles.zoneName}>
         <b>Zone {String(zone.id).padStart(2, "0")}</b>
         <strong>{zone.name}</strong>
+        {zone.simulationActive && <span className={styles.simulationBadge}>SIMULATION</span>}
       </span>
       <span>{zone.currentPeopleCount ?? 0} people</span>
       <span>{zone.currentDensity.toFixed(2)} people per m2</span>
-      <StatusBadge level={zone.currentRiskLevel} />
+      <span className={styles.rowStatus}>
+        <StatusBadge level={zone.currentRiskLevel} />
+        {zone.bottleneckDetected && <InformativeBottleneckBadge summary={hotspotSummary} />}
+      </span>
       <span className={styles.rowAge}>
         {formatAge(zone.lastUpdated, now)} <Icon name="arrow" />
       </span>
@@ -361,14 +460,19 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
   );
 }
 
+/*
 function RecommendationPanel({
   recommendations,
   now,
   onUpdate,
+  onTakeAction,
+  simulationZoneIds,
 }: {
   recommendations: Recommendation[];
   now: number;
-  onUpdate: (id: number, action: "acknowledge" | "dismiss") => void;
+  onUpdate: (id: number) => void;
+  onTakeAction: (recommendation: Recommendation) => void;
+  simulationZoneIds: Set<number>;
 }) {
   return (
     <Card className={styles.recommendationCard} id="recommendations">
@@ -376,7 +480,7 @@ function RecommendationPanel({
         <div>
           <span className={styles.kicker}>DECISION SUPPORT</span>
           <h2>Recommended actions</h2>
-          <p>Transparent, rule-based actions for the current signals.</p>
+          <p>Deterministic rolling-window assessments for sustained patterns.</p>
         </div>
         <span className={styles.recommendationCount}>
           {recommendations.length}
@@ -391,23 +495,23 @@ function RecommendationPanel({
               />
               <div>
                 <div className={styles.alertPreviewTop}>
-                  <strong>{recommendation.zoneName || "Venue-wide"}</strong>
+                  <strong>{recommendation.zoneName || "Venue-wide"} {(recommendation.source === "SIMULATION" || (recommendation.zoneId && simulationZoneIds.has(recommendation.zoneId))) && <span className={styles.simulationBadge}>SIMULATION</span>}</strong>
                   <StatusBadge level={recommendation.severity} />
                 </div>
                 <p>{recommendation.message}</p>
-                <small>{formatAge(recommendation.createdAt, now)}</small>
+                <small>{formatAge(recommendation.createdAt, now)} · {recommendation.acknowledgedByUserId ? "Sent to security staff" : "Not yet sent to security staff"}</small>
                 <div className={styles.recommendationActions}>
                   <Button
-                    variant="secondary"
+                    variant="primary"
                     size="sm"
-                    onClick={() => onUpdate(recommendation.id, "acknowledge")}
+                    onClick={() => onTakeAction(recommendation)}
                   >
-                    Acknowledge
+                    Take Action
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onUpdate(recommendation.id, "dismiss")}
+                    onClick={() => onUpdate(recommendation.id)}
                   >
                     Dismiss
                   </Button>
@@ -426,28 +530,40 @@ function RecommendationPanel({
   );
 }
 
+}
+*/
 function ConsoleApp({ user }: { user: UserInfo }) {
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [reports, setReports] = useState<CitizenReport[]>([]);
   const [health, setHealth] = useState<Health>();
   const [events, setEvents] = useState<RiskEvent[]>([]);
+  const [forecast, setForecast] = useState<RiskForecast>();
+  const [forecastUpdatedAt, setForecastUpdatedAt] = useState<number>();
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState("");
+  const [hotspotEventsByZone, setHotspotEventsByZone] = useState<Record<number, RiskEvent[]>>({});
   const [selectedZoneId, setSelectedZoneId] = useState<number>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const stompRef = useRef<Client | null>(null);
+  const forecastRef = useRef<RiskForecast | undefined>(undefined);
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
-  const activeAlerts = alerts.filter((alert) => !alert.resolved).length;
+  const selectedHotspotSummary = summarizeHotspots(events, now);
+  const zonesRequiringAttention = zones.filter((zone) => riskRank[zone.currentRiskLevel] >= riskRank.MEDIUM).length;
+  const freshSignals = zones.filter((zone) => zone.lastUpdated && now - new Date(zone.lastUpdated).valueOf() <= 15000).length;
   const totalHeadcount = zones.reduce(
     (sum, zone) => sum + (zone.currentPeopleCount ?? 0),
     0,
   );
   const overallRisk = highestRisk(zones);
   const overallMeta = riskMeta[overallRisk];
+  const simulationZoneIds = new Set(zones.filter((zone) => zone.simulationActive).map((zone) => zone.id));
+  const latestEvent = events[0];
+  const telemetryStale = Boolean(selectedZone?.lastUpdated) && now - new Date(selectedZone!.lastUpdated).valueOf() > 15000;
+  useEffect(() => { forecastRef.current = forecast; }, [forecast]);
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -460,18 +576,21 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         return;
       }
       const currentVenue = venues[0];
-      const [venueZones, active, activeRecommendations, status, nextReports] =
+      const [venueZones, status, nextReports] =
         await Promise.all([
           api<Zone[]>("/api/admin/zones"),
-          api<Alert[]>("/api/alerts?active=true"),
-          api<Recommendation[]>("/api/recommendations?active=true"),
           api<Health>("/api/health"),
-          api<CitizenReport[]>("/api/citizen-reports"),
+         api<CitizenReport[]>("/api/citizen-reports"),
         ]);
+      const activeRuns = await api<Array<{ zoneId: number; status: string }>>("/api/admin/scenarios/active").catch(() => []);
+      const activeZoneIds = new Set(activeRuns.filter((run) => run.status === "PENDING" || run.status === "RUNNING").map((run) => run.zoneId));
       setVenue(currentVenue);
-      setZones(venueZones);
-      setAlerts(active);
-      setRecommendations(activeRecommendations);
+      setZones(venueZones.map((zone) => ({ ...zone, simulationActive: activeZoneIds.has(zone.id) })));
+      const recentEvents = await Promise.all(venueZones.map(async (zone) => {
+        try { return [zone.id, await api<RiskEvent[]>(`/api/zones/${zone.id}/risk-events?limit=50`)] as const; }
+        catch { return [zone.id, []] as const; }
+      }));
+      setHotspotEventsByZone(Object.fromEntries(recentEvents));
       setReports(nextReports);
       setHealth(status);
       setSelectedZoneId((current) =>
@@ -491,12 +610,21 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   }, []);
   const loadEvents = useCallback(async (zoneId: number) => {
     try {
-      setEvents(
-        await api<RiskEvent[]>(`/api/zones/${zoneId}/risk-events?limit=50`),
-      );
+      const recent = await api<RiskEvent[]>(`/api/zones/${zoneId}/risk-events?limit=50`);
+      setEvents(recent);
+      setHotspotEventsByZone((current) => ({ ...current, [zoneId]: recent }));
     } catch {
       setEvents([]);
     }
+  }, []);
+  const loadForecast = useCallback(async (zoneId: number) => {
+    setForecastLoading(true);
+    setForecast(undefined);
+    setForecastUpdatedAt(undefined);
+    setForecastError("");
+    try { setForecast(await api<RiskForecast>(`/api/zones/${zoneId}/risk-forecast`)); setForecastUpdatedAt(Date.now()); }
+    catch (reason) { setForecast(undefined); setForecastError(reason instanceof Error ? reason.message : "Could not load the risk forecast."); }
+    finally { setForecastLoading(false); }
   }, []);
   useEffect(() => {
     if (user.mustChangePassword) {
@@ -512,6 +640,9 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   useEffect(() => {
     if (selectedZoneId) loadEvents(selectedZoneId);
   }, [selectedZoneId, loadEvents]);
+  useEffect(() => {
+    if (selectedZoneId) loadForecast(selectedZoneId);
+  }, [selectedZoneId, loadForecast]);
   useEffect(() => {
     const client = new Client({
       brokerURL: WS_URL,
@@ -529,6 +660,8 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                     currentPeopleCount:
                       event.peopleCount ?? zone.currentPeopleCount ?? 0,
                     currentRiskLevel: event.riskLevel,
+                    bottleneckDetected: event.bottleneckDetected ?? zone.bottleneckDetected,
+                    simulationActive: event.source === "SIMULATION",
                     lastUpdated: event.timestamp,
                   }
                 : zone,
@@ -541,19 +674,21 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           );
           if (event.zoneId === selectedZoneId)
             setEvents((current) => [event, ...current].slice(0, 50));
+          setHotspotEventsByZone((current) => ({
+            ...current,
+            [event.zoneId]: [event, ...(current[event.zoneId] || [])].slice(0, 50),
+          }));
         });
-        client.subscribe("/topic/alerts", (message: IMessage) => {
-          const alert = JSON.parse(message.body) as Alert;
-          setAlerts((current) => [
-            alert,
-            ...current.filter((item) => item.id !== alert.id),
-          ]);
-        });
-        client.subscribe("/topic/recommendations", (message: IMessage) => {
-          const recommendation = JSON.parse(message.body) as Recommendation;
-          setRecommendations((current) => recommendation.status === "PENDING"
-            ? [recommendation, ...current.filter((item) => item.id !== recommendation.id)]
-            : current.filter((item) => item.id !== recommendation.id));
+        client.subscribe("/topic/risk-forecasts", (message: IMessage) => {
+          const nextForecast = JSON.parse(message.body) as RiskForecast;
+          const selected = nextForecast.zoneId === selectedZoneId;
+          const currentForecast = forecastRef.current;
+          const changedTelemetry = currentForecast?.lastTelemetryAt !== nextForecast.lastTelemetryAt || currentForecast?.source !== nextForecast.source || currentForecast?.stale !== nextForecast.stale;
+          if (selected && changedTelemetry) setForecastUpdatedAt(Date.now());
+          setForecast((current) => {
+            const changedTelemetry = current?.lastTelemetryAt !== nextForecast.lastTelemetryAt || current?.source !== nextForecast.source || current?.stale !== nextForecast.stale;
+            return selected && changedTelemetry ? nextForecast : current;
+          });
         });
       },
       onDisconnect: () => setConnected(false),
@@ -567,27 +702,17 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       stompRef.current = null;
     };
   }, [selectedZoneId]);
-  async function resolveAlert(id: number) {
-    try {
-      await api<Alert>(`/api/alerts/${id}/resolve`, { method: "PATCH" });
-      setAlerts((current) => current.filter((alert) => alert.id !== id));
-      setHealth((current) =>
-        current
-          ? { ...current, activeAlerts: Math.max(0, current.activeAlerts - 1) }
-          : current,
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Could not resolve alert.",
-      );
-    }
+  function takeAction(id: number, zoneId: number | null | undefined, zoneName: string | null | undefined, message: string) {
+    const params = new URLSearchParams();
+    if (zoneId) params.set("zoneId", String(zoneId));
+    params.set("message", `${zoneName || "Venue-wide"} — ${message}`);
+    params.set("recommendationId", String(id));
+    window.location.assign(`/console/admin?${params.toString()}`);
   }
-  async function updateRecommendation(
-    id: number,
-    action: "acknowledge" | "dismiss",
-  ) {
+  /*
+  async function updateRecommendation(id: number) {
     try {
-      await api<Recommendation>(`/api/recommendations/${id}/${action}`, {
+      await api<Recommendation>(`/api/recommendations/${id}/dismiss`, {
         method: "PATCH",
       });
       setRecommendations((current) =>
@@ -601,6 +726,24 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       );
     }
   }
+  async function dismissAlert(id: number) {
+    setDismissingAlertId(id); setError("");
+    try {
+      await api(`/api/alerts/${id}/resolve`, { method: "PATCH" });
+      setAlerts((current) => current.filter((alert) => alert.id !== id));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not dismiss alert."); }
+    finally { setDismissingAlertId(undefined); }
+  }
+  async function dismissAllAlerts() {
+    setDismissingAll(true); setError("");
+    try {
+      await api("/api/alerts/resolve-all", { method: "PATCH" });
+      setAlerts([]);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not dismiss alerts."); }
+    finally { setDismissingAll(false); }
+  }
+  }
+  */
   if (loading)
     return (
       <AppShell
@@ -637,11 +780,13 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       navItems={navItems}
       assistantZones={zones.map((zone) => ({ id: zone.id, name: zone.name }))}
     >
+      {selectedZone?.simulationActive && <div className={styles.simulationBanner}>SIMULATION MODE · Deterministic staff drill data is active for this zone. It is not live camera telemetry.</div>}
       <div className={styles.connection}>
         <span
           className={connected ? styles.connectedDot : styles.disconnectedDot}
         />
-        {connected ? "Live command link" : "Waiting for command link"}
+        {connected ? "Live command link" : "WebSocket disconnected · reconnecting"}
+        {telemetryStale && <span className={styles.staleNotice}> · Telemetry stale</span>}
       </div>
       <section className={styles.overviewGrid}>
         <div className={styles.focusCard}>
@@ -667,8 +812,8 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               />
               {connected ? "Signals updating live" : "Signals reconnecting"}
             </span>
-            <a href="#alerts">
-              Review response queue <Icon name="arrow" />
+            <a href="/console/admin/actions">
+              Review response actions <Icon name="arrow" />
             </a>
           </div>
         </div>
@@ -684,19 +829,20 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             detail="Live CV headcount"
           />
           <Metric
-            label="Open alerts"
-            value={activeAlerts}
-            detail="Requires attention"
-            tone={activeAlerts ? "danger" : "success"}
+            label="Fresh signals"
+            value={freshSignals}
+            detail="Updated in the last 15s"
+            tone={freshSignals === zones.length && zones.length ? "success" : "danger"}
           />
           <Metric
-            label="Risk events"
-            value={health?.totalRiskEvents ?? 0}
-            detail="Events received"
+            label="Zones requiring attention"
+            value={zonesRequiringAttention}
+            detail="Medium+ current risk"
+            tone={zonesRequiringAttention ? "danger" : "success"}
           />
         </div>
       </section>
-      <section className={styles.workspaceGrid}>
+      <div className={styles.dashboardStack}>
         <Card className={styles.mapCard}>
           <div className={styles.cardHeader}>
             <div>
@@ -705,8 +851,8 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               <p>Click a zone to update the workspace context.</p>
             </div>
             <span className={styles.liveLabel}>
-              <i className={styles.connectedDot} />
-              LIVE
+              <i className={telemetryStale ? styles.disconnectedDot : styles.connectedDot} />
+              {telemetryStale ? "STALE" : "LIVE"}
             </span>
           </div>
           <div className={styles.mapWrap}>
@@ -718,55 +864,19 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             />
           </div>
         </Card>
-        <div className={styles.sideStack}>
-          <RecommendationPanel recommendations={recommendations} now={now} onUpdate={updateRecommendation} />
-          <Card className={styles.queueCard}>
-            <div className={styles.cardHeader}>
-              <div>
-                <span className={styles.kicker}>RESPONSE QUEUE</span>
-                <h2>Priority alerts</h2>
-              </div>
-              <span className={styles.queueCount}>{activeAlerts}</span>
-            </div>
-            {alerts.length ? (
-              <div className={styles.alertPreview}>
-                {alerts.slice(0, 4).map((alert) => (
-                  <article key={alert.id}>
-                    <span
-                      className={`${styles.alertRail} ${styles[`rail${alert.severity}`]}`}
-                    />
-                    <div>
-                      <div className={styles.alertPreviewTop}>
-                        <strong>
-                          {alert.zoneName || `Zone ${alert.zoneId}`}
-                        </strong>
-                        <StatusBadge level={alert.severity} />
-                      </div>
-                      <p>{alert.message}</p>
-                      <small>{formatAge(alert.timestamp, now)}</small>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className={styles.inlineEmpty}>
-                <Icon name="check" />
-                <span>No active alerts. The response queue is clear.</span>
-              </div>
-            )}
-            <a className={styles.cardLink} href="#alerts">
-              Open response queue <Icon name="arrow" />
-            </a>
-          </Card>
-          <Card className={styles.zoneContext}>
+        <EarlyWarningPanel forecast={forecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} />
+        <Card className={styles.zoneContext}>
             <div className={styles.cardHeader}>
               <div>
                 <span className={styles.kicker}>SELECTED ZONE</span>
                 <h2>{selectedZone?.name || "No zone selected"}</h2>
+                {selectedZone?.simulationActive && <span className={styles.simulationBadge}>SIMULATION MODE</span>}
               </div>
               <StatusBadge level={selectedZone?.currentRiskLevel || "LOW"} />
             </div>
             {selectedZone ? (
+              <>
+              {selectedZone.bottleneckDetected && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
               <div className={styles.contextStats}>
                 <div>
                   <span>Headcount</span>
@@ -781,17 +891,22 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                   <strong>{formatTime(selectedZone.lastUpdated)}</strong>
                 </div>
               </div>
+              {latestEvent ? <div className={styles.signalFacts}>
+                <span className={styles.kicker}>DETECTED FACTS</span>
+                <p>{latestEvent.explanation}</p>
+                <div><span>Density change</span><strong>{((latestEvent.densityChange ?? 0) * 100).toFixed(0)}%</strong><span>Movement slowdown</span><strong>{((latestEvent.movementSlowdown ?? 0) * 100).toFixed(0)}%</strong><span>Hotspot persistence</span><strong>{latestEvent.hotspotPersistenceSeconds ?? 0}s</strong></div>
+              </div> : <div className={styles.noDataNotice}>No recent data for this zone.</div>}
+              {selectedZone.bottleneckDetected && selectedHotspotSummary && <HotspotDetail summary={selectedHotspotSummary} />}
+              </>
             ) : (
               <p>Select a zone from the map or register below.</p>
             )}
             <a className={styles.cardLink} href="#zones">
               View all zones <Icon name="arrow" />
             </a>
-          </Card>
-        </div>
-      </section>
-      <section className={styles.lowerGrid}>
-        <Card className={styles.zoneTableCard} id="zones">
+        </Card>
+        <div className={styles.lowerGrid}>
+          <Card className={styles.zoneTableCard} id="zones">
           <div className={styles.cardHeader}>
             <div>
               <span className={styles.kicker}>ZONE REGISTER</span>
@@ -816,6 +931,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                   selected={zone.id === selectedZoneId}
                   onSelect={() => setSelectedZoneId(zone.id)}
                   now={now}
+                  hotspotSummary={summarizeHotspots(hotspotEventsByZone[zone.id], now)}
                 />
               ))
             ) : (
@@ -824,51 +940,52 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               </div>
             )}
           </div>
-        </Card>
-        <TrendCard zone={selectedZone} events={events} />
-      </section>
-      <section className={styles.alertSection} id="alerts">
-        <div className={styles.sectionHeading}>
-          <div>
-            <span className={styles.kicker}>FULL RESPONSE QUEUE</span>
-            <h2>All active alerts</h2>
-          </div>
-          <span>{activeAlerts} open</span>
+          </Card>
+          <TrendCard zone={selectedZone} events={events} />
         </div>
-        <div className={styles.fullAlertList}>
-          {alerts.length ? (
-            alerts.map((alert) => (
-              <article className={styles.fullAlert} key={alert.id}>
-                <span
-                  className={`${styles.alertRail} ${styles[`rail${alert.severity}`]}`}
-                />
-                <div className={styles.fullAlertBody}>
-                  <div>
-                    <strong>{alert.zoneName || `Zone ${alert.zoneId}`}</strong>
-                    <StatusBadge level={alert.severity} />
-                  </div>
-                  <p>{alert.message}</p>
-                  <small>
-                    {formatTime(alert.timestamp)},{" "}
-                    {formatAge(alert.timestamp, now)}
-                  </small>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => resolveAlert(alert.id)}
-                >
-                  Resolve
-                </Button>
-              </article>
-            ))
-          ) : (
-            <div className={styles.tableEmpty}>
-              No active alerts. The command queue is clear.
+        {/* The single response queue lives under Administration. */}
+        {/*
+        <Card className={styles.queueCard} id="alerts">
+          <div className={styles.cardHeader}>
+            <div>
+              <span className={styles.kicker}>RESPONSE QUEUE</span>
+              <h2>Priority alerts</h2>
             </div>
-          )}
-        </div>
-      </section>
+            <div className={styles.queueHeaderActions}>
+              <span className={styles.queueCount}>{activeAlerts}</span>
+              {alerts.length > 0 && <Button variant="ghost" size="sm" disabled={dismissingAll} onClick={dismissAllAlerts}>{dismissingAll ? "Dismissing..." : "Dismiss all"}</Button>}
+            </div>
+          </div>
+          <div className={styles.fullAlertList}>
+            {alerts.length ? (
+              alerts.map((alert) => (
+                <article className={styles.fullAlert} key={alert.id}>
+                  <span className={`${styles.alertRail} ${styles[`rail${alert.severity}`]}`} />
+                  <div className={styles.fullAlertBody}>
+                    <div>
+                      <strong>{alert.zoneName || `Zone ${alert.zoneId}`} {(alert.source === "SIMULATION" || simulationZoneIds.has(alert.zoneId)) && <span className={styles.simulationBadge}>SIMULATION</span>}</strong>
+                      <StatusBadge level={alert.severity} />
+                    </div>
+                    <p>{alert.message}</p>
+                    <small>{formatTime(alert.timestamp)}, {formatAge(alert.timestamp, now)}</small>
+                  </div>
+                  <Button variant="primary" size="sm" onClick={() => takeAction("alert", alert.id, alert.zoneId, alert.zoneName, alert.message)}>
+                    Take Action
+                  </Button>
+                  <Button variant="ghost" size="sm" disabled={dismissingAlertId === alert.id || dismissingAll} onClick={() => dismissAlert(alert.id)}>
+                    {dismissingAlertId === alert.id ? "Dismissing..." : "Dismiss"}
+                  </Button>
+                </article>
+              ))
+            ) : (
+              <div className={styles.inlineEmpty}>
+                <Icon name="check" />
+                <span>No active alerts. The response queue is clear.</span>
+              </div>
+            )}
+          </div>
+        </Card> */}
+      </div>
     </AppShell>
   );
 }

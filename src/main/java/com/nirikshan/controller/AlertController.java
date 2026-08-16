@@ -10,4 +10,5 @@ public class AlertController {
     public AlertController(AlertService service) { this.service = service; }
     @GetMapping public List<AlertResponse> list(@RequestParam(required = false) Boolean active) { return service.list(active); }
     @PatchMapping("/{id}/resolve") public AlertResponse resolve(@PathVariable Long id) { return service.resolve(id); }
+    @PatchMapping("/resolve-all") public List<AlertResponse> resolveAll() { return service.resolveAll(); }
 }

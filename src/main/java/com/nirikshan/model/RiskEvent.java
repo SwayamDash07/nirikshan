@@ -13,7 +13,12 @@ public class RiskEvent {
     @Column(nullable = false) private int peopleCount;
     @Column(nullable = false) private double movementSpeed;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private RiskLevel riskLevel;
+    @Enumerated(EnumType.STRING) @Column(nullable = false) private RiskEventSource source = RiskEventSource.LIVE;
     @Column(nullable = false, columnDefinition = "TEXT") private String explanation;
+    @Column(columnDefinition = "TEXT") private String hotspotRegions;
+    @Column(nullable = false) private double densityChange;
+    @Column(nullable = false) private double movementSlowdown;
+    @Column(nullable = false) private long hotspotPersistenceSeconds;
     private String sourceClipId;
     public RiskEvent() {}
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
@@ -23,6 +28,11 @@ public class RiskEvent {
     public int getPeopleCount() { return peopleCount; } public void setPeopleCount(int peopleCount) { this.peopleCount = peopleCount; }
     public double getMovementSpeed() { return movementSpeed; } public void setMovementSpeed(double movementSpeed) { this.movementSpeed = movementSpeed; }
     public RiskLevel getRiskLevel() { return riskLevel; } public void setRiskLevel(RiskLevel riskLevel) { this.riskLevel = riskLevel; }
+    public RiskEventSource getSource() { return source; } public void setSource(RiskEventSource source) { this.source = source == null ? RiskEventSource.LIVE : source; }
     public String getExplanation() { return explanation; } public void setExplanation(String explanation) { this.explanation = explanation; }
+    public String getHotspotRegions() { return hotspotRegions; } public void setHotspotRegions(String hotspotRegions) { this.hotspotRegions = hotspotRegions; }
+    public double getDensityChange() { return densityChange; } public void setDensityChange(double value) { densityChange = value; }
+    public double getMovementSlowdown() { return movementSlowdown; } public void setMovementSlowdown(double value) { movementSlowdown = value; }
+    public long getHotspotPersistenceSeconds() { return hotspotPersistenceSeconds; } public void setHotspotPersistenceSeconds(long value) { hotspotPersistenceSeconds = value; }
     public String getSourceClipId() { return sourceClipId; } public void setSourceClipId(String sourceClipId) { this.sourceClipId = sourceClipId; }
 }

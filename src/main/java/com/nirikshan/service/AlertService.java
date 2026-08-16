@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 public class AlertService {
@@ -16,6 +18,11 @@ public class AlertService {
     public AlertService(AlertRepository repository, SimpMessagingTemplate messagingTemplate) { this.repository = repository; this.messagingTemplate = messagingTemplate; }
     @Transactional(readOnly = true) public List<AlertResponse> list(Boolean active) {
         List<Alert> alerts = active != null && active ? repository.findByResolvedOrderByTimestampDesc(false) : repository.findAllByOrderByTimestampDesc();
+        if (active != null && active) {
+            Map<Long, Alert> latestByZone = new LinkedHashMap<>();
+            alerts.forEach(alert -> latestByZone.putIfAbsent(alert.getZone().getId(), alert));
+            return latestByZone.values().stream().map(this::toResponse).toList();
+        }
         return alerts.stream().map(this::toResponse).toList();
     }
     @Transactional public AlertResponse resolve(Long id) {
@@ -25,5 +32,16 @@ public class AlertService {
         messagingTemplate.convertAndSend("/topic/alerts", response);
         return response;
     }
-    private AlertResponse toResponse(Alert a) { return new AlertResponse(a.getId(), a.getZone().getId(), a.getZone().getName(), a.getTimestamp(), a.getMessage(), a.getSeverity(), a.isResolved(), a.getResolvedAt()); }
+    @Transactional public List<AlertResponse> resolveAll() {
+        List<Alert> active = repository.findByResolvedOrderByTimestampDesc(false);
+        Instant resolvedAt = Instant.now();
+        List<AlertResponse> responses = active.stream().map(alert -> {
+            alert.setResolved(true); alert.setResolvedAt(resolvedAt);
+            AlertResponse response = toResponse(repository.save(alert));
+            messagingTemplate.convertAndSend("/topic/alerts", response);
+            return response;
+        }).toList();
+        return responses;
+    }
+    private AlertResponse toResponse(Alert a) { return new AlertResponse(a.getId(), a.getZone().getId(), a.getZone().getName(), a.getTimestamp(), a.getMessage(), a.getSeverity(), a.isResolved(), a.getResolvedAt(), a.getSource()); }
 }

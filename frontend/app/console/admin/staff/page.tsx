@@ -10,7 +10,7 @@ import styles from "../../console.module.css";
 type Zone = { id: number; name: string };
 type Venue = { id: number; name: string };
 
-const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
+const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Simulator", href: "/admin/scenarios", icon: "activity" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
 
 export default function Page() {
   const [user, setUser] = useState<UserInfo>();
@@ -44,5 +44,5 @@ export default function Page() {
 
   if (!user) return <main className={styles.loadingPage}>Checking access</main>;
 
-  return <AppShell user={user} title="Staff access" subtitle="Create and manage operations team accounts" active="Administration" navItems={navItems}>{loading ? <Spinner label="Loading staff access" /> : error ? <div className={styles.errorState}><h2>Staff access is unavailable</h2><p>{error}</p></div> : <AdminManagement zones={zones} view="staff" />}</AppShell>;
+  return <AppShell user={user} title="Staff access" subtitle="Create and manage security accounts" active="Administration" navItems={navItems}><a className={styles.backLink} href="/console/admin">Back to Administration</a>{loading ? <Spinner label="Loading staff access" /> : error ? <div className={styles.errorState}><h2>Staff access is unavailable</h2><p>{error}</p></div> : <AdminManagement zones={zones} view="staff" />}</AppShell>;
 }

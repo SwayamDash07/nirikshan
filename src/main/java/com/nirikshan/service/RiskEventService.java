@@ -7,6 +7,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -16,8 +20,10 @@ public class RiskEventService {
     private final AlertRepository alertRepository;
     private final RecommendationService recommendationService;
     private final SimpMessagingTemplate messagingTemplate;
-    public RiskEventService(RiskEventRepository eventRepository, ZoneRepository zoneRepository, AlertRepository alertRepository, RecommendationService recommendationService, SimpMessagingTemplate messagingTemplate) {
-        this.eventRepository = eventRepository; this.zoneRepository = zoneRepository; this.alertRepository = alertRepository; this.recommendationService = recommendationService; this.messagingTemplate = messagingTemplate;
+    private final ObjectMapper objectMapper;
+    private final RiskForecastService forecastService;
+    public RiskEventService(RiskEventRepository eventRepository, ZoneRepository zoneRepository, AlertRepository alertRepository, RecommendationService recommendationService, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper, RiskForecastService forecastService) {
+        this.eventRepository = eventRepository; this.zoneRepository = zoneRepository; this.alertRepository = alertRepository; this.recommendationService = recommendationService; this.messagingTemplate = messagingTemplate; this.objectMapper = objectMapper; this.forecastService = forecastService;
     }
 
     @Transactional
@@ -29,14 +35,22 @@ public class RiskEventService {
         event.setZone(zone); event.setTimestamp(request.timestamp()); event.setDensityScore(request.densityScore()); event.setPeopleCount(request.peopleCount());
         event.setMovementSpeed(request.movementSpeed()); event.setRiskLevel(request.riskLevel());
         event.setExplanation(request.explanation()); event.setSourceClipId(request.sourceClipId());
+        event.setSource(parseSource(request.source(), request.sourceClipId()));
+        event.setHotspotRegions(writeHotspots(request.hotspotRegions()));
+        event.setDensityChange(request.densityChange() == null ? relativeChange(previousEvent == null ? 0 : previousEvent.getDensityScore(), request.densityScore()) : request.densityChange());
+        event.setMovementSlowdown(request.movementSlowdown() == null ? relativeDrop(previousEvent == null ? request.movementSpeed() : previousEvent.getMovementSpeed(), request.movementSpeed()) : request.movementSlowdown());
+        event.setHotspotPersistenceSeconds(request.hotspotPersistenceSeconds() == null ? hotspotPersistenceSeconds(zone.getId(), request.timestamp(), request.hotspotRegions()) : Math.max(0, Math.round(request.hotspotPersistenceSeconds())));
         RiskEvent saved = eventRepository.save(event);
         zone.setCurrentDensity(request.densityScore()); zone.setCurrentPeopleCount(request.peopleCount()); zone.setCurrentRiskLevel(request.riskLevel()); zone.setLastUpdated(request.timestamp());
+        updateBottleneck(zone);
         zoneRepository.save(zone);
         recommendationService.evaluate(zone, saved, previousRisk, previousEvent);
+        if (request.riskLevel() == RiskLevel.LOW) resolveStaleAlerts(zone, request.timestamp());
         RiskEventResponse response = toResponse(saved);
         messagingTemplate.convertAndSend("/topic/risk-updates", response);
+        messagingTemplate.convertAndSend("/topic/risk-forecasts", forecastService.forecast(zone.getId()));
         if (request.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
-            Alert alert = alertRepository.save(new Alert(zone, request.timestamp(), request.explanation(), request.riskLevel()));
+            Alert alert = upsertActiveAlert(zone, request.timestamp(), request.explanation(), request.riskLevel(), saved.getSource());
             messagingTemplate.convertAndSend("/topic/alerts", toResponse(alert));
         }
         return response;
@@ -53,6 +67,78 @@ public class RiskEventService {
         int safeLimit = Math.max(1, Math.min(limit, 300));
         return eventRepository.findByZoneVenueIdOrderByTimestampDesc(venueId, PageRequest.of(0, safeLimit)).stream().map(this::toResponse).toList();
     }
-    private RiskEventResponse toResponse(RiskEvent e) { return new RiskEventResponse(e.getId(), e.getZone().getId(), e.getTimestamp(), e.getDensityScore(), e.getPeopleCount(), e.getMovementSpeed(), e.getRiskLevel(), e.getExplanation(), e.getSourceClipId()); }
-    private AlertResponse toResponse(Alert a) { return new AlertResponse(a.getId(), a.getZone().getId(), a.getZone().getName(), a.getTimestamp(), a.getMessage(), a.getSeverity(), a.isResolved(), a.getResolvedAt()); }
+    @Transactional(readOnly = true)
+    public List<RiskEventResponse> hotspots(Long zoneId, int limit) {
+        if (!zoneRepository.existsById(zoneId)) throw new ResourceNotFoundException("Zone", zoneId);
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        return eventRepository.findByZoneIdOrderByTimestampDesc(zoneId, PageRequest.of(0, safeLimit)).stream().filter(e -> !readHotspots(e).isEmpty()).map(this::toResponse).toList();
+    }
+    private void updateBottleneck(Zone zone) {
+        List<RiskEvent> recent = eventRepository.findTop10ByZoneIdOrderByTimestampDesc(zone.getId());
+        if (recent.size() < 10) { zone.setBottleneckDetected(false); return; }
+        long hotspotEvents = recent.stream().filter(e -> !readHotspots(e).isEmpty()).count();
+        long slowdownEvents = recent.stream().filter(e -> e.getMovementSlowdown() >= 0.20).count();
+        zone.setBottleneckDetected(hotspotEvents >= 7 && slowdownEvents >= 5 && recent.get(0).getDensityScore() >= recent.get(9).getDensityScore());
+    }
+    private long hotspotPersistenceSeconds(Long zoneId, java.time.Instant timestamp, List<HotspotRegion> current) {
+        if (current == null || current.isEmpty()) return 0;
+        List<RiskEvent> recent = eventRepository.findTop10ByZoneIdOrderByTimestampDesc(zoneId);
+        java.time.Instant start = timestamp;
+        for (RiskEvent prior : recent) {
+            if (prior.getHotspotRegions() == null || readHotspots(prior).isEmpty()) break;
+            start = prior.getTimestamp();
+        }
+        return Math.max(0, java.time.Duration.between(start, timestamp).toSeconds());
+    }
+    private double relativeChange(double oldValue, double newValue) { return oldValue <= 0 ? 0 : Math.max(0, (newValue - oldValue) / oldValue); }
+    private double relativeDrop(double oldValue, double newValue) { return oldValue <= 0 ? 0 : Math.max(0, (oldValue - newValue) / oldValue); }
+    private void resolveStaleAlerts(Zone zone, java.time.Instant timestamp) {
+        alertRepository.findByZoneIdAndResolvedFalseOrderByTimestampDesc(zone.getId()).stream()
+                .filter(alert -> !alert.isResolved()).forEach(alert -> {
+                    alert.setResolved(true); alert.setResolvedAt(timestamp); alertRepository.save(alert);
+                    messagingTemplate.convertAndSend("/topic/alerts", toResponse(alert));
+                });
+    }
+    private Alert upsertActiveAlert(Zone zone, java.time.Instant timestamp, String message, RiskLevel severity, RiskEventSource source) {
+        List<Alert> active = alertRepository.findByZoneIdAndResolvedFalseOrderByTimestampDesc(zone.getId());
+        Alert alert = active.isEmpty() ? new Alert(zone, timestamp, message, severity, source) : active.get(0);
+        alert.setTimestamp(timestamp); alert.setMessage(message); alert.setSeverity(severity); alert.setResolved(false); alert.setResolvedAt(null);
+        alert.setSource(source);
+        for (Alert duplicate : active.stream().skip(1).toList()) {
+            duplicate.setResolved(true); duplicate.setResolvedAt(timestamp); alertRepository.save(duplicate);
+            messagingTemplate.convertAndSend("/topic/alerts", toResponse(duplicate));
+        }
+        return alertRepository.save(alert);
+    }
+    private String writeHotspots(List<HotspotRegion> hotspots) {
+        try { return objectMapper.writeValueAsString(hotspots == null ? Collections.emptyList() : hotspots); }
+        catch (JsonProcessingException e) { throw new IllegalArgumentException("Invalid hotspot data", e); }
+    }
+    private List<HotspotRegion> readHotspots(RiskEvent event) {
+        if (event.getHotspotRegions() == null || event.getHotspotRegions().isBlank()) return List.of();
+        try { return objectMapper.readValue(event.getHotspotRegions(), new TypeReference<>() {}); }
+        catch (JsonProcessingException e) { return List.of(); }
+    }
+    @Transactional
+    public void restoreZoneFromLive(Long zoneId) {
+        Zone zone = zoneRepository.findById(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone", zoneId));
+        recommendationService.clearZoneState(zoneId);
+        alertRepository.findByZoneIdAndResolvedFalse(zoneId).forEach(alert -> { alert.setResolved(true); alert.setResolvedAt(java.time.Instant.now()); alertRepository.save(alert); messagingTemplate.convertAndSend("/topic/alerts", toResponse(alert)); });
+        RiskEvent latest = eventRepository.findFirstByZoneIdAndSourceOrderByTimestampDesc(zoneId, RiskEventSource.LIVE).orElse(null);
+        if (latest == null) {
+            zone.setCurrentDensity(0); zone.setCurrentPeopleCount(0); zone.setCurrentRiskLevel(RiskLevel.LOW); zone.setLastUpdated(java.time.Instant.now()); zone.setBottleneckDetected(false); zoneRepository.save(zone);
+            messagingTemplate.convertAndSend("/topic/risk-updates", new RiskEventResponse(null, zoneId, zone.getLastUpdated(), 0, 0, 0, RiskLevel.LOW, "No live telemetry; simulation ended and this zone is offline.", List.of(), false, null, 0, 0, 0, "LIVE"));
+            messagingTemplate.convertAndSend("/topic/risk-forecasts", forecastService.offline(zoneId));
+            return;
+        }
+        zone.setCurrentDensity(latest.getDensityScore()); zone.setCurrentPeopleCount(latest.getPeopleCount()); zone.setCurrentRiskLevel(latest.getRiskLevel()); zone.setLastUpdated(latest.getTimestamp()); zone.setBottleneckDetected(false); zoneRepository.save(zone);
+        messagingTemplate.convertAndSend("/topic/risk-updates", toResponse(latest));
+        messagingTemplate.convertAndSend("/topic/risk-forecasts", forecastService.forecastLive(zoneId));
+    }
+    private RiskEventSource parseSource(String source, String clipId) {
+        if (source != null && source.equalsIgnoreCase("SIMULATION")) return RiskEventSource.SIMULATION;
+        return clipId != null && clipId.startsWith("DEMO_REPLAY_") ? RiskEventSource.SIMULATION : RiskEventSource.LIVE;
+    }
+    private RiskEventResponse toResponse(RiskEvent e) { return new RiskEventResponse(e.getId(), e.getZone().getId(), e.getTimestamp(), e.getDensityScore(), e.getPeopleCount(), e.getMovementSpeed(), e.getRiskLevel(), e.getExplanation(), readHotspots(e), e.getZone().isBottleneckDetected(), e.getSourceClipId(), e.getDensityChange(), e.getMovementSlowdown(), e.getHotspotPersistenceSeconds(), e.getSource().name()); }
+    private AlertResponse toResponse(Alert a) { return new AlertResponse(a.getId(), a.getZone().getId(), a.getZone().getName(), a.getTimestamp(), a.getMessage(), a.getSeverity(), a.isResolved(), a.getResolvedAt(), a.getSource()); }
 }

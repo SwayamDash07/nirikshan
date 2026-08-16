@@ -4,6 +4,7 @@ import com.nirikshan.model.ZoneFeedStatus;
 import com.nirikshan.repository.ZoneFeedRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 @Service
 public class ZoneFeedRunner {
     private static final Logger log = LoggerFactory.getLogger(ZoneFeedRunner.class);
+    private static final int HEALTH_LOG_EVERY_ITERATIONS = 5;
     private final ZoneFeedRepository feedRepository;
     private final Path pipelineDir;
     private final String pythonExecutable;
@@ -40,9 +42,35 @@ public class ZoneFeedRunner {
 
     @PostConstruct
     void restartPersistedLiveFeeds() {
-        feedRepository.findByStatus(ZoneFeedStatus.LIVE)
-                .forEach(feed -> java.util.concurrent.CompletableFuture.runAsync(
-                        () -> start(feed.getZone().getId(), feed.getVideoPath())));
+        List<com.nirikshan.model.ZoneFeed> persisted = feedRepository.findByStatus(ZoneFeedStatus.LIVE);
+        log.info("Reconciling {} persisted LIVE zone feeds after backend startup", persisted.size());
+        persisted.forEach(feed -> {
+            if (!java.nio.file.Files.exists(pipelineDir.resolve(feed.getVideoPath()))) {
+                log.warn("Zone {} was LIVE but its video file is missing; marking feed OFFLINE", feed.getZone().getId());
+                feed.setStatus(ZoneFeedStatus.OFFLINE);
+                feed.setStartedAt(null);
+                feedRepository.save(feed);
+            } else {
+                log.info("Resuming persisted LIVE zone {} from {}", feed.getZone().getId(), feed.getVideoPath());
+                java.util.concurrent.CompletableFuture.runAsync(() -> start(feed.getZone().getId(), feed.getVideoPath()));
+            }
+        });
+    }
+
+    @jakarta.annotation.PreDestroy
+    void stopAll() {
+        processes.keySet().forEach(this::stop);
+    }
+
+    @Scheduled(fixedDelay = 60_000)
+    void logHealth() {
+        feedRepository.findByStatus(ZoneFeedStatus.LIVE).forEach(feed -> {
+            Process process = processes.get(feed.getZone().getId());
+            log.info("ZoneFeed health: zone={}, dbStatus={}, pid={}, alive={}, loopIteration={}",
+                    feed.getZone().getId(), feed.getStatus(), process == null ? "none" : process.pid(),
+                    process != null && process.isAlive(), feed.getCurrentLoopIteration());
+            if (process == null || !process.isAlive()) markOfflineIfCurrent(feed.getZone().getId(), feed.getVideoPath());
+        });
     }
 
     public synchronized void stop(Long zoneId) {
@@ -65,12 +93,18 @@ public class ZoneFeedRunner {
         try {
             process = launchIfCurrent(zoneId, videoPath, output);
             if (process == null) return;
-            log.info("Started continuous camera loop for zone {} with {}", zoneId, videoPath);
+            log.info("Started continuous camera loop for zone {} with {} (pid={})", zoneId, videoPath, process.pid());
             try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = outputReader.readLine()) != null) {
                     if (line.startsWith("LOOP_ITERATION ")) {
-                        try { updateIteration(zoneId, videoPath, Integer.parseInt(line.substring("LOOP_ITERATION ".length()).trim())); }
+                        try {
+                            int iteration = Integer.parseInt(line.substring("LOOP_ITERATION ".length()).trim());
+                            updateIteration(zoneId, videoPath, iteration);
+                            if (iteration > 0 && iteration % HEALTH_LOG_EVERY_ITERATIONS == 0) {
+                                log.info("Zone {} loop still running, iteration count: {}, pid={}", zoneId, iteration, process.pid());
+                            }
+                        }
                         catch (NumberFormatException ignored) { log.debug("Could not parse loop iteration: {}", line); }
                     } else if (!line.isBlank()) {
                         log.debug("CV zone {}: {}", zoneId, line);
@@ -78,13 +112,15 @@ public class ZoneFeedRunner {
                 }
             }
             int exitCode = process.waitFor();
-            if (exitCode != 0) log.warn("Continuous camera loop for zone {} exited with code {}", zoneId, exitCode);
+            log.warn("Continuous camera loop for zone {} stopped with exit code {} (pid={})", zoneId, exitCode, process.pid());
         } catch (Exception error) {
             log.error("Continuous camera loop for zone {} failed", zoneId, error);
         } finally {
             Process current = processes.get(zoneId);
             if (current != null && !current.isAlive()) processes.remove(zoneId, current);
             markOfflineIfCurrent(zoneId, videoPath);
+            log.info("Zone {} worker reconciliation complete; active process={}", zoneId,
+                    processes.get(zoneId) == null ? "none" : processes.get(zoneId).pid());
         }
     }
 

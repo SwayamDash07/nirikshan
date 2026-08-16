@@ -3,6 +3,8 @@
 import { FormEvent, useMemo, useState } from "react";
 import { api } from "../lib/auth";
 import Icon from "./Icon";
+import LanguageSelector from "./LanguageSelector";
+import type { AiLanguage } from "../lib/aiLanguage";
 import styles from "./assistantChat.module.css";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -21,7 +23,7 @@ function plainText(value: string) {
   return value.replace(/\*\*/g, "").replace(/^\s*#{1,6}\s*/gm, "").replace(/^\s*[-*]\s+/gm, "").trim();
 }
 
-export default function AssistantChatWidget({ zones }: { zones: AssistantZone[] }) {
+export default function AssistantChatWidget({ zones, language, onLanguageChange }: { zones: AssistantZone[]; language: AiLanguage; onLanguageChange: (language: AiLanguage) => void }) {
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -42,7 +44,7 @@ export default function AssistantChatWidget({ zones }: { zones: AssistantZone[] 
     try {
       const result = await api<ChatResponse>("/api/assistant/chat", {
         method: "POST",
-        body: JSON.stringify({ message, ...(zoneId === undefined ? {} : { zoneId }), conversationHistory: history }),
+        body: JSON.stringify({ message, language, ...(zoneId === undefined ? {} : { zoneId }), conversationHistory: history }),
       });
       setMessages((current) => [...current, { role: "assistant", content: plainText(result.response) }]);
     } catch (reason) {
@@ -59,7 +61,7 @@ export default function AssistantChatWidget({ zones }: { zones: AssistantZone[] 
 
   return <>
     {open && <section className={styles.panel} aria-label="Nirikshan Assistant">
-      <header className={styles.panelHeader}><div><strong>Nirikshan Assistant</strong><span>Campus safety only</span></div><button type="button" onClick={() => setOpen(false)} aria-label="Close assistant"><Icon name="close" /></button></header>
+      <header className={styles.panelHeader}><div><strong>Nirikshan Assistant</strong><span>Campus safety only</span></div><div className={styles.headerControls}><LanguageSelector language={language} onChange={onLanguageChange} className={styles.languageSelector} /><button type="button" onClick={() => setOpen(false)} aria-label="Close assistant"><Icon name="close" /></button></div></header>
       <div className={styles.messages} aria-live="polite">{visibleMessages.map((item, index) => <div className={`${styles.message} ${item.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={`${item.role}-${index}`}>{plainText(item.content)}</div>)}{loading && <div className={`${styles.message} ${styles.assistantMessage} ${styles.loading}`} aria-label="Assistant is responding"><i /><i /><i /></div>}</div>
       <div className={styles.quickActions}>
         <button type="button" onClick={() => setSummaryOpen((current) => !current)} disabled={loading}>Summary</button>

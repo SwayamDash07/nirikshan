@@ -5,6 +5,8 @@ import com.nirikshan.dto.AuthResponses.*;
 import com.nirikshan.model.*;
 import com.nirikshan.repository.*;
 import com.nirikshan.security.CurrentUser;
+import com.nirikshan.service.AlertService;
+import com.nirikshan.service.RecommendationService;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,14 +25,20 @@ public class AdminUserController {
     private final SecurityInstructionRepository instructions;
     private final CurrentUser current;
     private final PasswordEncoder passwords;
+    private final AlertService alerts;
+    private final RecommendationService recommendations;
     private final SecureRandom random = new SecureRandom();
 
-    public AdminUserController(UserRepository users, ZoneRepository zones, SecurityInstructionRepository instructions, CurrentUser current, PasswordEncoder passwords) {
+    public AdminUserController(UserRepository users, ZoneRepository zones, SecurityInstructionRepository instructions,
+                               CurrentUser current, PasswordEncoder passwords, AlertService alerts,
+                               RecommendationService recommendations) {
         this.users = users;
         this.zones = zones;
         this.instructions = instructions;
         this.current = current;
         this.passwords = passwords;
+        this.alerts = alerts;
+        this.recommendations = recommendations;
     }
 
     @PostMapping("/users")
@@ -107,8 +115,23 @@ public class AdminUserController {
         users.save(user);
     }
 
+    @PatchMapping("/users/{id}/password")
+    @Transactional
+    public UserInfo changeSecurityPassword(@PathVariable Long id, @Valid @RequestBody AdminPasswordChange request) {
+        User target = users.findById(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (target.getRole() != UserRole.SECURITY) throw new IllegalArgumentException("Only security personnel passwords can be changed here");
+        target.setPasswordHash(passwords.encode(request.newPassword()));
+        target.setMustChangePassword(false);
+        users.save(target);
+        return AuthController.info(target);
+    }
+
     @PostMapping("/instructions")
+    @Transactional
     public InstructionInfo instruction(@Valid @RequestBody Instruction request) {
+        if (request.recommendationId() != null && request.alertId() != null) {
+            throw new IllegalArgumentException("An instruction can resolve one source item at a time");
+        }
         SecurityInstruction instruction = new SecurityInstruction();
         instruction.setMessage(request.message());
         instruction.setCreatedBy(current.get());
@@ -119,6 +142,8 @@ public class AdminUserController {
             instruction.setTargetSecurityUser(user);
         }
         instructions.save(instruction);
+        if (request.recommendationId() != null) recommendations.acknowledge(request.recommendationId());
+        if (request.alertId() != null) alerts.resolve(request.alertId());
         return new InstructionInfo(instruction.getId(), instruction.getMessage(), instruction.getTargetZone() == null ? null : instruction.getTargetZone().getId(), instruction.getTargetSecurityUser() == null ? null : instruction.getTargetSecurityUser().getId(), instruction.getCreatedAt());
     }
 

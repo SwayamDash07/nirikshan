@@ -87,6 +87,6 @@ public class ZoneFeedService {
         return new AdminZoneResponse(zone.getId(), zone.getName(), zone.getLatitude(), zone.getLongitude(), zone.getRadiusMeters(),
                 zone.getCurrentDensity(), zone.getCurrentPeopleCount(), zone.getCurrentRiskLevel(), zone.getLastUpdated(), status,
                 feed == null ? null : feed.getVideoFilename(), videoUrl, feed == null ? null : feed.getStartedAt(),
-                feed == null ? 0 : feed.getCurrentLoopIteration());
+                feed == null ? 0 : feed.getCurrentLoopIteration(), zone.isBottleneckDetected());
     }
 }

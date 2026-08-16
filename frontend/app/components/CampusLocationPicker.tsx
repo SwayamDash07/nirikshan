@@ -86,7 +86,7 @@ export default function CampusLocationPicker({
       <button className={styles.locationButton} type="button" onClick={() => setTracking(true)} disabled={locationState === "locating"}>⌖ <span>Use my location</span></button>
     </div>
     {query && <div className={styles.results} role="listbox" aria-label="Campus search results">{matches.length ? matches.map((venue) => <button key={venue.id} type="button" role="option" onClick={() => { onSelect(venue, "search"); setQuery(""); }}>{venue.name}<small>{venue.description || "Safety services available"}</small></button>) : <p>No supported campus matches that search.</p>}</div>}
-    {nearest && venueIsCovered(nearest.venue, location) && nearest.venue.id !== selectedVenue?.id && <button className={styles.nearest} type="button" onClick={() => onSelect(nearest.venue, "nearest")}>Use {nearest.venue.name} · {nearest.distance}m away</button>}
+    {nearest && venueIsCovered(nearest.venue, location) && nearest.venue.id !== selectedVenue?.id && <button className={styles.nearest} type="button" onClick={() => onSelect(nearest.venue, "nearest")}>Use {nearest.venue.name}, {nearest.distance}m away</button>}
     {!covered && locationState === "ready" && <p className={styles.unavailable}>Move into a supported campus or search for a campus above to view its safety services.</p>}
   </section>;
 }

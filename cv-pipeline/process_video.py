@@ -30,6 +30,7 @@ import torch
 from ultralytics import YOLO
 
 from risk_scoring import ZoneRisk, calculate_zone_risk
+from signal_utils import detect_hotspots_from_centroids, derive_signal_values
 
 
 RISK_COLORS = {
@@ -39,6 +40,9 @@ RISK_COLORS = {
     "CRITICAL": (0, 0, 255),
 }
 RISK_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+HOTSPOT_GRID_SIZE = 3
+HOTSPOT_THRESHOLD = 1.5
+HOTSPOT_COLOR = (255, 0, 210)
 
 
 @dataclass
@@ -84,6 +88,24 @@ def detect_people(model: YOLO, frame: Any, confidence: float, device: str, augme
         left, top, right, bottom = [round(value) for value in box]
         detections.append(Detection(((left + right) / 2, (top + bottom) / 2), (left, top, right, bottom)))
     return detections
+
+
+def detect_hotspots(detections: list[Detection], frame_width: int, frame_height: int,
+                    grid_size: int = HOTSPOT_GRID_SIZE, threshold: float = HOTSPOT_THRESHOLD) -> list[dict[str, Any]]:
+    """Find coarse within-camera crowd concentration using the tested signal helper."""
+    return detect_hotspots_from_centroids((detection.centroid for detection in detections), frame_width, frame_height, grid_size, threshold)
+
+
+def draw_hotspots(frame: Any, hotspots: list[dict[str, Any]], width: int, height: int,
+                  grid_size: int = HOTSPOT_GRID_SIZE) -> None:
+    cell_width, cell_height = width / grid_size, height / grid_size
+    for hotspot in hotspots:
+        row, column = [int(value) - 1 for value in hotspot["gridPosition"].split(",")]
+        left, top = round(column * cell_width), round(row * cell_height)
+        right, bottom = round((column + 1) * cell_width), round((row + 1) * cell_height)
+        cv2.rectangle(frame, (left, top), (right, bottom), HOTSPOT_COLOR, max(3, round(width / 280)))
+        cv2.putText(frame, f"HOTSPOT {hotspot['relativeDensity']:.1f}x", (left + 8, top + 26),
+                    cv2.FONT_HERSHEY_SIMPLEX, max(0.45, min(0.75, width / 2000)), HOTSPOT_COLOR, 2, cv2.LINE_AA)
 
 
 def make_writer(path: Path, fps: float, width: int, height: int) -> cv2.VideoWriter:
@@ -324,6 +346,9 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     latest_trend = "→"
     latest_density = 0.0
     latest_speed = 0.0
+    latest_hotspots: list[dict[str, Any]] = []
+    hotspot_started_at: float | None = None
+    hotspot_persistence_seconds = 0.0
     current_total_people = 0
     detections: list[Detection] = []
     last_posted_video_seconds: float | None = None
@@ -349,6 +374,13 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
             if frame_index % process_every == 0:
                 detections = detect_people(model, frame, confidence, device=device, augment=augment)
                 current_total_people = len(detections)
+                latest_hotspots = detect_hotspots(detections, frame_width, frame_height)
+                if latest_hotspots:
+                    hotspot_started_at = timestamp_seconds if hotspot_started_at is None else hotspot_started_at
+                    hotspot_persistence_seconds = max(0.0, timestamp_seconds - hotspot_started_at)
+                else:
+                    hotspot_started_at = None
+                    hotspot_persistence_seconds = 0.0
                 weighted_people = perspective_weighted_people(detections, calibration)
                 before_count = ""
                 if comparison_model is not None:
@@ -375,8 +407,7 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                     (sample for sample in reversed(smoothed_history) if timestamp_seconds - sample[0] >= lookback),
                     smoothed_history[0],
                 )
-                density_increase = (latest_density - baseline[1]) / max(abs(baseline[1]), 0.001)
-                speed_drop = (baseline[2] - latest_speed) / max(abs(baseline[2]), 0.001)
+                density_increase, speed_drop = derive_signal_values(latest_density, baseline[1], latest_speed, baseline[2])
                 latest_risk = calculate_zone_risk(
                     latest_density, density_increase, latest_speed, thresholds, speed_drop=speed_drop
                 )
@@ -404,7 +435,12 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                         "movementSpeed": round(latest_risk.speed, 4),
                         "riskLevel": latest_risk.level,
                         "explanation": latest_risk.explanation,
+                        "densityChange": round(latest_risk.density_increase, 4),
+                        "movementSlowdown": round(latest_risk.speed_drop, 4),
+                        "hotspotPersistenceSeconds": round(hotspot_persistence_seconds, 1),
+                        "hotspotRegions": latest_hotspots,
                         "sourceClipId": args.source_clip_id or Path(args.input).stem,
+                        "source": "LIVE",
                     })
                     if live_mode:
                         if args.loop:
@@ -426,6 +462,7 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
             if writer is not None:
                 if args.heatmap_overlay is not False:
                     frame = apply_density_heatmap(frame, detections)
+                draw_hotspots(frame, latest_hotspots, frame_width, frame_height)
                 level = latest_risk.level if latest_risk else "LOW"
                 color = RISK_COLORS[level]
                 cv2.rectangle(frame, (2, 2), (frame_width - 3, frame_height - 3), color, max(3, round(frame_width / 350)))

@@ -11,6 +11,7 @@ public class Recommendation {
     @Enumerated(EnumType.STRING) @Column(nullable = false) private RecommendationType type;
     @Column(nullable = false, length = 2000) private String message;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private RiskLevel severity;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private RiskEventSource source = RiskEventSource.LIVE;
     @Column(nullable = false) private Instant createdAt;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private RecommendationStatus status = RecommendationStatus.PENDING;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "acknowledged_by_user_id") private User acknowledgedByUser;
@@ -19,8 +20,14 @@ public class Recommendation {
     public Recommendation(Zone zone, RecommendationType type, String message, RiskLevel severity) {
         this.zone = zone; this.type = type; this.message = message; this.severity = severity; this.createdAt = Instant.now();
     }
+    public Recommendation(Zone zone, RecommendationType type, String message, RiskLevel severity, RiskEventSource source) {
+        this(zone, type, message, severity); this.source = source == null ? RiskEventSource.LIVE : source;
+    }
     public Long getId() { return id; } public Zone getZone() { return zone; } public RecommendationType getType() { return type; }
-    public String getMessage() { return message; } public RiskLevel getSeverity() { return severity; } public Instant getCreatedAt() { return createdAt; }
+    public String getMessage() { return message; } public void setMessage(String message) { this.message = message; }
+    public RiskLevel getSeverity() { return severity; } public void setSeverity(RiskLevel severity) { this.severity = severity; }
+    public Instant getCreatedAt() { return createdAt; }
     public RecommendationStatus getStatus() { return status; } public void setStatus(RecommendationStatus status) { this.status = status; }
+    public RiskEventSource getSource() { return source; } public void setSource(RiskEventSource source) { this.source = source == null ? RiskEventSource.LIVE : source; }
     public User getAcknowledgedByUser() { return acknowledgedByUser; } public void setAcknowledgedByUser(User user) { this.acknowledgedByUser = user; }
 }

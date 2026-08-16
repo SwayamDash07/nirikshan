@@ -48,9 +48,9 @@ public class VenueGraphService {
             String nodeId = zoneNode(zone.getId());
             nodes.add(new VenueGraphResponse.RouteNodeResponse(nodeId, zone.getName(), "ZONE", zone.getId(), zone.getLatitude(), zone.getLongitude()));
             int timeToExit = travelSeconds(zone.getLatitude(), zone.getLongitude(), mainGateExitLat, mainGateExitLng);
-            paths.add(path(nodeId + "_TO_MAIN_GATE_EXIT", nodeId, MAIN_GATE_EXIT, mainGateExitCapacity, timeToExit, "OUTBOUND"));
+            paths.add(path(nodeId + "_TO_MAIN_GATE_EXIT", nodeId, MAIN_GATE_EXIT, mainGateExitCapacity, timeToExit, "OUTBOUND", zone));
         }
-        if (mainGate != null) paths.add(path(MAIN_GATE + "_TO_" + zoneNode(mainGate.getId()), MAIN_GATE, zoneNode(mainGate.getId()), defaultCapacity, 20, "INBOUND"));
+        if (mainGate != null) paths.add(path(MAIN_GATE + "_TO_" + zoneNode(mainGate.getId()), MAIN_GATE, zoneNode(mainGate.getId()), defaultCapacity, 20, "INBOUND", mainGate));
         return new Graph(venue, zoneList, nodes, paths);
     }
 
@@ -61,8 +61,9 @@ public class VenueGraphService {
 
     public static String zoneNode(Long zoneId) { return "ZONE_" + zoneId; }
     private static double coordinate(Double value, double fallback) { return value == null ? fallback : value; }
-    private VenueGraphResponse.RoutePathResponse path(String id, String from, String to, int capacity, int seconds, String direction) {
-        return new VenueGraphResponse.RoutePathResponse(id, from, to, Math.max(1, capacity), Math.max(1, seconds), direction, true, false);
+    private VenueGraphResponse.RoutePathResponse path(String id, String from, String to, int capacity, int seconds, String direction, Zone zone) {
+        boolean blocked = zone != null && (zone.isBottleneckDetected() || zone.getCurrentRiskLevel() == com.nirikshan.model.RiskLevel.CRITICAL);
+        return new VenueGraphResponse.RoutePathResponse(id, from, to, Math.max(1, capacity), Math.max(1, seconds), direction, !blocked, blocked);
     }
     public static int travelSeconds(Double lat1, Double lng1, Double lat2, Double lng2) {
         if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return 90;

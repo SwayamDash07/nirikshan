@@ -25,6 +25,6 @@ public class FlowStatusService {
                 sufficient ? forecast.flowState() : FlowBehaviorState.INSUFFICIENT_DATA,
                 forecast.behaviorExplanation(), sufficient,
                 forecast.analysisGeneratedAt(), forecast.analysisWindowStart(), forecast.analysisWindowEnd(),
-                forecast.nextAnalysisAt(), forecast.analysisIntervalSeconds(), forecast.dataSufficiency());
+                forecast.nextAnalysisAt(), forecast.analysisIntervalSeconds(), forecast.dataSufficiency(), forecast.unusualBehavior());
     }
 }

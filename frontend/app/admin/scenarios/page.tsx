@@ -1,21 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AppShell, { NavItem } from "../../components/AppShell";
+import AppShell, { primaryNavItems } from "../../components/AppShell";
 import { Button, Card, Spinner } from "../../components/ui";
 import { api, clearSession, readSession, type UserInfo } from "../../lib/auth";
 import styles from "./scenarios.module.css";
 
 type Zone = { id: number; name: string };
-type ScenarioType = "buildup" | "surge" | "persistent_hotspot" | "slowdown" | "recovery" | "normal_one_way" | "slowing_flow" | "reverse_movement" | "conflicting_movement" | "blocked_route" | "alternate_exit_recovery";
+type ScenarioType = "buildup" | "surge" | "persistent_hotspot" | "slowdown" | "recovery" | "normal_one_way" | "slowing_flow" | "reverse_movement" | "conflicting_movement" | "blocked_route" | "alternate_exit_recovery" | "stampede_precursor" | "unusual_behavior";
 type Run = { runId: string; scenarioType: ScenarioType; zoneId: number; status: "PENDING" | "RUNNING" | "COMPLETE" | "STOPPED"; speed: number; message: string; startedAt: string; completedAt?: string };
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/console", icon: "grid" },
-  { label: "Administration", href: "/console/admin", icon: "users" },
-  { label: "Video ingestion", href: "/admin", icon: "upload" },
-  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
-  { label: "Security", href: "/alerts/security", icon: "lock" },
-];
+const navItems = primaryNavItems;
 const scenarios: Array<{ value: ScenarioType; label: string; description: string }> = [
   { value: "buildup", label: "Gradual Buildup", description: "Density rises steadily over time." },
   { value: "surge", label: "Sudden Surge", description: "A rapid density spike tests escalation response." },
@@ -28,6 +22,8 @@ const scenarios: Array<{ value: ScenarioType; label: string; description: string
   { value: "conflicting_movement", label: "Conflicting movement", description: "SIMULATION: crossing flows compete in one zone." },
   { value: "blocked_route", label: "Blocked route", description: "SIMULATION: the route to Main Gate Exit becomes blocked." },
   { value: "alternate_exit_recovery", label: "Exit-gate recovery", description: "SIMULATION: Main Gate Exit recovers after a route disruption." },
+  { value: "stampede_precursor", label: "Stampede precursors", description: "SIMULATION: density accelerates while movement slows, with persistent hotspot and conflicting-flow signals." },
+  { value: "unusual_behavior", label: "Unusual behavior", description: "SIMULATION: repeated abrupt slowdowns, reversals, and conflicting movement test persistence gating." },
 ];
 
 function Simulator({ user }: { user: UserInfo }) {

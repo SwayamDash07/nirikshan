@@ -13,6 +13,16 @@ import styles from "./shell.module.css";
 export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
 export type PreviewRole = "SECURITY" | "CITIZEN";
 
+export const primaryNavItems: NavItem[] = [
+  { label: "Dashboard", href: "/console", icon: "grid" },
+  { label: "Administration", href: "/console/admin", icon: "users" },
+  { label: "Citizen reports", href: "/console/reports", icon: "activity" },
+  { label: "3D Model", href: "/console/3d-map", icon: "map" },
+  { label: "Video Ingestion", href: "/admin", icon: "upload" },
+  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
+  { label: "Security", href: "/alerts/security", icon: "lock" },
+];
+
 const roleLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security operator", CITIZEN: "Campus member" };
 const switchLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security personnel", CITIZEN: "Customer view" };
 const sidebarKey = "nirikshan.sidebar-collapsed";
@@ -91,7 +101,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     {mobileOpen && <button className={styles.mobileBackdrop} type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
     <header className={styles.mobileHeader}><a className={styles.brand} href={decoratedHomeHref}><span className={styles.brandMark}>N</span><b>Nirikshan</b></a><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /><button className={styles.mobileMenu} type="button" onClick={() => setMobileOpen((current) => !current)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen}><Icon name="menu" /></button></header>
     <main className={mainClass}>
-      <div className={styles.mobileNav}>{navItems.slice(0, 5).map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={previewHref(item.href)}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
+      <div className={styles.mobileNav}>{navItems.map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={previewHref(item.href)}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
       <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /></div></header>
       {queryPreview && <div className={styles.previewBanner} role="status">{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</div>}
       {children}

@@ -54,24 +54,27 @@ public class RiskForecastService {
     private final long analysisIntervalSeconds;
     private final int flowMinSamples;
     private final long flowMinSpanSeconds;
+    private final RiskIntelligenceService intelligence;
     private final Map<Long, CachedForecast> cache = new ConcurrentHashMap<>();
 
     @Autowired
     public RiskForecastService(RiskEventRepository events, ZoneRepository zones, ObjectMapper objectMapper,
                                @Value("${nirikshan.analysis.interval-seconds:30}") long analysisIntervalSeconds,
                                @Value("${nirikshan.analysis.flow-min-samples:3}") int flowMinSamples,
-                               @Value("${nirikshan.analysis.flow-min-span-seconds:10}") long flowMinSpanSeconds) {
+                               @Value("${nirikshan.analysis.flow-min-span-seconds:10}") long flowMinSpanSeconds,
+                               RiskIntelligenceService intelligence) {
         this.events = events;
         this.zones = zones;
         this.objectMapper = objectMapper;
         this.analysisIntervalSeconds = Math.max(1, analysisIntervalSeconds);
         this.flowMinSamples = Math.max(1, flowMinSamples);
         this.flowMinSpanSeconds = Math.max(0, flowMinSpanSeconds);
+        this.intelligence = intelligence;
     }
 
     /** Compatibility constructor for deterministic calculation tests and small local tools. */
     public RiskForecastService(RiskEventRepository events, ZoneRepository zones) {
-        this(events, zones, new ObjectMapper(), 30, 3, 10);
+        this(events, zones, new ObjectMapper(), 30, 3, 10, new RiskIntelligenceService(events, zones));
     }
 
     @Transactional(readOnly = true)
@@ -138,6 +141,7 @@ public class RiskForecastService {
                     explanationFor(calculated, heldState, heldRisk, confidence));
         }
         calculated = withFlowSnapshot(calculated, readings, now);
+        calculated = withIntelligence(calculated, readings, zone);
         if (existing == null || !sameSourceAnalysis || shouldCommit(existing.forecast(), calculated, now)) {
             RiskForecastResponse committed = withSnapshotMetadata(calculated, readings, now);
             cache.put(zone.getId(), new CachedForecast(key, committed, heldState, committed.confidence()));
@@ -210,7 +214,8 @@ public class RiskForecastService {
                 forecast.projections(), forecast.dominantDirection(), forecast.directionDegrees(), forecast.directionConfidence(),
                 forecast.directionalConsistency(), forecast.reverseMovementRatio(), forecast.conflictingMovementRatio(), forecast.behaviorState(),
                 forecast.behaviorExplanation(), generatedAt, windowStart, windowEnd, generatedAt.plusSeconds(analysisIntervalSeconds),
-                analysisIntervalSeconds, forecast.dataSufficiency(), forecast.flowState(), forecast.direction(), forecast.analysisPeopleCount(), forecast.analysisHotspotRegions());
+                analysisIntervalSeconds, forecast.dataSufficiency(), forecast.flowState(), forecast.direction(), forecast.analysisPeopleCount(), forecast.analysisHotspotRegions(),
+                forecast.stampedeLikelihood(), forecast.panicPropagation(), forecast.unusualBehavior());
     }
 
     private static RiskForecastResponse withLiveTelemetry(RiskForecastResponse snapshot, Instant lastTelemetryAt, boolean stale) {
@@ -223,7 +228,25 @@ public class RiskForecastService {
                 snapshot.directionalConsistency(), snapshot.reverseMovementRatio(), snapshot.conflictingMovementRatio(), snapshot.behaviorState(),
                 snapshot.behaviorExplanation(), snapshot.analysisGeneratedAt(), snapshot.analysisWindowStart(), snapshot.analysisWindowEnd(),
                 snapshot.nextAnalysisAt(), snapshot.analysisIntervalSeconds(), snapshot.dataSufficiency(), snapshot.flowState(), snapshot.direction(),
-                snapshot.analysisPeopleCount(), snapshot.analysisHotspotRegions());
+                snapshot.analysisPeopleCount(), snapshot.analysisHotspotRegions(), snapshot.stampedeLikelihood(), snapshot.panicPropagation(), snapshot.unusualBehavior());
+    }
+
+    private RiskForecastResponse withIntelligence(RiskForecastResponse forecast, List<RiskEvent> readings, Zone zone) {
+        var stampede = intelligence.stampede(readings, forecast.projectedDensity(), forecast.densityTrendPerMinute(),
+                forecast.movementSlowdown(), forecast.hotspotPersistenceSeconds(), forecast.bottleneckDetected(),
+                forecast.source(), zone.getId());
+        var unusual = intelligence.unusual(readings);
+        var propagation = intelligence.propagation(zone.getId());
+        return new RiskForecastResponse(forecast.zoneId(), forecast.zoneName(), forecast.generatedAt(), forecast.lastTelemetryAt(),
+                forecast.currentRisk(), forecast.projectedRisk(), forecast.forecastHorizonSeconds(), forecast.estimatedSecondsToProjectedRisk(),
+                forecast.currentDensity(), forecast.projectedDensity(), forecast.densityTrendPerMinute(), forecast.currentMovementSpeed(),
+                forecast.movementSlowdown(), forecast.movementSlowdownTrendPerMinute(), forecast.hotspotPersistenceSeconds(),
+                forecast.bottleneckDetected(), forecast.confidence(), forecast.state(), forecast.explanation(), forecast.source(), forecast.stale(),
+                forecast.projections(), forecast.dominantDirection(), forecast.directionDegrees(), forecast.directionConfidence(),
+                forecast.directionalConsistency(), forecast.reverseMovementRatio(), forecast.conflictingMovementRatio(), forecast.behaviorState(),
+                forecast.behaviorExplanation(), forecast.analysisGeneratedAt(), forecast.analysisWindowStart(), forecast.analysisWindowEnd(),
+                forecast.nextAnalysisAt(), forecast.analysisIntervalSeconds(), forecast.dataSufficiency(), forecast.flowState(), forecast.direction(),
+                forecast.analysisPeopleCount(), forecast.analysisHotspotRegions(), stampede, propagation, unusual);
     }
 
     private static RiskForecastResponse withFlowUnavailable(RiskForecastResponse forecast, String explanation) {
@@ -368,6 +391,8 @@ public class RiskForecastService {
         String message;
         if (forecast.stale()) {
             message = "Safety data is stale; reconnect to refresh.";
+        } else if (forecast.stampedeLikelihood() != null && "HIGH".equals(forecast.stampedeLikelihood().level())) {
+            message = "Crowd movement may become unsafe near " + forecast.zoneName() + ". Move away from the congested area and follow staff directions.";
         } else if (forecast.state() == RiskForecastState.RECOVERING || forecast.projectedRisk() == RiskLevel.LOW) {
             message = "Conditions are settling back toward normal.";
         } else if (forecast.projectedRisk().ordinal() >= RiskLevel.HIGH.ordinal()) {
@@ -379,7 +404,7 @@ public class RiskForecastService {
         }
         return new CitizenRiskForecastResponse(forecast.zoneId(), forecast.zoneName(), forecast.generatedAt(),
                 forecast.lastTelemetryAt(), forecast.currentRisk(), forecast.projectedRisk(), forecast.state(),
-                message, forecast.stale(), forecast.source());
+                message, forecast.stale(), forecast.source(), forecast.stampedeLikelihood() == null ? "INSUFFICIENT_DATA" : forecast.stampedeLikelihood().level());
     }
 
     public static RiskForecastResponse calculate(Zone zone, List<RiskEvent> input, Instant generatedAt) {

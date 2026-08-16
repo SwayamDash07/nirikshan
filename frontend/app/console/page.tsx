@@ -20,7 +20,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import AppShell, { NavItem } from "../components/AppShell";
+import AppShell, { primaryNavItems } from "../components/AppShell";
 import Icon from "../components/Icon";
 import { Button, Card, Spinner } from "../components/ui";
 import { api, clearSession, readSession, type UserInfo } from "../lib/auth";
@@ -131,6 +131,9 @@ type RiskForecast = {
   direction?: string;
   analysisPeopleCount?: number;
   analysisHotspotRegions?: HotspotRegion[];
+  stampedeLikelihood?: { score: number; level: "LOW" | "MEDIUM" | "HIGH" | "INSUFFICIENT_DATA"; evidence: string[]; explanation: string };
+  panicPropagation?: { state: string; sourceZoneId?: number; sourceZoneName?: string; affectedZoneIds: number[]; confidence: number; explanation: string; source: "LIVE" | "SIMULATION" };
+  unusualBehavior?: { detected: boolean; state: string; persistentReadings: number; confidence: number; evidence: string[]; explanation: string };
 };
 type RouteRecommendation = {
   recommendedRoute?: { routeId: string; routeName: string; exitOrGate: string; expectedTravelTimeSeconds: number; riskScore: number; reason: string; nodeLabels: string[] };
@@ -141,6 +144,7 @@ type RouteRecommendation = {
   gateAction: string;
   gateActionReason: string;
   source: "LIVE" | "SIMULATION";
+  blockage?: { status: "OPEN" | "DEGRADED" | "BLOCKED" | "UNKNOWN"; reason: string; evidence: string[]; source: "LIVE" | "SIMULATION" };
 };
 type RouteGraph = { nodes: Array<{ id: string; label: string; kind: string }>; paths: Array<{ id: string; fromNodeId: string; toNodeId: string; capacity: number; travelTimeSeconds: number; open: boolean; blocked: boolean }> };
 
@@ -176,14 +180,7 @@ const riskRank: Record<RiskLevel, number> = {
   HIGH: 2,
   CRITICAL: 3,
 };
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/console", icon: "grid" },
-  { label: "Citizen reports", href: "/console/reports", icon: "activity" },
-  { label: "Administration", href: "/console/admin", icon: "users" },
-  { label: "Video ingestion", href: "/admin", icon: "upload" },
-  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
-  { label: "Security", href: "/alerts/security", icon: "lock" },
-];
+const navItems = primaryNavItems;
 
 function formatTime(value?: string) {
   if (!value) return "Not available";
@@ -304,7 +301,9 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forec
   };
   const analysisUpdated = Boolean(updatedAt && now - updatedAt < 5000);
   const hysteresisHeld = Boolean(forecast?.explanation.toLowerCase().includes("held by"));
-  return <Card className={`${styles.forecastCard} ${forecast ? stateClass[forecast.state] : styles.forecastInsufficient}`} id="forecast">
+  const stampedeLevel = forecast?.stampedeLikelihood?.level || "INSUFFICIENT_DATA";
+  const stampedePriority = stampedeLevel === "MEDIUM" || stampedeLevel === "HIGH";
+  return <Card className={`${styles.forecastCard} ${forecast ? stateClass[forecast.state] : styles.forecastInsufficient} ${stampedePriority ? styles.forecastPriority : styles.forecastResting}`} id="forecast">
     <div className={styles.cardHeader}>
       <div><span className={styles.kicker}>EARLY WARNING</span><h2>Risk forecast</h2><p>Projected risk is decision support, not a confirmed incident.</p></div>
       <div className={styles.forecastBadges}>
@@ -312,12 +311,16 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forec
         {hysteresisHeld && <span className={styles.forecastHeld}>HYSTERESIS HOLD</span>}
         {forecast?.stale && <span className={styles.forecastStale}>STALE</span>}
         {forecast?.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}
+        {forecast?.stampedeLikelihood && <span className={stampedePriority ? styles.stampedeBadge : styles.forecastHeld}>STAMPEDE {stampedeLevel.replaceAll("_", " ")}</span>}
       </div>
     </div>
     {loading ? <div className={styles.forecastEmpty}>Calculating forecast from recent readings…</div> : error ? <div className={styles.forecastEmpty}><strong>Forecast unavailable</strong><span>{error}</span></div> : !forecast ? <div className={styles.forecastEmpty}>Select a zone to calculate its forecast.</div> : <>
       <div className={styles.forecastHeadline}><div><span>Current</span><strong>{riskMeta[forecast.currentRisk].label}</strong></div><span className={styles.forecastArrow}>→</span><div><span>Projected</span><strong>{riskMeta[forecast.projectedRisk].label}</strong></div><b className={styles.forecastState}>{stateLabel[forecast.state]}</b></div>
       {forecast.stale || forecast.state === "INSUFFICIENT_DATA" ? <div className={styles.forecastNotice}>{forecast.explanation}</div> : <div className={styles.forecastNotice}>{forecast.estimatedSecondsToProjectedRisk != null && forecast.projectedRisk !== forecast.currentRisk ? `Projected ${riskMeta[forecast.projectedRisk].label.toLowerCase()} risk in approximately ${Math.max(0, Math.round(forecast.estimatedSecondsToProjectedRisk / 60))} minutes.` : forecast.explanation}</div>}
       <div className={styles.forecastStats}><div><span>Density now → projected</span><strong>{forecast.currentDensity.toFixed(2)} → {forecast.projectedDensity.toFixed(2)}</strong></div><div><span>Density trend</span><strong>{forecast.densityTrendPerMinute >= 0 ? "+" : ""}{forecast.densityTrendPerMinute.toFixed(2)} / min</strong></div><div><span>Confidence</span><strong>{Math.round(forecast.confidence * 100)}%</strong></div><div><span>Telemetry</span><strong>{forecast.lastTelemetryAt ? `${formatAge(forecast.lastTelemetryAt, now)}${forecast.stale ? " · STALE" : ""}` : "No recent data"}</strong></div></div>
+      {forecast.stampedeLikelihood && <div className={stampedePriority ? styles.stampedePanel : styles.signalFacts}><span className={styles.kicker}>STAMPEDE LIKELIHOOD · HEURISTIC DECISION SUPPORT</span><strong>{stampedeLevel.replaceAll("_", " ")} · {Math.round(forecast.stampedeLikelihood.score * 100)}%</strong><p>{forecast.stampedeLikelihood.explanation}</p>{forecast.stampedeLikelihood.evidence.length > 0 && <small>{forecast.stampedeLikelihood.evidence.join(" · ")}</small>}</div>}
+      {forecast.panicPropagation && forecast.panicPropagation.state !== "NONE" && <p className={styles.forecastNotice}>Propagation: {forecast.panicPropagation.explanation}</p>}
+      {forecast.unusualBehavior?.detected && <p className={styles.forecastNotice}>Unusual behavior persisted across {forecast.unusualBehavior.persistentReadings} readings: {forecast.unusualBehavior.explanation}</p>}
       <div className={styles.forecastMeta}><span>Forecast age: {formatAge(forecast.generatedAt, now)}</span><span>{hysteresisHeld ? "State held by hysteresis" : analysisUpdated ? "Updated from new reading" : "Analysis unchanged"}</span>{forecast.stale && <span>Forecast based on last telemetry</span>}</div>
       <p className={styles.forecastExplanation}>{forecast.explanation}</p>
     </>}
@@ -349,6 +352,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
         <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
         <span>Gate action</span><strong>{route?.gateAction?.replaceAll("_", " ") || "Unavailable"}</strong>
       </div>
+      {route?.blockage && <div className={styles.summaryRow}><span>Route state</span><strong>{route.blockage.status}</strong></div>}
       <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
     </Card>;
   }
@@ -363,7 +367,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
     <div className={styles.forecastMeta}><span>Last analysis: {formatTime(forecast?.analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(forecast?.analysisWindowStart, forecast?.analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(forecast?.nextAnalysisAt, now)}</span><span>Interval: {forecast?.analysisIntervalSeconds || 30}s</span></div>
     {(reverseWarning || conflictWarning) && <p className={styles.forecastNotice}>{reverseWarning ? "Reverse movement warning." : "Conflicting movement warning."} {conflictWarning ? "Crossing flow is elevated." : "People are moving against the dominant direction."}</p>}
     <div className={styles.signalFacts}><span className={styles.kicker}>PREDICTED RISK</span><p>{forecast ? `${forecast.currentRisk} now → ${forecast.projectedRisk} projected. ${forecast.explanation}` : "Forecast unavailable."}</p></div>
-    <div className={styles.signalFacts}><span className={styles.kicker}>RECOMMENDED ACTION</span>{route?.recommendedRoute ? <><p><strong>{route.recommendedRoute.routeName}</strong> · {route.expectedTravelTimeSeconds}s · risk score {route.riskScore.toFixed(2)}</p><p>{route.reason}</p><p><strong>Gate action:</strong> {route.gateAction} · {route.gateActionReason}</p></> : <p>{route?.reason || "Route recommendation unavailable."}</p>}</div>
+    <div className={styles.signalFacts}><span className={styles.kicker}>RECOMMENDED ACTION</span>{route?.recommendedRoute ? <><p><strong>{route.recommendedRoute.routeName}</strong> · {route.expectedTravelTimeSeconds}s · risk score {route.riskScore.toFixed(2)}</p><p>{route.reason}</p><p><strong>Route state:</strong> {route.blockage?.status || "UNKNOWN"} · {route.blockage?.reason || "No blockage evidence available."}</p><p><strong>Gate action:</strong> {route.gateAction} · {route.gateActionReason}</p></> : <p>{route?.reason || "Route recommendation unavailable."}</p>}</div>
     {route?.rejectedRoutes?.length ? <div className={styles.signalFacts}><span className={styles.kicker}>REJECTED ROUTES</span>{route.rejectedRoutes.map((item) => <p key={item.routeName}><strong>{item.routeName}</strong> · {item.blocked ? "BLOCKED" : item.reason}</p>)}</div> : null}
     {graph && <div className={styles.signalFacts}><span className={styles.kicker}>LOCAL ROUTE GRAPH</span><p>{graph.nodes.filter((node) => node.kind === "ZONE").length} zones · {graph.nodes.filter((node) => node.kind === "EXIT").length} exits · {graph.paths.length} directed paths</p></div>}
   </Card>;

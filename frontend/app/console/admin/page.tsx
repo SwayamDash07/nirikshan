@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AppShell, { NavItem } from "../../components/AppShell";
+import AppShell, { primaryNavItems } from "../../components/AppShell";
 import { Button } from "../../components/ui";
 import { clearSession, readSession, type UserInfo } from "../../lib/auth";
 import ResponseActions from "../ResponseActions";
 import styles from "../console.module.css";
 import managementStyles from "../management.module.css";
 
-const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Simulator", href: "/admin/scenarios", icon: "activity" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
+const navItems = primaryNavItems;
 
 export default function Page() {
   const [user, setUser] = useState<UserInfo>();

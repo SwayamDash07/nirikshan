@@ -22,7 +22,7 @@ def get_json(session: requests.Session, url: str) -> Any:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("scenario", choices=("buildup", "surge", "persistent_hotspot", "slowdown", "recovery", "normal_one_way", "slowing_flow", "reverse_movement", "conflicting_movement", "blocked_route", "alternate_exit_recovery"))
+    parser.add_argument("scenario", choices=("buildup", "surge", "persistent_hotspot", "slowdown", "recovery", "normal_one_way", "slowing_flow", "reverse_movement", "conflicting_movement", "blocked_route", "alternate_exit_recovery", "stampede_precursor", "unusual_behavior"))
     parser.add_argument("--zone-id", type=int, required=True)
     parser.add_argument("--token", required=True, help="ADMIN JWT")
     parser.add_argument("--base-url", default="http://localhost:8080")

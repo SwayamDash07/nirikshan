@@ -98,8 +98,20 @@ public class RecommendationService {
     }
 
     private void createProjectedRecommendations(Zone zone, RiskForecastResponse forecast, RiskEventSource source) {
-        if (forecast.stale() || forecast.state() == RiskForecastState.INSUFFICIENT_DATA
-                || forecast.projectedRisk().ordinal() <= forecast.currentRisk().ordinal()) return;
+        if (forecast.stale() || forecast.state() == RiskForecastState.INSUFFICIENT_DATA) return;
+        if (forecast.stampedeLikelihood() != null && "HIGH".equals(forecast.stampedeLikelihood().level())) {
+            create(zone, RecommendationType.DEPLOY_SECURITY,
+                    "Heuristic stampede likelihood is HIGH (" + Math.round(forecast.stampedeLikelihood().score() * 100)
+                            + "%): " + forecast.stampedeLikelihood().explanation(), RiskLevel.HIGH, source);
+            return;
+        }
+        if (forecast.stampedeLikelihood() != null && "MEDIUM".equals(forecast.stampedeLikelihood().level())
+                && forecast.projectedRisk().ordinal() <= forecast.currentRisk().ordinal()) {
+            create(zone, RecommendationType.REDIRECT,
+                    "Heuristic stampede likelihood is MEDIUM; redirect incoming visitors while movement signals are reviewed.", RiskLevel.MEDIUM, source);
+            return;
+        }
+        if (forecast.projectedRisk().ordinal() <= forecast.currentRisk().ordinal()) return;
         String prefix = "Projected " + forecast.projectedRisk() + " risk, not a confirmed current incident: ";
         if (forecast.projectedRisk() == RiskLevel.CRITICAL) {
             // A zone has one current pending action. CLOSE_ENTRY is the primary

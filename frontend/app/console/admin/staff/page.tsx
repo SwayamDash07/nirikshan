@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AppShell, { NavItem } from "../../../components/AppShell";
+import AppShell, { primaryNavItems } from "../../../components/AppShell";
 import { Spinner } from "../../../components/ui";
 import { api, clearSession, readSession, type UserInfo } from "../../../lib/auth";
 import AdminManagement from "../../AdminManagement";
@@ -10,7 +10,7 @@ import styles from "../../console.module.css";
 type Zone = { id: number; name: string };
 type Venue = { id: number; name: string };
 
-const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Simulator", href: "/admin/scenarios", icon: "activity" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
+const navItems = primaryNavItems;
 
 export default function Page() {
   const [user, setUser] = useState<UserInfo>();

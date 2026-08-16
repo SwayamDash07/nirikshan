@@ -61,9 +61,15 @@ public class RiskEventService {
         if (request.riskLevel() == RiskLevel.LOW) resolveStaleAlerts(zone, request.timestamp());
         RiskEventResponse response = toResponse(saved);
         messagingTemplate.convertAndSend("/topic/risk-updates", response);
-        messagingTemplate.convertAndSend("/topic/risk-forecasts", forecastService.forecast(zone.getId()));
-        if (request.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
-            Alert alert = upsertActiveAlert(zone, request.timestamp(), request.explanation(), request.riskLevel(), saved.getSource());
+        var forecast = forecastService.forecast(zone.getId());
+        messagingTemplate.convertAndSend("/topic/risk-forecasts", forecast);
+        messagingTemplate.convertAndSend("/topic/risk-intelligence", forecast);
+        if (request.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal()
+                || (forecast.stampedeLikelihood() != null && "HIGH".equals(forecast.stampedeLikelihood().level()))) {
+            RiskLevel alertSeverity = request.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal() ? request.riskLevel() : RiskLevel.HIGH;
+            String alertMessage = forecast.stampedeLikelihood() != null && "HIGH".equals(forecast.stampedeLikelihood().level())
+                    ? "Heuristic stampede likelihood HIGH: " + forecast.stampedeLikelihood().explanation() : request.explanation();
+            Alert alert = upsertActiveAlert(zone, request.timestamp(), alertMessage, alertSeverity, saved.getSource());
             messagingTemplate.convertAndSend("/topic/alerts", toResponse(alert));
         }
         return response;

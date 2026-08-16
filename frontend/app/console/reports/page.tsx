@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AppShell, { NavItem } from "../../components/AppShell";
+import AppShell, { primaryNavItems } from "../../components/AppShell";
 import { Card, Spinner } from "../../components/ui";
 import { api, clearSession, readSession, type UserInfo } from "../../lib/auth";
 import styles from "../console.module.css";
 
 type Report = { id: number; zoneId: number; zoneName: string; description: string; timestamp: string; status: string };
-const navItems: NavItem[] = [{ label: "Dashboard", href: "/console", icon: "grid" }, { label: "Citizen reports", href: "/console/reports", icon: "activity" }, { label: "Administration", href: "/console/admin", icon: "users" }, { label: "Video ingestion", href: "/admin", icon: "upload" }, { label: "Security", href: "/alerts/security", icon: "lock" }];
+const navItems = primaryNavItems;
 function age(value: string) { const seconds = Math.max(0, Math.round((Date.now() - new Date(value).valueOf()) / 1000)); return seconds < 60 ? "Just now" : seconds < 3600 ? `${Math.floor(seconds / 60)} min ago` : `${Math.floor(seconds / 3600)} hr ago`; }
 
 function Reports({ user }: { user: UserInfo }) {

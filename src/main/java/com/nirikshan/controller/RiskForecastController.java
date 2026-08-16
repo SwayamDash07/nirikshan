@@ -33,6 +33,20 @@ public class RiskForecastController {
         return forecasts.forecast(zoneId);
     }
 
+    @GetMapping("/api/zones/{zoneId}/stampede-likelihood")
+    public com.nirikshan.dto.StampedeLikelihoodResponse stampede(@PathVariable Long zoneId) {
+        var user = currentUser.get();
+        if (user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.SECURITY) throw new IllegalArgumentException("Detailed stampede signals are not available to citizen accounts");
+        return forecasts.forecast(zoneId).stampedeLikelihood();
+    }
+
+    @GetMapping("/api/zones/{zoneId}/panic-propagation")
+    public com.nirikshan.dto.PanicPropagationResponse propagation(@PathVariable Long zoneId) {
+        var user = currentUser.get();
+        if (user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.SECURITY) throw new IllegalArgumentException("Detailed propagation signals are not available to citizen accounts");
+        return forecasts.forecast(zoneId).panicPropagation();
+    }
+
     @GetMapping("/api/venue/risk-forecast")
     public List<CitizenRiskForecastResponse> venue(@RequestParam(required = false) Long venueId) {
         Long selectedVenue = venueId;

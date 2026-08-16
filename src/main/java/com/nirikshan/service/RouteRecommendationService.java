@@ -10,6 +10,7 @@ import com.nirikshan.model.RiskLevel;
 import com.nirikshan.model.Zone;
 import com.nirikshan.repository.RiskEventRepository;
 import com.nirikshan.repository.ZoneRepository;
+import com.nirikshan.repository.CitizenReportRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -25,10 +26,11 @@ public class RouteRecommendationService {
     private final ZoneRepository zones;
     private final RiskEventRepository events;
     private final RiskForecastService forecasts;
+    private final CitizenReportRepository reports;
 
     public RouteRecommendationService(VenueGraphService graphService, ZoneRepository zones,
-                                      RiskEventRepository events, RiskForecastService forecasts) {
-        this.graphService = graphService; this.zones = zones; this.events = events; this.forecasts = forecasts;
+                                      RiskEventRepository events, RiskForecastService forecasts, CitizenReportRepository reports) {
+        this.graphService = graphService; this.zones = zones; this.events = events; this.forecasts = forecasts; this.reports = reports;
     }
 
     public RouteRecommendationResponse recommend(Long venueId, Long originZoneId) {
@@ -42,14 +44,26 @@ public class RouteRecommendationService {
         FlowBehaviorState behavior = latest == null ? FlowBehaviorState.INSUFFICIENT_DATA : latest.getBehaviorState();
         boolean simulatedPrimaryRouteBlocked = latest != null && latest.getSourceClipId() != null
                 && latest.getSourceClipId().toUpperCase().contains("BLOCKED_ROUTE");
+        boolean reportBlockage = reports.findByZone_IdOrderByTimestampDesc(origin.getId()).stream().limit(5)
+                .filter(report -> report.getTimestamp() != null && latest != null && !report.getTimestamp().isBefore(latest.getTimestamp().minusSeconds(120)))
+                .anyMatch(report -> report.getDescription() != null && report.getDescription().toLowerCase().matches(".*(blocked|closed|fire|trapped|emergency).*"));
+        boolean blocked = simulatedPrimaryRouteBlocked || reportBlockage || origin.isBottleneckDetected() || origin.getCurrentRiskLevel() == RiskLevel.CRITICAL;
+        String blockageStatus = routeStatus(blocked, latest == null || forecast.stale(), forecast.movementSlowdown(), origin.getCurrentRiskLevel());
+        List<String> blockageEvidence = new ArrayList<>();
+        if (simulatedPrimaryRouteBlocked) blockageEvidence.add("simulation marked this route blocked");
+        if (reportBlockage) blockageEvidence.add("recent citizen report indicates a blocked or unsafe passage");
+        if (origin.isBottleneckDetected()) blockageEvidence.add("persistent hotspot/bottleneck evidence");
+        if (origin.getCurrentRiskLevel() == RiskLevel.CRITICAL) blockageEvidence.add("critical zone risk");
+        if (forecast.movementSlowdown() >= .20) blockageEvidence.add("flow slowdown is " + Math.round(forecast.movementSlowdown() * 100) + "%");
+        if (latest != null && latest.getSource() == RiskEventSource.SIMULATION) blockageEvidence.add("simulation signal");
+        String blockageReason = blockageStatus.equals("BLOCKED") ? "Current route evidence indicates the route should not be used."
+                : blockageStatus.equals("DEGRADED") ? "Route remains usable but capacity or movement is reduced."
+                : blockageStatus.equals("UNKNOWN") ? "No fresh route evidence is available." : "No current blockage evidence is present.";
         List<RouteRecommendationResponse.RouteOption> options = new ArrayList<>();
         for (String exit : List.of(VenueGraphService.MAIN_GATE_EXIT)) {
             VenueGraphResponse.RoutePathResponse path = graph.paths().stream()
                     .filter(item -> item.fromNodeId().equals(VenueGraphService.zoneNode(origin.getId())) && item.toNodeId().equals(exit))
                     .findFirst().orElseThrow();
-            boolean blocked = simulatedPrimaryRouteBlocked
-                    || origin.isBottleneckDetected()
-                    || origin.getCurrentRiskLevel() == RiskLevel.CRITICAL;
             boolean directionCompatible = behavior != FlowBehaviorState.REVERSE_FLOW
                     && behavior != FlowBehaviorState.CONFLICTING_FLOW;
             double score = score(origin.getCurrentRiskLevel(), forecast.projectedRisk(), origin.isBottleneckDetected(),
@@ -85,7 +99,8 @@ public class RouteRecommendationService {
                 "Selected " + selected.routeName() + " because it has the lowest non-blocked route score.";
         return new RouteRecommendationResponse(venueId, origin.getId(), selected, rejected, reason,
                 selected == null ? 0 : selected.expectedTravelTimeSeconds(), selected == null ? 1 : selected.riskScore(),
-                gateAction, gateReason, Instant.now(), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name());
+                gateAction, gateReason, Instant.now(), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name(),
+                new com.nirikshan.dto.RouteBlockageResponse(blockageStatus, blockageReason, List.copyOf(blockageEvidence), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name()));
     }
 
     public CitizenRouteGuidanceResponse citizen(Long venueId, Long originZoneId) {
@@ -110,6 +125,12 @@ public class RouteRecommendationService {
         double directionPenalty = directionCompatible ? 0 : 1;
         return Math.min(1.0, .30 * current + .25 * projected + .15 * (bottleneck ? 1 : 0)
                 + .15 * pressure + .10 * travel + .05 * directionPenalty);
+    }
+
+    public static String routeStatus(boolean blockedEvidence, boolean unknown, double slowdown, RiskLevel risk) {
+        if (blockedEvidence) return "BLOCKED";
+        if (unknown) return "UNKNOWN";
+        return slowdown >= .20 || risk.ordinal() >= RiskLevel.HIGH.ordinal() ? "DEGRADED" : "OPEN";
     }
 
     public static String citizenMessage(String exitOrGate, boolean available) {

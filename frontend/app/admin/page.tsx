@@ -2,7 +2,7 @@
 
 import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Client, IMessage } from "@stomp/stompjs";
-import AppShell, { NavItem } from "../components/AppShell";
+import AppShell, { primaryNavItems } from "../components/AppShell";
 import Icon from "../components/Icon";
 import { Button, Card, Spinner } from "../components/ui";
 import { api, apiBase, clearSession, readSession, type UserInfo } from "../lib/auth";
@@ -26,13 +26,7 @@ type Zone = {
 type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel };
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/console", icon: "grid" },
-  { label: "Administration", href: "/console/admin", icon: "users" },
-  { label: "Video ingestion", href: "/admin", icon: "upload" },
-  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
-  { label: "Security", href: "/alerts/security", icon: "lock" },
-];
+const navItems = primaryNavItems;
 const riskLabels: Record<RiskLevel, string> = { LOW: "Normal", MEDIUM: "Watch", HIGH: "High", CRITICAL: "Critical" };
 
 function formatTime(value?: string) {
@@ -140,8 +134,8 @@ function AdminUpload({ user }: { user: UserInfo }) {
     finally { setBusyZoneId(undefined); }
   }
 
-  if (loading) return <AppShell user={user} title="Video ingestion" active="Video ingestion" navItems={navItems}><Spinner label="Loading camera coverage" /></AppShell>;
-  return <AppShell user={user} title="Video ingestion" subtitle="Connect recorded footage as continuous simulated CCTV coverage" active="Video ingestion" navItems={navItems}>
+  if (loading) return <AppShell user={user} title="Video ingestion" active="Video Ingestion" navItems={navItems}><Spinner label="Loading camera coverage" /></AppShell>;
+  return <AppShell user={user} title="Video ingestion" subtitle="Connect recorded footage as continuous simulated CCTV coverage" active="Video Ingestion" navItems={navItems}>
     <section className={styles.intro}><div><span className={styles.kicker}>CAMERA MANAGEMENT</span><h1>Connect your camera network</h1><p>Each zone behaves like a security camera. Connect footage once and Nirikshan keeps processing it in a real-time loop until you stop coverage.</p></div><div className={styles.networkState}><i />{zones.filter((zone) => zone.feedStatus === "LIVE").length} of {zones.length} cameras live</div></section>
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}

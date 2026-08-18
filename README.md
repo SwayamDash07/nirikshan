@@ -213,13 +213,18 @@ mvn spring-boot:run
 
 `DATABASE_URL` may also be a Railway-style `postgresql://...` URL. The backend converts it to the JDBC form automatically. `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` override the `DATABASE_*` variables when present.
 
-For Railway deployment, attach a Railway PostgreSQL service and set the backend service variables from the database service. The usual Railway URL is shaped like this (keep the real credential in Railway variables, never in source control):
+For Railway deployment, attach a Railway PostgreSQL service and set the backend service variables from the database service. The production profile seeds the Campus 25 venue/zones and creates an administrator only when the explicit admin seed variables are present. The usual Railway URL is shaped like this (keep the real credential in Railway variables, never in source control):
 
 ```text
 SPRING_PROFILES_ACTIVE=prod
 DATABASE_URL=postgresql://postgres:<password>@postgres.railway.internal:5432/railway
 NIRIKSHAN_JWT_SECRET=<long-random-secret>
+ADMIN_SEED_EMAIL=<admin-email>
+ADMIN_SEED_PASSWORD=<strong-admin-password>
+ADMIN_SEED_FORCE_RESET=false
 ```
+
+For first-time recovery of a live administrator account, temporarily set `ADMIN_SEED_EMAIL` to the intended administrator email, set a new `ADMIN_SEED_PASSWORD`, and set `ADMIN_SEED_FORCE_RESET=true` in the backend deployment environment. Redeploy once, confirm login at `/console/login`, then immediately set `ADMIN_SEED_FORCE_RESET=false` and redeploy again. Never commit these values to the repository. Browser location requires an HTTPS live URL and user permission; if location is denied, citizens can still search for **KIIT Campus 25** manually.
 
 Railway may alternatively expose `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`; the `prod` profile supports those variables too. For local testing against the Railway database, use the database service's reachable/public URL if `postgres.railway.internal` is only resolvable inside Railway:
 
@@ -229,7 +234,7 @@ $env:DATABASE_URL="postgresql://postgres:<password>@<railway-public-host>:<port>
 mvn spring-boot:run
 ```
 
-On a fresh PostgreSQL database, Flyway applies `src/main/resources/db/migration/V1__create_initial_schema.sql` before Hibernate starts. Existing non-empty prototype databases are baselined at version `0`, then the idempotent migration runs; it can create missing tables such as `users` without deleting existing data. If the schema is incomplete in another way, startup fails with the exact validation error instead of silently serving a broken app. The seed runner is enabled only for `dev` and `local-postgres`; production does not create demo data or admin accounts.
+On a fresh PostgreSQL database, Flyway applies `src/main/resources/db/migration/V1__create_initial_schema.sql` before Hibernate starts. Existing non-empty prototype databases are baselined at version `0`, then the idempotent migration runs; it can create missing tables such as `users` without deleting existing data. If the schema is incomplete in another way, startup fails with the exact validation error instead of silently serving a broken app. The seed runner is enabled for `dev`, `local-postgres`, and `prod`. It creates missing Campus 25 venue/zones in a fresh database, but it never overwrites an existing administrator unless `ADMIN_SEED_FORCE_RESET=true` is explicitly enabled.
 
 The public health endpoint is `http://localhost:8080/api/health`. It reports the active profile, database name/schema, missing required tables, and row counts. A `DOWN` response means the backend is pointed at the wrong database, cannot connect, or has an incomplete schema.
 

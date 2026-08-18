@@ -24,6 +24,7 @@ nirikshan:
     jwt-expiry-hours: 24
     admin-seed-email: ${ADMIN_SEED_EMAIL:}
     admin-seed-password: ${ADMIN_SEED_PASSWORD:}
+    admin-seed-force-reset: ${ADMIN_SEED_FORCE_RESET:false}
   cv:
     pipeline-dir: ${NIRIKSHAN_CV_PIPELINE_DIR:cv-pipeline}
     python-executable: ${NIRIKSHAN_PYTHON:python}

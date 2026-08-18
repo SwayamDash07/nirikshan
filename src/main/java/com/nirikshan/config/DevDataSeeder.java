@@ -17,7 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.List;
 
 @Configuration
-@Profile({"dev", "local-postgres"})
+@Profile({"dev", "local-postgres", "prod"})
 public class DevDataSeeder {
     private static final String VENUE_NAME = "KIIT Campus 25";
 
@@ -31,6 +31,9 @@ public class DevDataSeeder {
 
     @Value("${nirikshan.auth.admin-seed-password:}")
     private String adminPassword;
+
+    @Value("${nirikshan.auth.admin-seed-force-reset:false}")
+    private boolean forceReset;
 
     public DevDataSeeder(VenueRepository venueRepository, ZoneRepository zoneRepository,
                          UserRepository userRepository, PasswordEncoder passwords) {
@@ -77,7 +80,15 @@ public class DevDataSeeder {
         }
         var existing = userRepository.findByEmailIgnoreCase(adminEmail).orElse(null);
         if (existing != null) {
-            if (existing.getRole() == UserRole.ADMIN && !existing.isProtectedAdmin()) {
+            if (forceReset && !adminPassword.isBlank()) {
+                existing.setPasswordHash(passwords.encode(adminPassword));
+                existing.setRole(UserRole.ADMIN);
+                existing.setName("Nirikshan Admin");
+                existing.setMustChangePassword(false);
+                existing.setProtectedAdmin(true);
+                existing.setActive(true);
+                userRepository.save(existing);
+            } else if (existing.getRole() == UserRole.ADMIN && !existing.isProtectedAdmin()) {
                 existing.setProtectedAdmin(true);
                 userRepository.save(existing);
             }

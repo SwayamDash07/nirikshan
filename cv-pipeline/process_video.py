@@ -127,8 +127,12 @@ def load_json(path: Path) -> dict[str, Any]:
         return json.load(stream)
 
 
-def detect_people(model: YOLO, frame: Any, confidence: float, device: str, augment: bool = False) -> list[Detection]:
-    results = model.predict(frame, conf=confidence, classes=[0], augment=augment, device=device, verbose=False)
+def detect_people(model: YOLO, frame: Any, confidence: float, device: str, augment: bool = False,
+                  imgsz: int | None = None) -> list[Detection]:
+    options = {"conf": confidence, "classes": [0], "augment": augment, "device": device, "verbose": False}
+    if imgsz is not None:
+        options["imgsz"] = imgsz
+    results = model.predict(frame, **options)
     detections: list[Detection] = []
     if not results or results[0].boxes is None:
         return detections

@@ -86,7 +86,8 @@ def emit_for_stream(stream: Stream, frame: Any, model: Any, privacy: FaceBlurPro
                     thresholds: dict[str, Any], device: str, post_url: str, timeout: float) -> None:
     clean = privacy.sanitize(frame).frame
     detections = detect_people(model, clean, float(thresholds.get("personConfidence", 0.28)), device,
-                               augment=bool(thresholds.get("augment", False)))
+                               augment=bool(thresholds.get("augment", False)),
+                               imgsz=int(thresholds.get("sharedInferenceImageSize", 416)))
     calibration = thresholds.get("zoneCalibration", {}).get(str(stream.zone_id), {})
     visible_area = max(float(calibration.get("visibleAreaSqMeters", 100.0)), 0.001)
     weighted_people = perspective_weighted_people(detections, calibration)

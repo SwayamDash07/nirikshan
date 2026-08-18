@@ -100,10 +100,10 @@ public class ZoneFeedRunner {
         ProcessBuilder builder = new ProcessBuilder(command)
                 .directory(pipelineDir.toFile())
                 .redirectErrorStream(true);
-        builder.environment().putIfAbsent("OMP_NUM_THREADS", "1");
-        builder.environment().putIfAbsent("MKL_NUM_THREADS", "1");
-        builder.environment().putIfAbsent("OPENBLAS_NUM_THREADS", "1");
-        builder.environment().putIfAbsent("NUMEXPR_NUM_THREADS", "1");
+        builder.environment().putIfAbsent("OMP_NUM_THREADS", "2");
+        builder.environment().putIfAbsent("MKL_NUM_THREADS", "2");
+        builder.environment().putIfAbsent("OPENBLAS_NUM_THREADS", "2");
+        builder.environment().putIfAbsent("NUMEXPR_NUM_THREADS", "2");
         Process started = builder.start();
         process = started;
         log.info("Started shared CV worker pid={} for active video zones", started.pid());

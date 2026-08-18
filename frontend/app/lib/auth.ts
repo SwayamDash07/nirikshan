@@ -1,3 +1,5 @@
+import { readOfflineCache, safeOfflinePath, writeOfflineCache } from "./offlineSync";
+
 export type Role = "ADMIN" | "SECURITY" | "CITIZEN";
 
 export type UserInfo = {
@@ -55,6 +57,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       response = await fetch(`${apiBase}${path}`, { ...init, headers, cache: "no-store" });
     } catch {
+      const cached = await readOfflineCache(path);
+      if (cached !== undefined) return cached as T;
       throw new ApiError(`Cannot reach the backend at ${apiBase}. Check that Spring Boot is running.`, undefined, path);
     }
 
@@ -75,8 +79,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
     if (response.status === 204 || !text) return undefined as T;
     if (typeof payload === "string") {
-      try { return JSON.parse(payload) as T; } catch { throw new ApiError("Backend returned an invalid response", response.status, path, requestId); }
+      try {
+        const parsed = JSON.parse(payload) as T;
+        if (safeOfflinePath(path)) void writeOfflineCache(path, parsed);
+        return parsed;
+      } catch { throw new ApiError("Backend returned an invalid response", response.status, path, requestId); }
     }
+    if (safeOfflinePath(path)) void writeOfflineCache(path, payload);
     return payload as T;
   })();
   if (method !== "GET") { responseCache.clear(); return request; }

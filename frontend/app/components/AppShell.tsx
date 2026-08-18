@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, ReactNode, useEffect, useState } from "react";
-import { clearSession, type Role, type UserInfo } from "../lib/auth";
+import { api, clearSession, type Role, type UserInfo } from "../lib/auth";
 import Icon, { IconName } from "./Icon";
 import ThemeToggle from "./ThemeToggle";
 import AssistantChatWidget, { type AssistantZone } from "./AssistantChatWidget";
@@ -9,6 +9,7 @@ import LanguageSelector from "./LanguageSelector";
 import { AI_LANGUAGE_STORAGE_KEY, type AiLanguage } from "../lib/aiLanguage";
 import { AiLanguageProvider } from "../lib/aiLanguageContext";
 import { usePageLanguage } from "../lib/pageLanguage";
+import { pendingOfflineReports, syncOfflineReports } from "../lib/offlineSync";
 import styles from "./shell.module.css";
 
 export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
@@ -31,6 +32,8 @@ const sidebarKey = "nirikshan.sidebar-collapsed";
 export function AppShell({ user, title, subtitle, active, navItems, previewRole, assistantZones, children }: { user: UserInfo; title: string; subtitle?: string; active: string; navItems: NavItem[]; previewRole?: PreviewRole; assistantZones?: AssistantZone[]; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [pendingReports, setPendingReports] = useState(0);
   const [language, setLanguage] = useState<AiLanguage>("en");
   const [queryPreview, setQueryPreview] = useState<PreviewRole | undefined>(() => {
     if (typeof window === "undefined") return undefined;
@@ -48,6 +51,17 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     const preview = new URLSearchParams(window.location.search).get("preview");
     if (preview === "security") setQueryPreview("SECURITY");
     if (preview === "customer") setQueryPreview("CITIZEN");
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => pendingOfflineReports().then((items) => setPendingReports(items.length)).catch(() => undefined);
+    const synchronize = () => syncOfflineReports((report) => api("/api/citizen-reports", { method: "POST", body: JSON.stringify({ zoneId: report.zoneId, description: report.description, clientEventId: report.clientEventId }) })).then((items) => setPendingReports(items.length)).catch(() => undefined);
+    const online = () => { setOffline(false); void synchronize(); };
+    const offlineState = () => setOffline(true);
+    setOffline(!navigator.onLine); refresh();
+    if (navigator.onLine) void synchronize();
+    window.addEventListener("online", online); window.addEventListener("offline", offlineState);
+    return () => { window.removeEventListener("online", online); window.removeEventListener("offline", offlineState); };
   }, []);
 
   function changeLanguage(next: AiLanguage) {
@@ -106,6 +120,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
       <div className={styles.mobileNav}>{navItems.map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={previewHref(item.href)}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
       <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /></div></header>
       {queryPreview && <div className={styles.previewBanner} role="status">{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</div>}
+      {(offline || pendingReports > 0) && <div className={styles.offlineBanner} role="status">{offline ? "Offline mode: showing the last safe data available." : "Connection restored."}{pendingReports > 0 && ` ${pendingReports} incident report${pendingReports === 1 ? "" : "s"} waiting to sync.`}</div>}
       {children}
       <AssistantChatWidget language={language} onLanguageChange={changeLanguage} zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />
     </main>

@@ -23,8 +23,14 @@ public class CitizenReportController {
 
     @PostMapping
     public CitizenReport create(@Valid @RequestBody CitizenReportRequest request) {
+        if (request.clientEventId() != null && !request.clientEventId().isBlank()) {
+            var existing = reportRepository.findByClientEventId(request.clientEventId());
+            if (existing.isPresent()) return existing.get();
+        }
         Zone zone = zoneRepository.findById(request.zoneId()).orElseThrow(() -> new ResourceNotFoundException("Zone", request.zoneId()));
-        return reportRepository.save(new CitizenReport(zone, request.description()));
+        CitizenReport report = new CitizenReport(zone, request.description());
+        report.setClientEventId(request.clientEventId());
+        return reportRepository.save(report);
     }
 
     @GetMapping

@@ -5,6 +5,7 @@ import AppShell, { NavItem } from "../../components/AppShell";
 import CampusLocationPicker, { type CampusPoint, type CampusVenue, type VenueSelectionSource } from "../../components/CampusLocationPicker";
 import { Button, Card, Field, Select, Spinner, Textarea } from "../../components/ui";
 import { api, clearSession, readSession, type Session } from "../../lib/auth";
+import { queueOfflineReport } from "../../lib/offlineSync";
 import styles from "../citizen.module.css";
 
 type Zone = { id: number; name: string };
@@ -21,7 +22,7 @@ function ReportIssue({ session }: { session: Session }) {
   useEffect(() => { load(); }, []);
   const selectVenue = useCallback((next: CampusVenue, _source: VenueSelectionSource) => { setVenue(next); window.localStorage.setItem("nirikshan.selectedVenue", String(next.id)); }, []);
   useEffect(() => { if (venue && venues.length) load(); }, [venue?.id]);
-  async function report(event: FormEvent) { event.preventDefault(); setSending(true); setError(""); setNotice(""); try { await api("/api/citizen-reports", { method: "POST", body: JSON.stringify({ zoneId, description }) }); setDescription(""); setNotice("Your report was sent to the safety team."); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not send report"); } finally { setSending(false); } }
+  async function report(event: FormEvent) { event.preventDefault(); setSending(true); setError(""); setNotice(""); const clientEventId = crypto.randomUUID(); const payload = { zoneId, description, clientEventId }; try { await api("/api/citizen-reports", { method: "POST", body: JSON.stringify(payload) }); setDescription(""); setNotice("Your report was sent to the safety team."); } catch (reason) { if (!navigator.onLine && await queueOfflineReport({ zoneId: Number(zoneId), description, clientEventId })) { setDescription(""); setNotice("You are offline. Your report is saved securely and will send automatically when connection returns."); } else setError(reason instanceof Error ? reason.message : "Could not send report"); } finally { setSending(false); } }
   if (session.user.mustChangePassword) { window.location.replace("/alerts/security"); return <main className={styles.centerState}>Opening account security</main>; }
   return <AppShell user={session.user} title="Report an issue" subtitle={`${venue?.name || "Your campus"} safety reporting`} active="Report issue" navItems={navItems}>
     <div className={styles.reportIntro}><span className={styles.eyebrow}>DIRECT REPORTING</span><h2>Tell the safety team</h2><p>Send a quick report about a hazard, crowding, blocked route, or anything that could affect people nearby.</p></div>

@@ -14,3 +14,4 @@
   min-width: 0;
   overflow-x: clip;
 }
+.offlineBanner { margin: 0 0 14px; padding: 10px 13px; border: 1px solid var(--warning); border-radius: 10px; color: var(--text); background: var(--warning-soft); font-size: 12px; line-height: 1.45; }

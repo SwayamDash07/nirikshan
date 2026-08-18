@@ -19,6 +19,8 @@ public class CitizenReport {
     private Instant timestamp;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private ReportStatus status = ReportStatus.OPEN;
+    @Column(unique = true, length = 64)
+    private String clientEventId;
 
     public CitizenReport() {}
     public CitizenReport(Zone zone, String description) {
@@ -30,4 +32,5 @@ public class CitizenReport {
     public String getDescription() { return description; } public void setDescription(String description) { this.description = description; }
     public Instant getTimestamp() { return timestamp; } public void setTimestamp(Instant timestamp) { this.timestamp = timestamp; }
     public ReportStatus getStatus() { return status; } public void setStatus(ReportStatus status) { this.status = status; }
+    public String getClientEventId() { return clientEventId; } public void setClientEventId(String clientEventId) { this.clientEventId = clientEventId; }
 }

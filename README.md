@@ -2,6 +2,131 @@
 
 Spring Boot 3.3 / Java 17 backend for the Nirikshan crowd-risk prototype. The Python CV pipeline supplies pre-computed density, movement, risk level, and explanation values; this service stores, broadcasts, and surfaces them.
 
+## Product overview
+
+Nirikshan is a privacy-aware crowd-safety platform for campus and venue operations. It accepts self-recorded crowd videos, extracts aggregate movement signals, predicts rising risk, recommends safer interventions, and distributes role-appropriate alerts to administrators, security staff, and citizens.
+
+```mermaid
+flowchart LR
+    V[Self-recorded crowd video] --> P[Python CV pipeline]
+    P --> S[Privacy gate<br/>face blur before output]
+    S --> E[Risk event API]
+    E --> I[Risk intelligence<br/>forecast + flow analysis]
+    I --> R[Recommendations<br/>routes, gates, staff, announcements]
+    R --> D[Admin command dashboard]
+    R --> K[Security workspace]
+    R --> C[Citizen alerts + reports]
+    E --> W[(PostgreSQL / H2 dev)]
+    W --> D
+    W --> K
+    W --> C
+```
+
+### Architecture at a glance
+
+```mermaid
+graph TD
+    subgraph Client[Next.js PWA]
+        Admin[Admin console]
+        Security[Security workspace]
+        Citizen[Citizen alerts]
+        Voice[Multilingual voice assistant]
+        Offline[IndexedDB cache + report outbox]
+    end
+    subgraph Backend[Spring Boot backend]
+        Auth[JWT + role access]
+        API[REST controllers]
+        STOMP[WebSocket/STOMP broker]
+        Intelligence[Risk forecast + flow intelligence]
+        Actions[Recommendation and announcement workflow]
+        Privacy[Privacy retention + audit]
+    end
+    subgraph Processing[Python processing]
+        Video[Video ingestion]
+        Blur[Face blurring]
+        Signals[Density, speed, direction, hotspots]
+        Sim[Deterministic + agent-based simulation]
+    end
+    DB[(PostgreSQL / H2)]
+
+    Admin --> Auth --> API
+    Security --> Auth
+    Citizen --> Auth
+    Voice --> API
+    Offline -. reconnect sync .-> API
+    Video --> Blur --> Signals --> API
+    Sim --> API
+    API --> Intelligence --> Actions
+    API --> STOMP
+    API --> DB
+    Privacy --> DB
+    STOMP --> Admin
+    STOMP --> Security
+    STOMP --> Citizen
+```
+
+### Operational safety loop
+
+```mermaid
+sequenceDiagram
+    participant Video as Recorded video
+    participant CV as CV pipeline
+    participant API as Risk API
+    participant Engine as Intelligence engine
+    participant Ops as Admin/security
+    participant People as Citizens
+
+    Video->>CV: Read frames
+    CV->>CV: Blur faces and derive aggregate signals
+    CV->>API: Density, speed, direction, hotspots, behavior
+    API->>Engine: Store event and evaluate recent history
+    Engine->>Engine: Forecast risk and route conditions
+    Engine->>Ops: Recommend exits, gates, staff, routes
+    Engine->>People: Send approved multilingual warning
+    Ops->>API: Acknowledge, send, resolve, or dismiss
+    API-->>People: Updated safe route and alert state
+```
+
+### Offline behavior
+
+```mermaid
+flowchart TD
+    Online{Network available?}
+    Online -->|Yes| Fresh[Fetch current safe telemetry]
+    Fresh --> Cache[Persist privacy-safe cache]
+    Online -->|No| Cached[Show last-known data<br/>with stale/offline label]
+    Cached --> Report[Citizen submits report]
+    Report --> Outbox[(IndexedDB report outbox)]
+    Outbox --> Reconnect{Connection restored?}
+    Reconnect -->|No| Outbox
+    Reconnect -->|Yes| Retry[Retry with clientEventId]
+    Retry --> Idempotent[Backend prevents duplicates]
+    Idempotent --> Sent[Report visible to safety team]
+```
+
+Offline mode deliberately caches only aggregate safety information and approved announcements. It never stores raw video, frames, face data, credentials, or administrator actions. A fully disconnected device cannot receive a new live alert without a network or separate broadcast channel.
+
+### Role and data boundaries
+
+| Role | Can view | Can do |
+|---|---|---|
+| Administrator | All zones, forecasts, recommendations, reports, feeds, audit state | Manage feeds, approve announcements, operate simulator, coordinate responses |
+| Security operator | Assigned-zone alerts, routes, interventions, reports | Acknowledge alerts and follow or execute staff instructions |
+| Citizen | Safe venue messages, localized alerts, routes, aggregate map context | Submit incident reports and receive safety guidance |
+
+### Core data boundary
+
+```mermaid
+flowchart LR
+    Raw[Raw video] -->|temporary processing only| Blur[Face blur]
+    Blur --> Safe[Aggregate telemetry]
+    Safe --> Store[(Database)]
+    Raw -. never exposed to .-> Public[Citizen clients]
+    Faces[Face images] -. never persisted .-> Store
+    Store --> Admin[Authorized admin/security views]
+    Store --> Citizen[Reduced citizen-safe views]
+```
+
 ## Authentication roles
 
 The public mobile experience at `/alerts` creates `CITIZEN` accounts only. Security accounts are created by an administrator and must change their one-time password at first sign-in. The unlinked administrator console is `/console`, with login at `/console/login`.
@@ -154,6 +279,10 @@ Privacy retention is configured with `NIRIKSHAN_RAW_VIDEO_RETENTION_HOURS` (defa
 For a local privacy smoke check against a sample clip, run `python cv-pipeline/smoke_privacy.py --input sample.mp4 --output sanitized-smoke.mp4`. The command fails if the local OpenCV face detector is unavailable or any frame cannot be sanitized.
 
 Uploads, processing start/completion/failure, sanitized footage access, and deletions are recorded in `privacy_audit_events`. Audit details never include frames, face images, raw video, tokens, passwords, or other sensitive payloads. The public **Privacy & Data Handling** page is available at `/privacy`.
+
+### Offline synchronization
+
+The PWA stores only privacy-safe read data in browser IndexedDB: venue/zone coordinates, aggregate risk telemetry, routes, alerts, forecasts, and approved announcements. Raw video, frames, face data, credentials, and administrator actions are never cached. Citizen incident reports submitted without connectivity are stored in a local outbox with a client event ID and automatically retried when the browser returns online. The backend treats that ID as idempotent, so reconnect retries cannot create duplicate reports. Offline screens clearly state that cached data may be stale; a disconnected device cannot receive a brand-new live alert without a network or separate broadcast channel.
 
 The backend assumes that `python` can run the CV dependencies from the `cv-pipeline/` directory. Override these values when necessary:
 

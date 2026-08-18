@@ -47,12 +47,15 @@ public class RecommendationService {
     private final GroqChatClient groq;
     private final ObjectMapper mapper;
     private final RiskForecastService forecastService;
+    private final RouteRecommendationService routeService;
+    private final AnnouncementService announcements;
     private final Map<Long, Instant> lastPatternAnalysis = new ConcurrentHashMap<>();
 
     public RecommendationService(RecommendationRepository recommendations, RiskEventRepository events,
                                  ZoneRepository zones, UserRepository users, CurrentUser currentUser,
                                  SimpMessagingTemplate messaging, GroqChatClient groq, ObjectMapper mapper,
-                                 RiskForecastService forecastService) {
+                                 RiskForecastService forecastService, RouteRecommendationService routeService,
+                                 AnnouncementService announcements) {
         this.recommendations = recommendations;
         this.events = events;
         this.zones = zones;
@@ -62,6 +65,8 @@ public class RecommendationService {
         this.groq = groq;
         this.mapper = mapper;
         this.forecastService = forecastService;
+        this.routeService = routeService;
+        this.announcements = announcements;
     }
 
     @Transactional
@@ -82,6 +87,7 @@ public class RecommendationService {
 
         RiskForecastResponse forecast = forecastService.forecast(zone.getId());
         createProjectedRecommendations(zone, forecast, event.getSource());
+        createInterventionRecommendations(zone, window, forecast, event.getSource());
 
         List<Zone> venueZones = zones.findByVenueId(zone.getVenue().getId());
         List<RiskForecastResponse> projectedHighZones = venueZones.stream()
@@ -128,6 +134,41 @@ public class RecommendationService {
         }
     }
 
+    private void createInterventionRecommendations(Zone zone, List<RiskEvent> window, RiskForecastResponse forecast, RiskEventSource source) {
+        if (window.size() < 3 || forecast.stale()) return;
+        PatternMetrics metrics = metrics(window);
+        int sustainedConflict = (int) window.stream().filter(event -> event.getConflictingMovementRatio() >= FlowBehaviorService.CONFLICTING_THRESHOLD
+                || event.getBehaviorState() == FlowBehaviorState.CONFLICTING_FLOW).count();
+        double reverse = window.stream().mapToDouble(RiskEvent::getReverseMovementRatio).average().orElse(0);
+        try {
+            var route = routeService.recommend(zone.getVenue().getId(), zone.getId());
+            boolean alternate = route.rejectedRoutes().stream().anyMatch(option -> option.open() && !option.blocked() && option.directionCompatible());
+            InterventionRuleEngine.OneWayDecision decision = InterventionRuleEngine.oneWay(sustainedConflict, reverse,
+                    route.blockage().status(), alternate, forecast.dominantDirection(), source);
+            if (decision.recommended()) {
+                String barricade = InterventionRuleEngine.barricadeInstruction(zone.isBottleneckDetected(), sustainedConflict >= 3,
+                        reverse >= FlowBehaviorService.REVERSE_THRESHOLD, route.blockage().status());
+                create(zone, RecommendationType.ONE_WAY_FLOW,
+                        "Recommend a temporary " + decision.direction() + " one-way flow on " + route.recommendedRoute().routeName() + ": " + decision.reason(),
+                        decision.severity(), source, new ActionMetadata(route.recommendedRoute().routeName(), decision.direction(),
+                        decision.durationMinutes(), decision.confidence(), barricade));
+            } else if (zone.isBottleneckDetected() || "DEGRADED".equals(route.blockage().status()) || "BLOCKED".equals(route.blockage().status())) {
+                String barricade = InterventionRuleEngine.barricadeInstruction(zone.isBottleneckDetected(), sustainedConflict >= 3,
+                        reverse >= FlowBehaviorService.REVERSE_THRESHOLD, route.blockage().status());
+                if (barricade != null) {
+                    RecommendationType type = RecommendationType.valueOf(barricade);
+                    create(zone, type, "Barricade recommendation for " + zone.getName() + ": " + barricade.replace('_', ' ').toLowerCase(Locale.ROOT)
+                                    + ". Advisory only; staff must assess conditions before changing barriers.",
+                            route.blockage().status().equals("BLOCKED") ? RiskLevel.HIGH : RiskLevel.MEDIUM, source,
+                            new ActionMetadata(route.recommendedRoute() == null ? zone.getName() : route.recommendedRoute().routeName(), null, 15,
+                                    Math.max(.50, 1 - route.riskScore()), barricade));
+                }
+            }
+        } catch (RuntimeException failure) {
+            log.debug("Intervention route analysis unavailable for zone {}: {}", zone.getId(), failure.getMessage());
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<RecommendationResponse> list(Boolean active) {
         List<Recommendation> result = Boolean.TRUE.equals(active)
@@ -145,6 +186,11 @@ public class RecommendationService {
                 .filter(recommendation -> recommendation.getType() == RecommendationType.OPEN_ROUTE)
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<RecommendationResponse> forZone(Long zoneId) {
+        return uniquePending(recommendations.findByZoneIdAndStatus(zoneId, RecommendationStatus.PENDING)).stream().map(this::toResponse).toList();
     }
 
     @Transactional
@@ -289,6 +335,10 @@ public class RecommendationService {
     }
 
     private void create(Zone zone, RecommendationType type, String message, RiskLevel severity, RiskEventSource source) {
+        create(zone, type, message, severity, source, null);
+    }
+
+    private void create(Zone zone, RecommendationType type, String message, RiskLevel severity, RiskEventSource source, ActionMetadata metadata) {
         Long zoneId = zone == null ? null : zone.getId();
         List<Recommendation> pendingForZone = zoneId == null
                 ? recommendations.findByStatusOrderByCreatedAtDesc(RecommendationStatus.PENDING).stream()
@@ -301,6 +351,7 @@ public class RecommendationService {
             sameType.setMessage(message);
             sameType.setSeverity(severity);
             sameType.setSource(source);
+            applyMetadata(sameType, metadata);
             broadcast(sameType);
             pendingForZone.stream().filter(existing -> existing != sameType).forEach(this::dismissPending);
             return;
@@ -314,7 +365,13 @@ public class RecommendationService {
         boolean coolingDown = zoneId == null
                 ? recommendations.existsByTypeAndZoneIsNullAndCreatedAtAfter(type, since)
                 : recommendations.existsByTypeAndZoneIdAndCreatedAtAfter(type, zoneId, since);
-        if (!coolingDown) broadcast(recommendations.save(new Recommendation(zone, type, message, severity, source)));
+        if (!coolingDown) {
+            Recommendation recommendation = new Recommendation(zone, type, message, severity, source);
+            applyMetadata(recommendation, metadata);
+            Recommendation saved = recommendations.save(recommendation);
+            broadcast(saved);
+            if (type == RecommendationType.ANNOUNCEMENT) announcements.createSuggested(zone, severity, source, message);
+        }
     }
 
     private void dismissPending(Recommendation recommendation) {
@@ -323,12 +380,13 @@ public class RecommendationService {
         broadcast(recommendation);
     }
 
-    private int actionPriority(RecommendationType type) {
+    static int actionPriority(RecommendationType type) {
         return switch (type) {
-            case CLOSE_ENTRY -> 5;
+            case CLOSE_ENTRY, CLOSE_BARRICADE_GAP, GATE_ACTION -> 6;
+            case ONE_WAY_FLOW, CREATE_ONE_WAY_CHANNEL, REMOVE_CROSSFLOW, NARROW_ENTRY -> 5;
             case DEPLOY_SECURITY, REASSIGN_PERSONNEL -> 4;
             case REDIRECT -> 3;
-            case OPEN_ROUTE -> 2;
+            case OPEN_ROUTE, OPEN_BARRICADE_GAP -> 2;
             case ANNOUNCEMENT -> 1;
         };
     }
@@ -354,7 +412,9 @@ public class RecommendationService {
         Zone zone = recommendation.getZone(); User acknowledgedBy = recommendation.getAcknowledgedByUser();
         return new RecommendationResponse(recommendation.getId(), zone == null ? null : zone.getId(), zone == null ? null : zone.getName(),
                 recommendation.getType(), recommendation.getMessage(), recommendation.getSeverity(), recommendation.getCreatedAt(),
-                recommendation.getStatus(), acknowledgedBy == null ? null : acknowledgedBy.getId(), recommendation.getSource());
+                recommendation.getStatus(), acknowledgedBy == null ? null : acknowledgedBy.getId(), recommendation.getSource(),
+                recommendation.getAffectedRoute(), recommendation.getFlowDirection(), recommendation.getDurationMinutes(),
+                recommendation.getConfidence(), recommendation.getBarricadeInstruction());
     }
 
     private static RecommendationType parseType(String value, RecommendationType fallback) {
@@ -373,4 +433,12 @@ public class RecommendationService {
                                   double densityStart, double densityEnd, double densityDelta, int risingReadings,
                                   double averageSlowdown, long hotspotReadings) { }
     private record PatternAssessment(boolean sustained, RecommendationType type, RiskLevel severity, String message) { }
+    private record ActionMetadata(String affectedRoute, String direction, Integer durationMinutes, Double confidence, String barricadeInstruction) { }
+
+    private static void applyMetadata(Recommendation recommendation, ActionMetadata metadata) {
+        if (metadata == null) return;
+        recommendation.setAffectedRoute(metadata.affectedRoute()); recommendation.setFlowDirection(metadata.direction());
+        recommendation.setDurationMinutes(metadata.durationMinutes()); recommendation.setConfidence(metadata.confidence());
+        recommendation.setBarricadeInstruction(metadata.barricadeInstruction());
+    }
 }

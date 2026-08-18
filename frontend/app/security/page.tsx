@@ -20,6 +20,7 @@ type SecurityAlert = {
   source?: "LIVE" | "SIMULATION";
 };
 type Instruction = { id: number; message: string; createdAt: string };
+type Intervention = { id: number; type: string; message: string; severity: RiskLevel; source?: "LIVE" | "SIMULATION"; affectedRoute?: string | null; direction?: string | null; durationMinutes?: number | null; barricadeInstruction?: string | null; confidence?: number | null };
 const labels: Record<RiskLevel, string> = {
   LOW: "Normal",
   MEDIUM: "Watch",
@@ -55,18 +56,21 @@ function SecurityWorkspace({
 }) {
   const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
   const [instructions, setInstructions] = useState<Instruction[]>([]);
+  const [interventions, setInterventions] = useState<Intervention[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [nextAlerts, nextInstructions] = await Promise.all([
+      const [nextAlerts, nextInstructions, nextInterventions] = await Promise.all([
         api<SecurityAlert[]>("/api/security/alerts"),
         api<Instruction[]>("/api/security/instructions"),
+        api<Intervention[]>("/api/security/interventions"),
       ]);
       setAlerts(nextAlerts);
       setInstructions(nextInstructions);
+      setInterventions(nextInterventions);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -225,6 +229,10 @@ function SecurityWorkspace({
               </span>
             </div>
           )}
+        </Card>
+        <Card className={styles.instructions}>
+          <div className={styles.cardHeader}><div><span className={styles.kicker}>ACTIONABLE INTERVENTIONS</span><h2>Advisory field actions</h2><p>Verify conditions before moving barriers or changing pedestrian flow.</p></div></div>
+          {interventions.length ? <div className={styles.instructionList}>{interventions.map((item) => <article key={item.id}><span className={styles.instructionIndex}>{String(item.id).padStart(2, "0")}</span><div><strong>{item.type.replaceAll("_", " ")}</strong><p>{item.message}</p><small>{item.affectedRoute ? `Route: ${item.affectedRoute}` : "Assigned zone"}{item.direction ? ` · Direction: ${item.direction}` : ""}{item.durationMinutes ? ` · ${item.durationMinutes} min` : ""}{item.barricadeInstruction ? ` · Barrier: ${item.barricadeInstruction.replaceAll("_", " ")}` : ""}{item.source === "SIMULATION" ? " · SIMULATION" : ""}</small></div></article>)}</div> : <div className={styles.empty}><strong>No intervention is pending</strong><span>Continue monitoring your assigned zone and follow command notes.</span></div>}
         </Card>
       </section>
     </AppShell>

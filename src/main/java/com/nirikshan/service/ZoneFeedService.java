@@ -2,6 +2,7 @@ package com.nirikshan.service;
 
 import com.nirikshan.dto.AdminZoneResponse;
 import com.nirikshan.model.Zone;
+import com.nirikshan.model.PrivacyStatus;
 import com.nirikshan.model.ZoneFeed;
 import com.nirikshan.model.ZoneFeedStatus;
 import com.nirikshan.repository.ZoneFeedRepository;
@@ -24,12 +25,16 @@ public class ZoneFeedService {
     private final ZoneRepository zoneRepository;
     private final ZoneFeedRepository feedRepository;
     private final ZoneFeedRunner runner;
+    private final PrivacyAuditService audit;
+    private final PrivacyRetentionService retention;
     private final Path pipelineDir;
 
     public ZoneFeedService(ZoneRepository zoneRepository, ZoneFeedRepository feedRepository, ZoneFeedRunner runner,
-                           @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir) {
+                            PrivacyAuditService audit, PrivacyRetentionService retention,
+                            @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir) {
         this.zoneRepository = zoneRepository;
         this.feedRepository = feedRepository;
+        this.audit = audit; this.retention = retention;
         this.runner = runner;
         this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize();
     }
@@ -44,6 +49,7 @@ public class ZoneFeedService {
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("A non-empty video file is required to connect footage");
         Zone zone = zoneRepository.findById(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone", zoneId));
         runner.stop(zoneId);
+        feedRepository.findByZone_Id(zoneId).ifPresent(previous -> retention.deleteFeedSource(previous.getVideoPath(), zoneId));
 
         String original = file.getOriginalFilename() == null ? "camera-footage.mp4" : file.getOriginalFilename();
         String safeName = Path.of(original).getFileName().toString().replaceAll("[^a-zA-Z0-9._-]", "_");
@@ -60,9 +66,11 @@ public class ZoneFeedService {
         feed.setVideoPath(relativePath.toString());
         feed.setVideoFilename(safeName);
         feed.setStatus(ZoneFeedStatus.LIVE);
+        feed.setPrivacyStatus(PrivacyStatus.ACTIVE);
         feed.setStartedAt(Instant.now());
         feed.setCurrentLoopIteration(0);
         feed = feedRepository.save(feed);
+        audit.record("UPLOAD", "LIVE_FEED", zoneId, "Camera source stored privately for active processing");
         runner.start(zoneId, feed.getVideoPath());
         return response(zone, feed);
     }
@@ -72,6 +80,7 @@ public class ZoneFeedService {
         ZoneFeed feed = feedRepository.findByZone_Id(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone feed", zoneId));
         runner.stop(zoneId);
         feed.setStatus(ZoneFeedStatus.OFFLINE);
+        retention.deleteFeedSource(feed.getVideoPath(), zoneId);
         feed.setStartedAt(null);
         feedRepository.save(feed);
         return response(feed.getZone(), feed);
@@ -83,10 +92,10 @@ public class ZoneFeedService {
 
     private AdminZoneResponse response(Zone zone, ZoneFeed feed) {
         ZoneFeedStatus status = feed == null ? ZoneFeedStatus.OFFLINE : feed.getStatus();
-        String videoUrl = feed == null ? null : "/feed-files/" + feed.getVideoPath().replace('\\', '/');
+        String videoUrl = null;
         return new AdminZoneResponse(zone.getId(), zone.getName(), zone.getLatitude(), zone.getLongitude(), zone.getRadiusMeters(),
                 zone.getCurrentDensity(), zone.getCurrentPeopleCount(), zone.getCurrentRiskLevel(), zone.getLastUpdated(), status,
-                feed == null ? null : feed.getVideoFilename(), videoUrl, feed == null ? null : feed.getStartedAt(),
+                feed == null ? PrivacyStatus.PENDING : feed.getPrivacyStatus(), feed == null ? null : feed.getVideoFilename(), videoUrl, feed == null ? null : feed.getStartedAt(),
                 feed == null ? 0 : feed.getCurrentLoopIteration(), zone.isBottleneckDetected());
     }
 }

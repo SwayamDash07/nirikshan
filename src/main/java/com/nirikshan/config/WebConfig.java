@@ -29,9 +29,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String pipelineLocation = Path.of(pipelineDir).toAbsolutePath().normalize().toUri().toString();
         String outputsLocation = Path.of(pipelineDir).toAbsolutePath().normalize().resolve("outputs").toUri().toString();
-        registry.addResourceHandler("/feed-files/**").addResourceLocations(pipelineLocation);
         registry.addResourceHandler("/job-files/**").addResourceLocations(outputsLocation);
     }
 }

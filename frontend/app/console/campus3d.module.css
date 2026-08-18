@@ -41,6 +41,12 @@
   cursor: wait;
 }
 
+.sceneToolbar button.activeButton {
+  border-color: rgba(72, 216, 160, 0.68);
+  color: #d6fff0;
+  background: rgba(20, 73, 63, 0.9);
+}
+
 .orientation {
   padding: 7px 9px;
   border-radius: 8px;
@@ -82,6 +88,94 @@
   line-height: 1.35;
 }
 
+.validationError {
+  position: absolute;
+  top: 58px;
+  left: 14px;
+  max-width: min(560px, calc(100% - 28px));
+  padding: 9px 11px;
+  border: 1px solid rgba(240, 90, 103, 0.7);
+  border-radius: 8px;
+  color: #ffd7db;
+  background: rgba(92, 25, 35, 0.92);
+  font-size: 11px;
+}
+
+.referencePanel {
+  position: absolute;
+  top: 58px;
+  left: 14px;
+  z-index: 2;
+  width: min(390px, calc(100% - 28px));
+  max-height: calc(100% - 76px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(191, 214, 223, 0.24);
+  border-radius: 10px;
+  color: #dbeafe;
+  background: rgba(13, 21, 29, 0.94);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(12px);
+  font-size: 11px;
+}
+
+.referenceHeader,
+.referenceRow > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.referenceHeader strong {
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.referenceIntro,
+.referenceNote {
+  color: #a9c0ca;
+  line-height: 1.4;
+}
+
+.referenceNote {
+  margin: 8px 0;
+}
+
+.referenceRows {
+  display: grid;
+  gap: 7px;
+}
+
+.referenceRow {
+  padding: 8px;
+  border: 1px solid rgba(191, 214, 223, 0.12);
+  border-radius: 8px;
+  background: rgba(27, 42, 50, 0.7);
+}
+
+.referenceRow strong {
+  color: #f8fafc;
+}
+
+.referenceRow small {
+  display: block;
+  margin-top: 5px;
+  color: #a9c0ca;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.unverifiedText,
+.confirmedText {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.unverifiedText { color: #ffd58a; }
+.confirmedText { color: #78e6bb; }
+
 .entrySwatch,
 .exitSwatch,
 .routeSwatch,
@@ -105,5 +199,21 @@
   .sceneShell,
   .scene {
     min-height: 480px;
+  }
+
+  .sceneToolbar {
+    flex-wrap: wrap;
+    max-width: calc(100% - 28px);
+  }
+
+  .sceneLegend {
+    left: 14px;
+    right: auto;
+    width: min(235px, calc(100% - 28px));
+  }
+
+  .referencePanel {
+    top: 96px;
+    max-height: calc(100% - 114px);
   }
 }

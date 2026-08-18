@@ -28,6 +28,11 @@ nirikshan:
     pipeline-dir: ${NIRIKSHAN_CV_PIPELINE_DIR:cv-pipeline}
     python-executable: ${NIRIKSHAN_PYTHON:python}
     risk-event-url: ${NIRIKSHAN_RISK_EVENT_URL:http://localhost:8080/api/risk-events}
+  privacy:
+    raw-video-retention-hours: ${NIRIKSHAN_RAW_VIDEO_RETENTION_HOURS:0}
+    processed-frame-retention-hours: ${NIRIKSHAN_PROCESSED_FRAME_RETENTION_HOURS:24}
+    aggregate-event-retention-days: ${NIRIKSHAN_AGGREGATE_EVENT_RETENTION_DAYS:365}
+    cleanup-interval-ms: ${NIRIKSHAN_PRIVACY_CLEANUP_INTERVAL_MS:3600000}
   routes:
     default-capacity: ${NIRIKSHAN_ROUTE_DEFAULT_CAPACITY:600}
     main-gate-exit-capacity: ${NIRIKSHAN_MAIN_GATE_EXIT_CAPACITY:450}

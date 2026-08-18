@@ -29,6 +29,7 @@ import numpy as np
 import requests
 import torch
 from ultralytics import YOLO
+from privacy import FaceBlurProcessor
 
 from risk_scoring import ZoneRisk, calculate_zone_risk
 from signal_utils import (
@@ -332,6 +333,7 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     thresholds = load_json(Path(args.thresholds))
     device = resolve_device()
     model = load_model(args.model, device)
+    privacy = FaceBlurProcessor()
     capture = cv2.VideoCapture(str(args.input))
     if not capture.isOpened():
         raise RuntimeError(f"Could not open input video: {args.input}")
@@ -435,6 +437,9 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 smoothed_history.clear()
                 print(f"LOOP_ITERATION {loop_iteration}", flush=True)
                 continue
+            # Privacy is applied before detection, annotation, output, or display.
+            # The source frame remains in memory only for this transformation.
+            frame = privacy.sanitize(frame).frame
             timestamp_seconds = frame_index / fps
             if frame_index % process_every == 0:
                 detections = detect_people(model, frame, confidence, device=device, augment=augment)

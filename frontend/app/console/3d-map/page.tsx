@@ -17,7 +17,7 @@ function ThreeDMap({ user }: { user: UserInfo }) {
     <AppShell
       user={user}
       title="3D map"
-      subtitle="Map-aligned Campus 25 route and building model"
+      subtitle="Coordinate-aligned Campus 25 route with evidence status"
       active="3D Model"
       navItems={primaryNavItems}
     >
@@ -26,7 +26,7 @@ function ThreeDMap({ user }: { user: UserInfo }) {
           <div>
             <span className={styles.kicker}>CAMPUS 25 MODEL</span>
             <h2>3D route corridor</h2>
-            <p>Follow the supplied path from Main Gate through the campus to Main Gate Exit.</p>
+            <p>Follow the coordinate-backed path from Main Gate through the campus to Main Gate Exit. Open Reference/debug to audit photo and PDF evidence per area.</p>
           </div>
           <span className={styles.liveLabel}>MAP-ALIGNED</span>
         </div>

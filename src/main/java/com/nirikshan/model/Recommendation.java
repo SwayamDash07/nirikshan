@@ -15,6 +15,11 @@ public class Recommendation {
     @Column(nullable = false) private Instant createdAt;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private RecommendationStatus status = RecommendationStatus.PENDING;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "acknowledged_by_user_id") private User acknowledgedByUser;
+    @Column(length = 255) private String affectedRoute;
+    @Column(length = 64) private String flowDirection;
+    private Integer durationMinutes;
+    private Double confidence;
+    @Column(length = 64) private String barricadeInstruction;
 
     public Recommendation() { }
     public Recommendation(Zone zone, RecommendationType type, String message, RiskLevel severity) {
@@ -30,4 +35,9 @@ public class Recommendation {
     public RecommendationStatus getStatus() { return status; } public void setStatus(RecommendationStatus status) { this.status = status; }
     public RiskEventSource getSource() { return source; } public void setSource(RiskEventSource source) { this.source = source == null ? RiskEventSource.LIVE : source; }
     public User getAcknowledgedByUser() { return acknowledgedByUser; } public void setAcknowledgedByUser(User user) { this.acknowledgedByUser = user; }
+    public String getAffectedRoute() { return affectedRoute; } public void setAffectedRoute(String value) { affectedRoute = value; }
+    public String getFlowDirection() { return flowDirection; } public void setFlowDirection(String value) { flowDirection = value; }
+    public Integer getDurationMinutes() { return durationMinutes; } public void setDurationMinutes(Integer value) { durationMinutes = value; }
+    public Double getConfidence() { return confidence; } public void setConfidence(Double value) { confidence = value; }
+    public String getBarricadeInstruction() { return barricadeInstruction; } public void setBarricadeInstruction(String value) { barricadeInstruction = value; }
 }

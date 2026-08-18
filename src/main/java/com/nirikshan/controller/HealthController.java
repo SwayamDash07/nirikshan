@@ -23,6 +23,7 @@ import java.util.Set;
 @RestController
 public class HealthController {
     private static final Logger log = LoggerFactory.getLogger(HealthController.class);
+    private static final long CACHE_MILLIS = 5_000L;
     private static final Set<String> REQUIRED_TABLES = Set.of(
             "venues", "zones", "users", "alerts", "citizen_reports", "processing_jobs", "risk_events", "security_instructions");
 
@@ -31,6 +32,8 @@ public class HealthController {
     private final AlertRepository alertRepository;
     private final JdbcTemplate jdbcTemplate;
     private final Environment environment;
+    private volatile long lastHealthAt;
+    private volatile Map<String, Object> cachedHealth;
 
     public HealthController(ZoneRepository zoneRepository, RiskEventRepository riskEventRepository,
                             AlertRepository alertRepository, JdbcTemplate jdbcTemplate, Environment environment) {
@@ -42,7 +45,8 @@ public class HealthController {
     }
 
     @GetMapping("/api/health")
-    public ResponseEntity<Map<String, Object>> health() {
+    public synchronized ResponseEntity<Map<String, Object>> health() {
+        if (cachedHealth != null && System.currentTimeMillis() - lastHealthAt < CACHE_MILLIS) return ResponseEntity.ok(cachedHealth);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", "UP");
         body.put("activeProfile", activeProfile());
@@ -68,7 +72,9 @@ public class HealthController {
                 body.put("status", "DOWN");
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
             }
-            return ResponseEntity.ok(body);
+            cachedHealth = Map.copyOf(body);
+            lastHealthAt = System.currentTimeMillis();
+            return ResponseEntity.ok(cachedHealth);
         } catch (DataAccessException exception) {
             log.error("Health check could not access the configured database", exception);
             body.put("status", "DOWN");

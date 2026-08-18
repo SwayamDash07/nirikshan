@@ -17,11 +17,13 @@ public class ProcessingJobService {
     private final ProcessingJobRepository jobRepository;
     private final ZoneRepository zoneRepository;
     private final Path pipelineDir;
+    private final PrivacyAuditService audit;
 
     public ProcessingJobService(ProcessingJobRepository jobRepository, ZoneRepository zoneRepository,
-                                @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir) {
+                                @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir, PrivacyAuditService audit) {
         this.jobRepository = jobRepository; this.zoneRepository = zoneRepository;
         this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize();
+        this.audit = audit;
     }
 
     @Transactional
@@ -38,6 +40,7 @@ public class ProcessingJobService {
         try (var input = file.getInputStream()) {
             Files.copy(input, uploadDir.resolve(safeName), StandardCopyOption.REPLACE_EXISTING);
         }
+        audit.record("UPLOAD", "PROCESSING_JOB", job.getId(), "Video uploaded for privacy processing");
         return response(job);
     }
 
@@ -51,22 +54,34 @@ public class ProcessingJobService {
     }
 
     @Transactional
-    public void markProcessing(Long id) { ProcessingJob job = find(id); job.setStatus(ProcessingJobStatus.PROCESSING); job.setErrorMessage(null); }
+    public void markProcessing(Long id) { ProcessingJob job = find(id); job.setStatus(ProcessingJobStatus.PROCESSING); job.setPrivacyStatus(PrivacyStatus.ACTIVE); job.setErrorMessage(null); audit.record("PROCESSING", "PROCESSING_JOB", id, "Privacy processing started"); }
 
     @Transactional
     public void markComplete(Long id) {
-        ProcessingJob job = find(id); job.setStatus(ProcessingJobStatus.COMPLETE); job.setCompletedAt(Instant.now());
+        ProcessingJob job = find(id); job.setStatus(ProcessingJobStatus.COMPLETE); job.setPrivacyStatus(PrivacyStatus.ACTIVE); job.setCompletedAt(Instant.now());
         job.setAnnotatedVideoPath("/job-files/" + id + "/annotated.mp4");
         job.setSummaryPath("/job-files/" + id + "/summary/summary_report.html");
     }
 
     @Transactional
     public void markFailed(Long id, String error) {
-        ProcessingJob job = find(id); job.setStatus(ProcessingJobStatus.FAILED); job.setCompletedAt(Instant.now());
+        ProcessingJob job = find(id); job.setStatus(ProcessingJobStatus.FAILED); job.setPrivacyStatus(error != null && error.contains("PRIVACY_PROCESSING_FAILED") ? PrivacyStatus.PRIVACY_PROCESSING_FAILED : PrivacyStatus.PENDING); job.setCompletedAt(Instant.now());
         job.setErrorMessage(error == null ? "CV processing failed" : error.substring(0, Math.min(error.length(), 4000)));
+        audit.record("PROCESSING_FAILED", "PROCESSING_JOB", id, job.getPrivacyStatus().name());
+    }
+
+    public void deleteUpload(Long id) {
+        Path upload = pipelineDir.resolve("uploads").resolve(id.toString());
+        try (var stream = Files.walk(upload)) { stream.sorted((a,b) -> b.getNameCount() - a.getNameCount()).forEach(path -> { try { Files.deleteIfExists(path); } catch (IOException ignored) { } }); } catch (IOException ignored) { }
+        audit.record("DELETION", "UPLOAD", id, "Temporary upload deleted after processing");
+    }
+    public void deletePrivacyIntermediates(Long id) {
+        Path output = pipelineDir.resolve("outputs").resolve(id.toString());
+        try (var stream = Files.walk(output)) { stream.filter(path -> path.getFileName().toString().endsWith("_raw.mp4")).forEach(path -> { try { Files.deleteIfExists(path); } catch (IOException ignored) { } }); } catch (IOException ignored) { }
+        audit.record("DELETION", "PRIVACY_INTERMEDIATE", id, "Unexposed intermediate annotation removed");
     }
 
     public Path pipelineDir() { return pipelineDir; }
     @Transactional(readOnly = true) public ProcessingJob find(Long id) { return jobRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Processing job", id)); }
-    private ProcessingJobResponse response(ProcessingJob job) { return new ProcessingJobResponse(job.getId(), job.getZone().getId(), job.getZone().getName(), job.getVideoFilename(), job.getStatus(), job.getCreatedAt(), job.getCompletedAt(), job.getErrorMessage(), job.getAnnotatedVideoPath(), job.getSummaryPath()); }
+    private ProcessingJobResponse response(ProcessingJob job) { return new ProcessingJobResponse(job.getId(), job.getZone().getId(), job.getZone().getName(), job.getVideoFilename(), job.getStatus(), job.getPrivacyStatus(), job.getCreatedAt(), job.getCompletedAt(), job.getErrorMessage(), job.getAnnotatedVideoPath(), job.getSummaryPath()); }
 }

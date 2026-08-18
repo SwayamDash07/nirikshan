@@ -5,3 +5,4 @@
 /* Leaflet panes use z-index values up to 1000; keep the assistant above the map. */
 .launcher { z-index: 2000; }
 .panel { z-index: 1999; }
+.speakButton { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: 8px; padding: 0; border: 0; border-radius: 6px; color: var(--primary); background: transparent; cursor: pointer; vertical-align: middle; }.speakButton:hover { background: var(--surface-subtle); }.speakButton svg { width: 14px; height: 14px; }.voiceError { margin: 7px 11px 0; color: var(--danger); font-size: 10px; }.composer button.listening { background: var(--danger); }

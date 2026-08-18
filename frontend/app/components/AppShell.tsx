@@ -8,6 +8,7 @@ import AssistantChatWidget, { type AssistantZone } from "./AssistantChatWidget";
 import LanguageSelector from "./LanguageSelector";
 import { AI_LANGUAGE_STORAGE_KEY, type AiLanguage } from "../lib/aiLanguage";
 import { AiLanguageProvider } from "../lib/aiLanguageContext";
+import { usePageLanguage } from "../lib/pageLanguage";
 import styles from "./shell.module.css";
 
 export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
@@ -38,6 +39,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   });
   const workspaceRole = previewRole || queryPreview || user.role;
   const homeHref = workspaceRole === "ADMIN" ? "/console" : workspaceRole === "SECURITY" ? "/security" : "/alerts";
+  usePageLanguage(language);
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarKey) === "true");

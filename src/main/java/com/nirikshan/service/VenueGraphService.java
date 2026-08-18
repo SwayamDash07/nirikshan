@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /** Builds a small local graph from venue/zone coordinates; no external map service is used. */
@@ -49,6 +50,17 @@ public class VenueGraphService {
             nodes.add(new VenueGraphResponse.RouteNodeResponse(nodeId, zone.getName(), "ZONE", zone.getId(), zone.getLatitude(), zone.getLongitude()));
             int timeToExit = travelSeconds(zone.getLatitude(), zone.getLongitude(), mainGateExitLat, mainGateExitLng);
             paths.add(path(nodeId + "_TO_MAIN_GATE_EXIT", nodeId, MAIN_GATE_EXIT, mainGateExitCapacity, timeToExit, "OUTBOUND", zone));
+        }
+        // Advisory monitored-zone corridors create alternate *route* candidates. They are not a claim
+        // that a physical corridor is open; the action layer labels them for staff verification.
+        for (Zone zone : zoneList) {
+            zoneList.stream().filter(other -> !other.getId().equals(zone.getId()))
+                    .min(Comparator.comparingInt(other -> travelSeconds(zone.getLatitude(), zone.getLongitude(), other.getLatitude(), other.getLongitude())))
+                    .ifPresent(nearest -> {
+                        String from = zoneNode(zone.getId()); String to = zoneNode(nearest.getId());
+                        int seconds = travelSeconds(zone.getLatitude(), zone.getLongitude(), nearest.getLatitude(), nearest.getLongitude());
+                        paths.add(path(from + "_TO_" + to, from, to, defaultCapacity, seconds, "BIDIRECTIONAL", zone));
+                    });
         }
         if (mainGate != null) paths.add(path(MAIN_GATE + "_TO_" + zoneNode(mainGate.getId()), MAIN_GATE, zoneNode(mainGate.getId()), defaultCapacity, 20, "INBOUND", mainGate));
         return new Graph(venue, zoneList, nodes, paths);

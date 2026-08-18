@@ -23,6 +23,9 @@ export class ApiError extends Error {
 
 const key = "nirikshan.session";
 export const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const GET_CACHE_TTL_MS = 4000;
+const responseCache = new Map<string, { expiresAt: number; value: unknown }>();
+const pendingGets = new Map<string, Promise<unknown>>();
 
 export function readSession(): Session | null {
   if (typeof window === "undefined") return null;
@@ -35,16 +38,25 @@ export function clearSession() { window.localStorage.removeItem(key); }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const session = readSession();
+  const method = (init.method || "GET").toUpperCase();
+  const cacheKey = `${session?.token || "anonymous"}:${path}`;
+  if (method === "GET") {
+    const cached = responseCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value as T;
+    const pending = pendingGets.get(cacheKey);
+    if (pending) return pending as Promise<T>;
+  }
   const headers = new Headers(init.headers);
   if (session?.token) headers.set("Authorization", `Bearer ${session.token}`);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  let response: Response;
-  try {
-    response = await fetch(`${apiBase}${path}`, { ...init, headers, cache: "no-store" });
-  } catch {
-    throw new ApiError(`Cannot reach the backend at ${apiBase}. Check that Spring Boot is running.`, undefined, path);
-  }
+  const request = (async () => {
+    let response: Response;
+    try {
+      response = await fetch(`${apiBase}${path}`, { ...init, headers, cache: "no-store" });
+    } catch {
+      throw new ApiError(`Cannot reach the backend at ${apiBase}. Check that Spring Boot is running.`, undefined, path);
+    }
 
   const requestId = response.headers.get("X-Request-Id") || undefined;
   const contentType = response.headers.get("content-type") || "";
@@ -54,16 +66,26 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     try { payload = JSON.parse(text); } catch { }
   }
 
-  if (!response.ok) {
-    const data = payload && typeof payload === "object" ? payload as { error?: string; message?: string } : undefined;
-    const message = data?.message || data?.error || (typeof payload === "string" && payload.trim()) || `Backend returned HTTP ${response.status}`;
-    if (response.status === 401 || response.status === 403) clearSession();
-    throw new ApiError(message, response.status, path, requestId);
-  }
+    if (!response.ok) {
+      const data = payload && typeof payload === "object" ? payload as { error?: string; message?: string } : undefined;
+      const message = data?.message || data?.error || (typeof payload === "string" && payload.trim()) || `Backend returned HTTP ${response.status}`;
+      if (response.status === 401 || response.status === 403) clearSession();
+      throw new ApiError(message, response.status, path, requestId);
+    }
 
-  if (response.status === 204 || !text) return undefined as T;
-  if (typeof payload === "string") {
-    try { return JSON.parse(payload) as T; } catch { throw new ApiError("Backend returned an invalid response", response.status, path, requestId); }
+    if (response.status === 204 || !text) return undefined as T;
+    if (typeof payload === "string") {
+      try { return JSON.parse(payload) as T; } catch { throw new ApiError("Backend returned an invalid response", response.status, path, requestId); }
+    }
+    return payload as T;
+  })();
+  if (method !== "GET") { responseCache.clear(); return request; }
+  pendingGets.set(cacheKey, request);
+  try {
+    const value = await request;
+    responseCache.set(cacheKey, { expiresAt: Date.now() + GET_CACHE_TTL_MS, value });
+    return value;
+  } finally {
+    pendingGets.delete(cacheKey);
   }
-  return payload as T;
 }

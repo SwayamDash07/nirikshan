@@ -143,6 +143,7 @@ type RouteRecommendation = {
   riskScore: number;
   gateAction: string;
   gateActionReason: string;
+  gateActionDetail?: { action: "KEEP_GATE_OPEN" | "OPEN_ALTERNATE_EXIT" | "CLOSE_ENTRY_GATE" | "TEMPORARILY_CLOSE_EXIT" | "NO_CHANGE"; reason: string; affectedRoute: string; confidence: number; source: "LIVE" | "SIMULATION" };
   source: "LIVE" | "SIMULATION";
   blockage?: { status: "OPEN" | "DEGRADED" | "BLOCKED" | "UNKNOWN"; reason: string; evidence: string[]; source: "LIVE" | "SIMULATION" };
 };
@@ -350,7 +351,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
       </div>
       <div className={styles.summaryRow}>
         <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
-        <span>Gate action</span><strong>{route?.gateAction?.replaceAll("_", " ") || "Unavailable"}</strong>
+        <span>Gate action</span><strong>{route?.gateActionDetail?.action.replaceAll("_", " ") || route?.gateAction?.replaceAll("_", " ") || "Unavailable"}</strong>
       </div>
       {route?.blockage && <div className={styles.summaryRow}><span>Route state</span><strong>{route.blockage.status}</strong></div>}
       <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
@@ -367,7 +368,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
     <div className={styles.forecastMeta}><span>Last analysis: {formatTime(forecast?.analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(forecast?.analysisWindowStart, forecast?.analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(forecast?.nextAnalysisAt, now)}</span><span>Interval: {forecast?.analysisIntervalSeconds || 30}s</span></div>
     {(reverseWarning || conflictWarning) && <p className={styles.forecastNotice}>{reverseWarning ? "Reverse movement warning." : "Conflicting movement warning."} {conflictWarning ? "Crossing flow is elevated." : "People are moving against the dominant direction."}</p>}
     <div className={styles.signalFacts}><span className={styles.kicker}>PREDICTED RISK</span><p>{forecast ? `${forecast.currentRisk} now → ${forecast.projectedRisk} projected. ${forecast.explanation}` : "Forecast unavailable."}</p></div>
-    <div className={styles.signalFacts}><span className={styles.kicker}>RECOMMENDED ACTION</span>{route?.recommendedRoute ? <><p><strong>{route.recommendedRoute.routeName}</strong> · {route.expectedTravelTimeSeconds}s · risk score {route.riskScore.toFixed(2)}</p><p>{route.reason}</p><p><strong>Route state:</strong> {route.blockage?.status || "UNKNOWN"} · {route.blockage?.reason || "No blockage evidence available."}</p><p><strong>Gate action:</strong> {route.gateAction} · {route.gateActionReason}</p></> : <p>{route?.reason || "Route recommendation unavailable."}</p>}</div>
+    <div className={styles.signalFacts}><span className={styles.kicker}>RECOMMENDED ACTION</span>{route?.recommendedRoute ? <><p><strong>{route.recommendedRoute.routeName}</strong> · {route.expectedTravelTimeSeconds}s · risk score {route.riskScore.toFixed(2)}</p><p>{route.reason}</p><p><strong>Route state:</strong> {route.blockage?.status || "UNKNOWN"} · {route.blockage?.reason || "No blockage evidence available."}</p><p><strong>Gate action:</strong> {route.gateActionDetail?.action.replaceAll("_", " ") || route.gateAction} · {route.gateActionDetail?.reason || route.gateActionReason}{route.gateActionDetail ? ` · ${Math.round(route.gateActionDetail.confidence * 100)}% confidence` : ""}</p><small>Gate actions are recommendations for staff approval; Nirikshan does not control physical gates.</small></> : <p>{route?.reason || "Route recommendation unavailable."}</p>}</div>
     {route?.rejectedRoutes?.length ? <div className={styles.signalFacts}><span className={styles.kicker}>REJECTED ROUTES</span>{route.rejectedRoutes.map((item) => <p key={item.routeName}><strong>{item.routeName}</strong> · {item.blocked ? "BLOCKED" : item.reason}</p>)}</div> : null}
     {graph && <div className={styles.signalFacts}><span className={styles.kicker}>LOCAL ROUTE GRAPH</span><p>{graph.nodes.filter((node) => node.kind === "ZONE").length} zones · {graph.nodes.filter((node) => node.kind === "EXIT").length} exits · {graph.paths.length} directed paths</p></div>}
   </Card>;

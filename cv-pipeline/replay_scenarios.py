@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,10 +14,54 @@ SCENARIOS = (
     "normal_one_way", "slowing_flow", "reverse_movement", "conflicting_movement",
     "blocked_route", "alternate_exit_recovery",
     "stampede_precursor", "unusual_behavior",
+    "ai_crowd_simulation",
 )
 
 
+def generate_ai_crowd_simulation(zone_id: int = 1, start: datetime | None = None) -> list[dict]:
+    """Lightweight agent-based model used by the bonus simulator."""
+    start = start or datetime.now(timezone.utc).replace(microsecond=0)
+    rng = random.Random(25 + zone_id)
+    agents: list[dict[str, float]] = []
+    events: list[dict] = []
+    for index in range(24):
+        for _ in range(2 if index < 8 else 1):
+            agents.append({"x": rng.uniform(.05, .95), "y": rng.uniform(.05, .95), "target": rng.uniform(.25, .75)})
+        speeds: list[float] = []
+        reverse = conflict = 0
+        for agent in agents:
+            dx = agent["target"] - agent["x"]
+            pressure = sum(1 for other in agents if abs(other["x"] - agent["x"]) < .08 and abs(other["y"] - agent["y"]) < .08)
+            speed = max(.08, 1.15 - pressure * .12 - max(0, len(agents) - 18) * .025)
+            direction = 1 if dx >= 0 else -1
+            if index in {14, 15, 16} and rng.random() < .25:
+                direction *= -1; reverse += 1
+            if abs(agent["y"] - .5) < .12 and rng.random() < .18:
+                conflict += 1
+            agent["x"] = min(1, max(0, agent["x"] + direction * speed * .035))
+            speeds.append(speed)
+        density = min(8.5, len(agents) / 5.0 + max(0, index - 10) * .08)
+        movement = sum(speeds) / len(speeds) if speeds else 0
+        reverse_ratio = reverse / len(agents) if agents else 0
+        conflict_ratio = conflict / len(agents) if agents else 0
+        risk = "CRITICAL" if density >= 6 else "HIGH" if density >= 4 else "MEDIUM" if density >= 1.5 else "LOW"
+        events.append({
+            "zoneId": zone_id, "timestamp": (start + timedelta(seconds=index * 5)).isoformat().replace("+00:00", "Z"),
+            "densityScore": round(density, 3), "peopleCount": len(agents), "movementSpeed": round(movement, 3), "riskLevel": risk,
+            "explanation": f"AI SIMULATION: agent-based arrival, avoidance, and bottleneck model; {len(agents)} agents.",
+            "hotspotRegions": [{"gridPosition": "2,2", "relativeDensity": round(min(3, density / 2), 2)}] if density >= 3 else [],
+            "sourceClipId": "AI_SIMULATION_AGENT_BASED", "source": "SIMULATION", "dominantDirection": "E" if reverse_ratio < .2 else "W",
+            "directionDegrees": 90 if reverse_ratio < .2 else 270, "directionConfidence": round(max(.35, 1 - conflict_ratio), 3),
+            "directionalConsistency": round(max(.35, 1 - conflict_ratio), 3), "reverseMovementRatio": round(reverse_ratio, 3),
+            "conflictingMovementRatio": round(conflict_ratio, 3), "behaviorState": "UNUSUAL_BEHAVIOR" if reverse_ratio > .2 or conflict_ratio > .2 else "SLOWING_FLOW" if movement < .5 else "NORMAL_FLOW",
+            "behaviorExplanation": "AI SIMULATION: agents respond to local crowd pressure and route conflict.",
+        })
+    return events
+
+
 def generate_scenario(scenario: str, zone_id: int = 1, start: datetime | None = None) -> list[dict]:
+    if scenario == "ai_crowd_simulation":
+        return generate_ai_crowd_simulation(zone_id, start)
     if scenario not in SCENARIOS:
         raise ValueError(f"unknown scenario: {scenario}")
     start = start or datetime.now(timezone.utc).replace(microsecond=0)

@@ -50,6 +50,7 @@ type Alert = {
 };
 type Recommendation = { id: number; zoneId?: number | null; zoneName?: string | null; type: "OPEN_ROUTE"; message: string; severity: RiskLevel; createdAt: string; status: "PENDING" | "ACKNOWLEDGED" | "DISMISSED"; source?: "LIVE" | "SIMULATION" };
 type CitizenRoute = { routeName: string; guidance: string; exitOrGate: string; expectedTravelTimeSeconds: number; routeAvailable: boolean; source?: "LIVE" | "SIMULATION" };
+type PublicAnnouncement = { id: number; targetZoneId?: number | null; targetZoneName?: string | null; englishText: string; hindiText: string; odiaText: string; urgency: RiskLevel; source: "LIVE" | "SIMULATION"; sent: boolean };
 type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel; source?: "LIVE" | "SIMULATION" };
 type CitizenForecast = { zoneId: number; zoneName: string; generatedAt: string; lastTelemetryAt?: string; currentRisk: RiskLevel; projectedRisk: RiskLevel; state: "STABLE" | "RISING" | "SURGE_RISK" | "CRUSH_RISK" | "RECOVERING" | "INSUFFICIENT_DATA"; message: string; stale: boolean; source?: "LIVE" | "SIMULATION" };
 type IncidentSummary = { summary: string; language: string; scope: string; generatedAt: string };
@@ -247,6 +248,7 @@ function CitizenSummary({ enabled }: { enabled: boolean }) {
 }
 
 function Citizen({ session }: { session: Session }) {
+  const { language } = useAiLanguage();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
@@ -254,6 +256,7 @@ function Citizen({ session }: { session: Session }) {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [routeGuidance, setRouteGuidance] = useState<CitizenRoute>();
   const [forecasts, setForecasts] = useState<CitizenForecast[]>([]);
+  const [announcements, setAnnouncements] = useState<PublicAnnouncement[]>([]);
   const [simulationActive, setSimulationActive] = useState(false);
   const [densityHistory, setDensityHistory] = useState<number[]>([]);
   const [location, setLocation] = useState<Point>();
@@ -353,6 +356,11 @@ function Citizen({ session }: { session: Session }) {
         const recommendation = JSON.parse(message.body) as Recommendation;
         if (recommendation.type !== "OPEN_ROUTE") return;
         setRecommendations((current) => recommendation.status === "PENDING" ? [recommendation, ...current.filter((item) => item.id !== recommendation.id)] : current.filter((item) => item.id !== recommendation.id));
+      });
+      client.subscribe("/topic/citizen-announcements", (message: IMessage) => {
+        const announcement = JSON.parse(message.body) as PublicAnnouncement;
+        if (!announcement.sent) return;
+        setAnnouncements((current) => [announcement, ...current.filter((item) => item.id !== announcement.id)].slice(0, 5));
       });
     }});
     client.activate();
@@ -481,6 +489,7 @@ function Citizen({ session }: { session: Session }) {
             </Card>
           </section>
           {simulationActive || alerts.some((alert) => alert.source === "SIMULATION") || recommendations.some((recommendation) => recommendation.source === "SIMULATION") || forecasts.some((forecast) => forecast.source === "SIMULATION") ? <div className={styles.simulationBanner} role="status">SIMULATION MODE: Deterministic drill data is being shown. It is not live camera telemetry.</div> : null}
+          {announcements.length ? <section className={styles.alertSection} aria-live="polite"><div className={styles.sectionHeading}><div><span className={styles.kicker}>APPROVED SAFETY ANNOUNCEMENTS</span><h2>Follow these staff-approved instructions</h2></div><span>{announcements.length} sent</span></div><div className={styles.alertGrid}>{announcements.map((announcement) => <article className={styles.alertCard} key={announcement.id}><div className={styles.alertTop}><span className={`${styles.severity} ${styles[`severity${announcement.urgency}`]}`}>{labels[announcement.urgency]}</span>{announcement.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</div><h3>{announcement.targetZoneName || "Campus safety update"}</h3><p>{language === "hi" ? announcement.hindiText : language === "or" ? announcement.odiaText : announcement.englishText}</p><small>Only staff-approved announcements are shown here.</small></article>)}</div></section> : null}
           {forecasts.filter((forecast) => forecast.state !== "STABLE" || forecast.stale).map((forecast) => <Card className={styles.forecastCard} key={forecast.zoneId}><div className={styles.cardHeader}><div><span className={styles.kicker}>EARLY SAFETY UPDATE</span><h2>{forecast.zoneName}</h2><p>{forecast.message}</p></div>{forecast.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</div><small className={styles.forecastAge}>{forecast.stale ? "Stale data" : `Updated ${ago(forecast.lastTelemetryAt || forecast.generatedAt)}`}</small></Card>)}
           <section className={styles.customerLiveGrid}>
             <Card className={styles.trendCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>LIVE SIGNAL</span><h2>Campus density trend</h2><p>Recent readings with live updates from the venue risk loop.</p></div></div><LiveDensityChart values={densityHistory} /></Card>

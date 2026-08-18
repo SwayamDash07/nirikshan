@@ -12,14 +12,20 @@ type Recommendation = {
   id: number;
   zoneId?: number | null;
   zoneName?: string | null;
-  type: "REDIRECT" | "DEPLOY_SECURITY" | "OPEN_ROUTE" | "CLOSE_ENTRY" | "ANNOUNCEMENT" | "REASSIGN_PERSONNEL";
+  type: string;
   message: string;
   severity: RiskLevel;
   createdAt: string;
   status: "PENDING" | "ACKNOWLEDGED" | "DISMISSED";
   acknowledgedByUserId?: number | null;
   source?: "LIVE" | "SIMULATION";
+  affectedRoute?: string | null;
+  direction?: string | null;
+  durationMinutes?: number | null;
+  confidence?: number | null;
+  barricadeInstruction?: string | null;
 };
+type Announcement = { id: number; targetZoneName?: string | null; englishText: string; hindiText: string; odiaText: string; urgency: RiskLevel; source: "LIVE" | "SIMULATION"; approvalStatus: "PENDING_APPROVAL" | "APPROVED" | "REJECTED"; sent: boolean; createdAt: string };
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
 const riskMeta: Record<RiskLevel, { label: string; color: string; soft: string }> = {
@@ -60,12 +66,13 @@ export default function ResponseActions() {
   const [busyId, setBusyId] = useState<number>();
   const [busyAll, setBusyAll] = useState(false);
   const [error, setError] = useState("");
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const stompRef = useRef<Client | null>(null);
 
   async function load() {
     setLoading(true); setError("");
-    try { setItems(uniquePending(await api<Recommendation[]>("/api/recommendations?active=true"))); }
+    try { const [actions, drafts] = await Promise.all([api<Recommendation[]>("/api/recommendations?active=true"), api<Announcement[]>("/api/announcements")]); setItems(uniquePending(actions)); setAnnouncements(drafts); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load response actions."); }
     finally { setLoading(false); }
   }
@@ -115,6 +122,11 @@ export default function ResponseActions() {
     if (item.zoneId != null) params.set("zoneId", String(item.zoneId));
     window.location.assign(`/console/admin/actions?${params.toString()}`);
   }
+  async function updateAnnouncement(id: number, action: "approve" | "reject" | "send") {
+    setError("");
+    try { const next = await api<Announcement>(`/api/announcements/${id}/${action}`, { method: action === "send" ? "POST" : "PATCH" }); setAnnouncements((items) => [next, ...items.filter((item) => item.id !== next.id)]); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update announcement draft."); }
+  }
 
   return <>
     <div className={styles.connection}><span className={connected ? styles.connectedDot : styles.disconnectedDot} />{connected ? "Live command link" : "WebSocket disconnected, reconnecting"}<span>Updated {new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
@@ -123,10 +135,14 @@ export default function ResponseActions() {
       {error && <p className={styles.status}>{error}</p>}
       <div className={styles.fullAlertList}>{uniquePending(items).length ? uniquePending(items).map((item) => <article className={styles.fullAlert} key={item.id}>
         <span className={`${styles.alertRail} ${styles[`rail${item.severity}`]}`} />
-        <div className={styles.fullAlertBody}><div><strong>{item.zoneName || "Venue-wide"} {item.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</strong><StatusBadge level={item.severity} /></div><p>{item.message}</p><small>{time(item.createdAt)}, {age(item.createdAt)}, {item.acknowledgedByUserId ? "Sent to security staff" : "Not yet sent to security staff"}</small></div>
+        <div className={styles.fullAlertBody}><div><strong>{item.zoneName || "Venue-wide"} {item.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</strong><StatusBadge level={item.severity} /></div><p>{item.message}</p>{(item.affectedRoute || item.barricadeInstruction) && <small>Route: {item.affectedRoute || "staff assessment"}{item.direction ? ` · Direction: ${item.direction}` : ""}{item.durationMinutes ? ` · ${item.durationMinutes} min` : ""}{item.barricadeInstruction ? ` · Barrier: ${item.barricadeInstruction.replaceAll("_", " ")}` : ""}{item.confidence != null ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}</small>}<small>{time(item.createdAt)}, {age(item.createdAt)}, {item.acknowledgedByUserId ? "Sent to security staff" : "Not yet sent to security staff"}</small></div>
         <Button variant="primary" size="sm" onClick={() => takeAction(item)}>Take Action</Button>
         <Button variant="ghost" size="sm" disabled={busyId === item.id || busyAll} onClick={() => dismiss(item.id)}>{busyId === item.id ? "Dismissing..." : "Dismiss"}</Button>
       </article>) : <div className={styles.inlineEmpty}><Icon name="check" /><span>No response action is currently pending.</span></div>}</div>
     </Card>}
+    <Card className={styles.queueCard}>
+      <div className={styles.cardHeader}><div><span className={styles.kicker}>APPROVAL-GATED DELIVERY</span><h2>Public announcement drafts</h2><p>Web/PWA delivery is disabled until an administrator approves and sends a draft.</p></div><span className={styles.queueCount}>{announcements.filter((item) => !item.sent).length}</span></div>
+      <div className={styles.fullAlertList}>{announcements.length ? announcements.map((item) => <article className={styles.fullAlert} key={item.id}><span className={`${styles.alertRail} ${styles[`rail${item.urgency}`]}`} /><div className={styles.fullAlertBody}><div><strong>{item.targetZoneName || "Venue-wide"} {item.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</strong><StatusBadge level={item.urgency} /></div><p>{item.englishText}</p><small>Hindi: {item.hindiText}</small><small>Odia: {item.odiaText}</small><small>{item.approvalStatus.replaceAll("_", " ")} · {item.sent ? "Delivered in app" : "Not delivered"}</small></div>{item.approvalStatus === "PENDING_APPROVAL" && <><Button size="sm" onClick={() => updateAnnouncement(item.id, "approve")}>Approve</Button><Button variant="ghost" size="sm" onClick={() => updateAnnouncement(item.id, "reject")}>Reject</Button></>}{item.approvalStatus === "APPROVED" && !item.sent && <Button size="sm" onClick={() => updateAnnouncement(item.id, "send")}>Send</Button>}</article>) : <div className={styles.inlineEmpty}><Icon name="check" /><span>No announcement drafts are waiting for approval.</span></div>}</div>
+    </Card>
   </>;
 }

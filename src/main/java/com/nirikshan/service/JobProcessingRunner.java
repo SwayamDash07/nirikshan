@@ -21,10 +21,11 @@ public class JobProcessingRunner {
     private final RiskEventService riskEvents;
     private final ObjectMapper objectMapper;
     private final String pythonExecutable;
+    private final PrivacyAuditService audit;
 
     public JobProcessingRunner(ProcessingJobService jobs, RiskEventService riskEvents, ObjectMapper objectMapper,
-                               @Value("${nirikshan.cv.python-executable:python}") String pythonExecutable) {
-        this.jobs = jobs; this.riskEvents = riskEvents; this.objectMapper = objectMapper; this.pythonExecutable = pythonExecutable;
+                               @Value("${nirikshan.cv.python-executable:python}") String pythonExecutable, PrivacyAuditService audit) {
+        this.jobs = jobs; this.riskEvents = riskEvents; this.objectMapper = objectMapper; this.pythonExecutable = pythonExecutable; this.audit = audit;
     }
 
     @PostConstruct
@@ -57,9 +58,13 @@ public class JobProcessingRunner {
             List<RiskEventRequest> events = objectMapper.readValue(eventsFile.toFile(), new TypeReference<>() {});
             for (RiskEventRequest event : events) riskEvents.ingest(event);
             jobs.markComplete(jobId);
+            audit.record("PROCESSING_COMPLETE", "PROCESSING_JOB", jobId, "Aggregate events ingested; sanitized annotation retained per policy");
         } catch (Exception error) {
             log.error("CV processing job {} failed", jobId, error);
             jobs.markFailed(jobId, error.getMessage());
+        } finally {
+            jobs.deleteUpload(jobId);
+            jobs.deletePrivacyIntermediates(jobId);
         }
     }
 

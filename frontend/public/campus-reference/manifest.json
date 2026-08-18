@@ -1,0 +1,50 @@
+{
+  "status": "inspected-external-pdf",
+  "inspectedAt": "2026-08-17",
+  "photoDirectory": "/campus-reference/",
+  "photos": [],
+  "pdfs": [
+    {
+      "path": "attached/DocScanner 17-Aug-2026 12-33 PM.pdf",
+      "category": "viewpoint",
+      "areas": ["Campus 25 photo sequence", "Main Gate", "A Block Gate", "C Block Gate", "Academic Building", "Front of B Block", "Yoga Sculptures", "Student Parking", "Staff Parking"],
+      "page": "1-242",
+      "landmarks": ["concrete entrance arch", "low cream wall with black railing", "tree-lined paver corridor", "Block-A entrance", "Block-B entrance", "yoga sculpture courtyard", "waterfront balustrade", "lamp posts", "guard kiosk", "Electrical Panel Room sign", "No Parking sign"],
+      "notes": "All 242 scanned pages were rendered and visually reviewed. The PDF is external to the repository; copy it into this directory when the team needs browser-accessible page previews."
+    }
+  ],
+  "pageCount": 242,
+  "pageAudit": [
+    { "pages": "1-12", "categories": ["entrance", "viewpoint"], "landmarks": ["concrete entrance arch", "guard booth", "white/gray facade", "tree canopy"] },
+    { "pages": "13-60", "categories": ["pathway", "road", "viewpoint"], "landmarks": ["interlocking-paver corridor", "low cream wall", "black railing", "lamp posts", "tree-lined route", "20 km/h signs"] },
+    { "pages": "61-89", "categories": ["building", "entrance", "pathway"], "landmarks": ["Block-A entrance", "steps", "blue glazing", "Electrical Panel Room gate", "potted landscaping"] },
+    { "pages": "90-109", "categories": ["pathway", "road", "landmark"], "landmarks": ["stone-paved waterfront approach", "CCTV hardware", "waterfront balustrade", "KIIT WaterFront sign"] },
+    { "pages": "110-138", "categories": ["building", "landmark", "road"], "landmarks": ["yoga sculpture courtyard", "blue-glazed academic facade", "curbs", "motorcycle parking"] },
+    { "pages": "139-180", "categories": ["building", "road", "entrance"], "landmarks": ["academic wings", "guard kiosk", "palm landscaping", "dense motorcycle parking"] },
+    { "pages": "181-204", "categories": ["building", "entrance", "pathway", "road"], "landmarks": ["Block-B entrance", "damaged wall section", "drain grates", "covered entrance", "lawn courtyard"] },
+    { "pages": "205-242", "categories": ["building", "landmark", "road"], "landmarks": ["blue-glazed wings", "vertical fins", "sculptures", "palm rows", "service/loading access"] }
+  ],
+  "groups": {
+    "building": [],
+    "entrance": [],
+    "pathway": [],
+    "road": [],
+    "landmark": [],
+    "viewpoint": []
+  },
+  "landmarks": [
+    { "name": "Main Gate", "area": "Main Gate", "status": "coordinate-only", "sources": ["backend zone seed", "V15 gate migration"] },
+    { "name": "Hostel 25 Gate", "area": "Hostel 25 Gate", "status": "coordinate-only", "sources": ["backend zone seed"] },
+    { "name": "A Block Gate", "area": "A Block Gate", "status": "coordinate-only", "sources": ["backend zone seed"] },
+    { "name": "Cafeteria", "area": "Cafeteria", "status": "coordinate-only", "sources": ["backend zone seed"] },
+    { "name": "My Mother My Hero Statue", "area": "Parking Turn to Student Parking", "status": "coordinate-only", "sources": ["existing Campus 25 route data"] },
+    { "name": "Yoga Sculptures", "area": "Student Parking approach", "status": "coordinate-only", "sources": ["existing Campus 25 route data"] },
+    { "name": "C Block Gate", "area": "C Block approach", "status": "coordinate-only", "sources": ["backend zone seed", "V14 migration"] },
+    { "name": "Main Gate Exit", "area": "Exit approach", "status": "coordinate-only", "sources": ["backend zone seed", "V15 gate migration"] }
+  ],
+  "notes": [
+    "The attached PDF contains 242 scanned photo pages and no extractable text layer; every page was rendered and visually reviewed.",
+    "The sequence supplies visual style and repeatable landmarks, but it does not supply a site plan or per-photo GPS coordinates. Photo-derived placement remains unverified unless it matches supplied coordinates.",
+    "Add the PDF or individual compressed images to the category folders and update this manifest; the 3D debug panel will then show the evidence per area."
+  ]
+}

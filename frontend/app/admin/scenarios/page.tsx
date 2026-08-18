@@ -7,7 +7,7 @@ import { api, clearSession, readSession, type UserInfo } from "../../lib/auth";
 import styles from "./scenarios.module.css";
 
 type Zone = { id: number; name: string };
-type ScenarioType = "buildup" | "surge" | "persistent_hotspot" | "slowdown" | "recovery" | "normal_one_way" | "slowing_flow" | "reverse_movement" | "conflicting_movement" | "blocked_route" | "alternate_exit_recovery" | "stampede_precursor" | "unusual_behavior";
+type ScenarioType = "buildup" | "surge" | "persistent_hotspot" | "slowdown" | "recovery" | "normal_one_way" | "slowing_flow" | "reverse_movement" | "conflicting_movement" | "blocked_route" | "alternate_exit_recovery" | "stampede_precursor" | "unusual_behavior" | "ai_crowd_simulation";
 type Run = { runId: string; scenarioType: ScenarioType; zoneId: number; status: "PENDING" | "RUNNING" | "COMPLETE" | "STOPPED"; speed: number; message: string; startedAt: string; completedAt?: string };
 const navItems = primaryNavItems;
 const scenarios: Array<{ value: ScenarioType; label: string; description: string }> = [
@@ -24,6 +24,7 @@ const scenarios: Array<{ value: ScenarioType; label: string; description: string
   { value: "alternate_exit_recovery", label: "Exit-gate recovery", description: "SIMULATION: Main Gate Exit recovers after a route disruption." },
   { value: "stampede_precursor", label: "Stampede precursors", description: "SIMULATION: density accelerates while movement slows, with persistent hotspot and conflicting-flow signals." },
   { value: "unusual_behavior", label: "Unusual behavior", description: "SIMULATION: repeated abrupt slowdowns, reversals, and conflicting movement test persistence gating." },
+  { value: "ai_crowd_simulation", label: "AI crowd simulation", description: "BONUS: lightweight agent-based simulation models arrivals, movement, pressure, and local avoidance." },
 ];
 
 function Simulator({ user }: { user: UserInfo }) {
@@ -61,7 +62,7 @@ function Simulator({ user }: { user: UserInfo }) {
   if (loading) return <AppShell user={user} title="Scenario Simulator" active="Simulator" navItems={navItems}><Spinner label="Loading simulator" /></AppShell>;
   const active = run?.status === "PENDING" || run?.status === "RUNNING";
   return <AppShell user={user} title="Scenario Simulator" subtitle="Admin-only staff training and system validation drills" active="Simulator" navItems={navItems}>
-    <section className={styles.trainingBanner}><strong>DRILL MODE: SIMULATION DATA</strong><p>The Scenario Simulator runs deterministic buildup, surge, hotspot, and recovery events through the same ingestion path as camera telemetry. It is separate from live monitoring and every affected zone is clearly labelled.</p></section>
+    <section className={styles.trainingBanner}><strong>DRILL MODE: SIMULATION DATA</strong><p>The Scenario Simulator runs deterministic and AI agent-based crowd events through the same ingestion path as recorded-video telemetry. It is separate from live monitoring and every affected zone is clearly labelled.</p></section>
     {error && <p className={styles.error} role="alert">{error}</p>}{notice && <p className={styles.notice} role="status">{notice}</p>}
     <Card className={styles.panel}>
       <div className={styles.heading}><div><span className={styles.kicker}>CONTROLLED REPLAY</span><h2>Run a safety scenario</h2><p>Use this for staff drills, validation, and reliable product demonstrations.</p></div>{active && <span className={styles.running}><i />{run.status}</span>}</div>

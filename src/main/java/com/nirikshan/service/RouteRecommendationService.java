@@ -4,6 +4,7 @@ import com.nirikshan.dto.CitizenRouteGuidanceResponse;
 import com.nirikshan.dto.RouteRecommendationResponse;
 import com.nirikshan.dto.VenueGraphResponse;
 import com.nirikshan.model.FlowBehaviorState;
+import com.nirikshan.model.GateActionType;
 import com.nirikshan.model.RiskEvent;
 import com.nirikshan.model.RiskEventSource;
 import com.nirikshan.model.RiskLevel;
@@ -60,12 +61,12 @@ public class RouteRecommendationService {
                 : blockageStatus.equals("DEGRADED") ? "Route remains usable but capacity or movement is reduced."
                 : blockageStatus.equals("UNKNOWN") ? "No fresh route evidence is available." : "No current blockage evidence is present.";
         List<RouteRecommendationResponse.RouteOption> options = new ArrayList<>();
+        boolean directionCompatible = behavior != FlowBehaviorState.REVERSE_FLOW
+                && behavior != FlowBehaviorState.CONFLICTING_FLOW;
         for (String exit : List.of(VenueGraphService.MAIN_GATE_EXIT)) {
             VenueGraphResponse.RoutePathResponse path = graph.paths().stream()
                     .filter(item -> item.fromNodeId().equals(VenueGraphService.zoneNode(origin.getId())) && item.toNodeId().equals(exit))
                     .findFirst().orElseThrow();
-            boolean directionCompatible = behavior != FlowBehaviorState.REVERSE_FLOW
-                    && behavior != FlowBehaviorState.CONFLICTING_FLOW;
             double score = score(origin.getCurrentRiskLevel(), forecast.projectedRisk(), origin.isBottleneckDetected(),
                     path.capacity(), origin.getCurrentPeopleCount(), blocked, directionCompatible, path.travelTimeSeconds());
             String reason = blocked ? "Route is blocked by the current bottleneck/critical state."
@@ -76,31 +77,47 @@ public class RouteRecommendationService {
                     List.of(origin.getName(), label(exit)), label(exit), path.travelTimeSeconds(), path.capacity(),
                     path.open() && !blocked, blocked, directionCompatible, round(score), reason));
         }
+        // An alternate is a monitored-zone diversion that still reaches the designated exit. It is
+        // intentionally labelled for staff verification, not treated as automatic field control.
+        for (VenueGraphResponse.RoutePathResponse corridor : graph.paths().stream()
+                .filter(path -> path.fromNodeId().equals(VenueGraphService.zoneNode(origin.getId())) && path.toNodeId().startsWith("ZONE_"))
+                .toList()) {
+            String viaNode = corridor.toNodeId();
+            VenueGraphResponse.RoutePathResponse exitPath = graph.paths().stream()
+                    .filter(path -> path.fromNodeId().equals(viaNode) && path.toNodeId().equals(VenueGraphService.MAIN_GATE_EXIT)).findFirst().orElse(null);
+            if (exitPath == null) continue;
+            Zone via = graph.zones().stream().filter(zone -> VenueGraphService.zoneNode(zone.getId()).equals(viaNode)).findFirst().orElse(null);
+            if (via == null) continue;
+            boolean alternateBlocked = blocked || corridor.blocked() || exitPath.blocked();
+            int seconds = corridor.travelTimeSeconds() + exitPath.travelTimeSeconds();
+            double alternateScore = score(via.getCurrentRiskLevel(), forecasts.forecast(via.getId()).projectedRisk(), via.isBottleneckDetected(),
+                    Math.min(corridor.capacity(), exitPath.capacity()), via.getCurrentPeopleCount(), alternateBlocked, directionCompatible, seconds);
+            options.add(new RouteRecommendationResponse.RouteOption(corridor.id() + "_VIA_" + viaNode,
+                    "Staff-verified diversion via " + via.getName(), List.of(origin.getName(), via.getName(), "Main Gate Exit"),
+                    "Main Gate Exit", seconds, Math.min(corridor.capacity(), exitPath.capacity()), !alternateBlocked, alternateBlocked,
+                    directionCompatible, round(alternateScore), alternateBlocked ? "Diversion route is currently constrained." : "Alternate monitored-zone diversion; staff must verify physical availability before directing people."));
+        }
         options.sort(Comparator.comparingDouble(RouteRecommendationResponse.RouteOption::riskScore)
                 .thenComparingInt(RouteRecommendationResponse.RouteOption::expectedTravelTimeSeconds));
         RouteRecommendationResponse.RouteOption selected = options.stream().filter(item -> item.open() && !item.blocked() && item.directionCompatible()).findFirst().orElse(null);
         List<RouteRecommendationResponse.RouteOption> rejected = options.stream().filter(item -> item != selected).toList();
-        String gateAction;
-        String gateReason;
-        if (selected == null) {
-            gateAction = "KEEP_MAIN_GATE_CLOSED";
-            gateReason = "No open route to the designated Main Gate Exit is currently available.";
-        } else if (selected.exitOrGate().equals("Main Gate Exit") && origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
-            gateAction = "OPEN_MAIN_GATE_EXIT";
-            gateReason = "Main Gate Exit is the designated outbound gate for this venue.";
-        } else if (origin.getCurrentRiskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
-            gateAction = "CLOSE_" + origin.getName().toUpperCase().replace(' ', '_');
-            gateReason = "Reduce inflow while the origin zone is high risk.";
-        } else {
-            gateAction = "KEEP_GATES_OPEN";
-            gateReason = "No gate change is required for the current score.";
-        }
+        boolean alternateAvailable = options.stream().anyMatch(option -> selected != null && option != selected && option.open() && !option.blocked() && option.directionCompatible());
+        GateActionType gateAction = InterventionRuleEngine.gateAction(selected != null, alternateAvailable, blockageStatus, origin.getCurrentRiskLevel());
+        String gateReason = switch (gateAction) {
+            case TEMPORARILY_CLOSE_EXIT -> "No safe outbound route is currently available; this is an advisory temporary closure, not automatic gate control.";
+            case OPEN_ALTERNATE_EXIT -> "The primary route is constrained and an alternate route is available for staff verification.";
+            case CLOSE_ENTRY_GATE -> "Reduce inbound pressure while the origin zone is high risk.";
+            case KEEP_GATE_OPEN -> "The selected route is open with no current gate restriction evidence.";
+            case NO_CHANGE -> "Current route evidence does not justify a gate change.";
+        };
         String reason = selected == null ? "No safe route to Main Gate Exit is currently available; keep the Main Gate for entry only." :
                 "Selected " + selected.routeName() + " because it has the lowest non-blocked route score.";
         return new RouteRecommendationResponse(venueId, origin.getId(), selected, rejected, reason,
                 selected == null ? 0 : selected.expectedTravelTimeSeconds(), selected == null ? 1 : selected.riskScore(),
-                gateAction, gateReason, Instant.now(), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name(),
-                new com.nirikshan.dto.RouteBlockageResponse(blockageStatus, blockageReason, List.copyOf(blockageEvidence), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name()));
+                gateAction.name(), gateReason, Instant.now(), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name(),
+                new com.nirikshan.dto.RouteBlockageResponse(blockageStatus, blockageReason, List.copyOf(blockageEvidence), latest == null ? RiskEventSource.LIVE.name() : latest.getSource().name()),
+                new com.nirikshan.dto.GateActionResponse(gateAction, gateReason, selected == null ? origin.getName() : selected.routeName(),
+                        selected == null ? .70 : Math.max(.50, 1 - selected.riskScore()), latest == null ? RiskEventSource.LIVE : latest.getSource()));
     }
 
     public CitizenRouteGuidanceResponse citizen(Long venueId, Long originZoneId) {
@@ -109,7 +126,7 @@ public class RouteRecommendationService {
         if (route == null) return new CitizenRouteGuidanceResponse(venueId, detailed.originZoneId(), "No safe route available",
                 citizenMessage("Main Gate Exit", false), "Main Gate Exit", 0, false, detailed.generatedAt(), detailed.source());
         String guidance = citizenMessage(route.exitOrGate(), true);
-        if (detailed.gateAction().equals("OPEN_MAIN_GATE_EXIT")) guidance = "Use Main Gate Exit.";
+        if (detailed.gateActionDetail().action() == GateActionType.OPEN_ALTERNATE_EXIT) guidance = "Follow staff directions to the approved alternate exit.";
         return new CitizenRouteGuidanceResponse(venueId, detailed.originZoneId(), route.routeName(), guidance,
                 route.exitOrGate(), route.expectedTravelTimeSeconds(), true, detailed.generatedAt(), detailed.source());
     }

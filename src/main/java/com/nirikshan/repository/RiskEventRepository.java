@@ -10,4 +10,5 @@ public interface RiskEventRepository extends JpaRepository<RiskEvent, Long> {
     List<RiskEvent> findByZoneVenueIdOrderByTimestampDesc(Long venueId, Pageable pageable);
     List<RiskEvent> findByZoneIdAndTimestampAfterOrderByTimestampAsc(Long zoneId, Instant timestamp);
     java.util.Optional<RiskEvent> findFirstByZoneIdAndSourceOrderByTimestampDesc(Long zoneId, com.nirikshan.model.RiskEventSource source);
+    long deleteByTimestampBefore(Instant cutoff);
 }

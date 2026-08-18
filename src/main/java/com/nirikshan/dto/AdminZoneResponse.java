@@ -2,6 +2,7 @@ package com.nirikshan.dto;
 
 import com.nirikshan.model.RiskLevel;
 import com.nirikshan.model.ZoneFeedStatus;
+import com.nirikshan.model.PrivacyStatus;
 
 import java.time.Instant;
 
@@ -16,6 +17,7 @@ public record AdminZoneResponse(
         RiskLevel currentRiskLevel,
         Instant lastUpdated,
         ZoneFeedStatus feedStatus,
+        PrivacyStatus privacyStatus,
         String videoFilename,
         String videoUrl,
         Instant feedStartedAt,

@@ -5,11 +5,12 @@ import { Client, IMessage } from "@stomp/stompjs";
 import AppShell, { primaryNavItems } from "../components/AppShell";
 import Icon from "../components/Icon";
 import { Button, Card, Spinner } from "../components/ui";
-import { api, apiBase, clearSession, readSession, type UserInfo } from "../lib/auth";
+import { api, clearSession, readSession, type UserInfo } from "../lib/auth";
 import styles from "./admin.module.css";
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type FeedStatus = "OFFLINE" | "LIVE";
+type PrivacyStatus = "PENDING" | "ACTIVE" | "PRIVACY_PROCESSING_FAILED";
 type Zone = {
   id: number;
   name: string;
@@ -18,6 +19,7 @@ type Zone = {
   currentRiskLevel: RiskLevel;
   lastUpdated: string;
   feedStatus: FeedStatus;
+  privacyStatus: PrivacyStatus;
   videoFilename?: string;
   videoUrl?: string;
   feedStartedAt?: string;
@@ -57,9 +59,10 @@ function CameraCard({ zone, busy, onPick, onDrop, onStop }: { zone: Zone; busy: 
       <span className={`${styles.feedBadge} ${live ? styles.feedLive : styles.feedOffline}`}><i />{live ? "Live" : "Offline"}</span>
     </div>
     <div className={styles.preview}>
-      {live && zone.videoUrl ? <video key={zone.videoUrl} src={`${apiBase}${zone.videoUrl}`} autoPlay muted loop playsInline preload="auto" aria-label={`${zone.name} camera preview`} /> : <CameraPlaceholder />}
+      {live ? <div className={styles.privacyPreview}><Icon name="shield" /><span>Live metrics only</span><small>Raw camera footage is never exposed.</small></div> : <CameraPlaceholder />}
       {live && <span className={styles.previewOverlay}><i className={styles.pulseDot} />PROCESSING NOW</span>}
     </div>
+    <div className={`${styles.privacyStatus} ${zone.privacyStatus === "PRIVACY_PROCESSING_FAILED" ? styles.privacyFailed : styles.privacyActive}`} role="status"><Icon name={zone.privacyStatus === "PRIVACY_PROCESSING_FAILED" ? "activity" : "shield"} />{zone.privacyStatus === "PRIVACY_PROCESSING_FAILED" ? "Privacy processing failed — footage blocked" : zone.privacyStatus === "ACTIVE" ? "Face blurring active" : "Privacy processing pending"}</div>
     {live ? <>
       <div className={styles.liveStats}>
         <div><span>Headcount</span><strong>{zone.currentPeopleCount ?? 0}</strong></div>

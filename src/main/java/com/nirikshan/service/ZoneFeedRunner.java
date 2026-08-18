@@ -1,6 +1,7 @@
 package com.nirikshan.service;
 
 import com.nirikshan.model.ZoneFeedStatus;
+import com.nirikshan.model.PrivacyStatus;
 import com.nirikshan.repository.ZoneFeedRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -52,6 +53,7 @@ public class ZoneFeedRunner {
                 feed.setStartedAt(null);
                 feedRepository.save(feed);
             } else {
+                if (feed.getPrivacyStatus() != PrivacyStatus.ACTIVE) feed.setPrivacyStatus(PrivacyStatus.ACTIVE);
                 log.info("Resuming persisted LIVE zone {} from {}", feed.getZone().getId(), feed.getVideoPath());
                 java.util.concurrent.CompletableFuture.runAsync(() -> start(feed.getZone().getId(), feed.getVideoPath()));
             }
@@ -92,16 +94,23 @@ public class ZoneFeedRunner {
         Path output = pipelineDir.resolve("outputs").resolve("live").resolve("zone-" + zoneId).resolve("events.json");
         try {
             while (isCurrentFeed(zoneId, videoPath)) {
-                Process activeProcess = launchIfCurrent(zoneId, videoPath, output);
+            Process activeProcess = launchIfCurrent(zoneId, videoPath, output);
                 if (activeProcess == null) return;
                 log.info("Started continuous camera loop for zone {} with {} (pid={})", zoneId, videoPath, activeProcess.pid());
+                boolean privacyFailed = false;
                 try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(activeProcess.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = outputReader.readLine()) != null) {
+                        if (line.contains("PRIVACY_PROCESSING_FAILED")) {
+                            privacyFailed = true;
+                            markPrivacyFailed(zoneId, videoPath);
+                            log.error("Privacy processing failed for zone {}; refusing to expose or retry footage", zoneId);
+                            break;
+                        }
                         if (line.startsWith("LOOP_ITERATION ")) {
                             try {
                                 int iteration = Integer.parseInt(line.substring("LOOP_ITERATION ".length()).trim());
-                                updateIteration(zoneId, videoPath, iteration);
+                                if (iteration % HEALTH_LOG_EVERY_ITERATIONS == 0) updateIteration(zoneId, videoPath, iteration);
                                 if (iteration > 0 && iteration % HEALTH_LOG_EVERY_ITERATIONS == 0) {
                                     log.info("Zone {} loop still running, iteration count: {}, pid={}", zoneId, iteration, activeProcess.pid());
                                 }
@@ -117,7 +126,7 @@ public class ZoneFeedRunner {
                     }
                 }
                 int exitCode = activeProcess.waitFor();
-                if (!isCurrentFeed(zoneId, videoPath)) break;
+                if (privacyFailed || !isCurrentFeed(zoneId, videoPath)) break;
                 log.warn("Continuous camera loop for zone {} stopped with exit code {} (pid={}); retrying", zoneId, exitCode, activeProcess.pid());
                 Thread.sleep(RETRY_DELAY_MILLIS);
             }
@@ -169,6 +178,14 @@ public class ZoneFeedRunner {
     private void markOfflineIfCurrent(Long zoneId, String videoPath) {
         feedRepository.findByZone_Id(zoneId).filter(feed -> feed.getStatus() == ZoneFeedStatus.LIVE && videoPath.equals(feed.getVideoPath())).ifPresent(feed -> {
             feed.setStatus(ZoneFeedStatus.OFFLINE);
+            feedRepository.save(feed);
+        });
+    }
+
+    private void markPrivacyFailed(Long zoneId, String videoPath) {
+        feedRepository.findByZone_Id(zoneId).filter(feed -> videoPath.equals(feed.getVideoPath())).ifPresent(feed -> {
+            feed.setStatus(ZoneFeedStatus.OFFLINE);
+            feed.setPrivacyStatus(PrivacyStatus.PRIVACY_PROCESSING_FAILED);
             feedRepository.save(feed);
         });
     }

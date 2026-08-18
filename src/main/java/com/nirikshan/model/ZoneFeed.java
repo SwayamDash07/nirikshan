@@ -23,6 +23,10 @@ public class ZoneFeed {
     @Column(nullable = false)
     private ZoneFeedStatus status = ZoneFeedStatus.OFFLINE;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PrivacyStatus privacyStatus = PrivacyStatus.PENDING;
+
     private Instant startedAt;
 
     @Column(nullable = false)
@@ -37,6 +41,8 @@ public class ZoneFeed {
     public void setVideoFilename(String videoFilename) { this.videoFilename = videoFilename; }
     public ZoneFeedStatus getStatus() { return status; }
     public void setStatus(ZoneFeedStatus status) { this.status = status; }
+    public PrivacyStatus getPrivacyStatus() { return privacyStatus; }
+    public void setPrivacyStatus(PrivacyStatus privacyStatus) { this.privacyStatus = privacyStatus; }
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
     public int getCurrentLoopIteration() { return currentLoopIteration; }

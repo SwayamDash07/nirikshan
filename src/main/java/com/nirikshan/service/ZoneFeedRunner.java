@@ -152,6 +152,7 @@ public class ZoneFeedRunner {
                 "--zone-id", zoneId.toString(),
                 "--thresholds", "thresholds_config.json",
                 "--output", pipelineDir.relativize(output).toString(),
+                "--model", "yolov8n.pt",
                 "--loop", "--post-live", "--post-url", riskEventUrl
         );
         Process process = new ProcessBuilder(command)

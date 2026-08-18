@@ -163,6 +163,19 @@ Annotated videos are converted to H.264 for browser playback. Install FFmpeg and
 
 If `torch.cuda.is_available()` returns `False`, CUDA is unavailable to that interpreter; the CV pipeline will report `Using device: cpu (no GPU detected)` and use slower CPU inference.
 
+### Railway deployment with video processing
+
+The repository includes a root `Dockerfile`. Railway will use it automatically on the next deployment and install Java, Python, FFmpeg, CPU PyTorch, OpenCV, and the lightweight `yolov8n` model in one container. The image sets:
+
+```text
+NIRIKSHAN_PYTHON=/usr/local/bin/python3
+NIRIKSHAN_CV_PIPELINE_DIR=/app/cv-pipeline
+```
+
+In Railway, open the backend service, choose **Settings → Source**, confirm the repository root is the service root, then deploy the latest commit. Under **Variables**, keep `SPRING_PROFILES_ACTIVE=prod` and the database/admin variables. You may also add `NIRIKSHAN_PYTHON=/usr/local/bin/python3` there, although the Dockerfile already supplies it. Do not set it to `python` unless that executable exists in the image.
+
+The Railway image uses CPU inference and `yolov8n` to control memory. Connect one recording first and monitor the service before connecting additional zones. Raw recordings remain on the container filesystem and are deleted according to the privacy-retention settings; Railway volumes or external object storage are required if footage must survive redeployments.
+
 ```text
 mvn spring-boot:run
 ```

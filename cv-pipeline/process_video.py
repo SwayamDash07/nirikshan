@@ -628,7 +628,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zone-id", required=True, type=int, help="Backend Zone ID represented by this camera/video")
     parser.add_argument("--thresholds", required=True, help="Risk-scoring and calibration configuration JSON file")
     parser.add_argument("--output", required=True, help="Output risk-event JSON path")
-    parser.add_argument("--model", default="yolov8m.pt", help="Ultralytics model weights (default: yolov8m.pt)")
+    parser.add_argument("--model", default="yolov8n.pt", help="Ultralytics model weights (default: yolov8n.pt; use a larger model only with sufficient memory)")
     parser.add_argument("--confidence", type=float, help="Override person confidence threshold for this run")
     parser.add_argument("--debug-calibration", action="store_true", help="Print area, raw count, perspective count, density, and risk for a sample frame")
     parser.add_argument("--compare-model", help="Optional baseline model for per-frame before/after count comparison")

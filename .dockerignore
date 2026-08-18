@@ -1,0 +1,16 @@
+.git
+.gitignore
+target
+frontend/node_modules
+frontend/.next
+cv-pipeline/venv
+cv-pipeline/__pycache__
+cv-pipeline/real_footage
+cv-pipeline/uploads
+cv-pipeline/outputs
+tmp
+*.log
+*.mp4
+*.mov
+*.avi
+*.mkv

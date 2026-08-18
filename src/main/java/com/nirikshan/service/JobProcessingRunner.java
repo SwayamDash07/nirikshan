@@ -50,6 +50,7 @@ public class JobProcessingRunner {
             Path eventsFile = pipelineDir.resolve(relativeOutput).resolve("events.json");
             run(pipelineDir, List.of(pythonExecutable, "process_video.py", "--input", relativeInput,
                     "--zone-id", job.zoneId().toString(), "--thresholds", "thresholds_config.json",
+                    "--model", "yolov8n.pt",
                     "--output", relativeOutput + "/events.json", "--annotate",
                     "--annotation-output", relativeOutput + "/annotated.mp4"));
             run(pipelineDir, List.of(pythonExecutable, "generate_summary.py", "--events", relativeOutput + "/events.json",

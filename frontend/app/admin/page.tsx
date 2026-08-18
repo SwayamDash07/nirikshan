@@ -77,7 +77,7 @@ function CameraCard({ zone, busy, onPick, onDrop, onStop }: { zone: Zone; busy: 
 function AdminUpload({ user }: { user: UserInfo }) {
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyZoneId, setBusyZoneId] = useState<number>();
+  const [busyZoneIds, setBusyZoneIds] = useState<Set<number>>(() => new Set());
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const feedMutationVersion = useRef(0);
@@ -114,7 +114,8 @@ function AdminUpload({ user }: { user: UserInfo }) {
 
   async function connect(zoneId: number, file: File) {
     feedMutationVersion.current += 1;
-    setBusyZoneId(zoneId); setError(""); setNotice("");
+    setBusyZoneIds((current) => new Set(current).add(zoneId));
+    setError(""); setNotice("");
     try {
       const body = new FormData(); body.append("file", file);
       const connected = await api<Zone>(`/api/admin/zones/${zoneId}/connect-footage`, { method: "POST", body });
@@ -122,19 +123,19 @@ function AdminUpload({ user }: { user: UserInfo }) {
       await loadZones();
       setNotice(`${connected.name} is online. Continuous coverage is now running.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not connect camera footage."); }
-    finally { setBusyZoneId(undefined); }
+    finally { setBusyZoneIds((current) => { const next = new Set(current); next.delete(zoneId); return next; }); }
   }
 
   async function stop(zoneId: number) {
     feedMutationVersion.current += 1;
-    setBusyZoneId(zoneId); setError(""); setNotice("");
+    setBusyZoneIds((current) => new Set(current).add(zoneId)); setError(""); setNotice("");
     try {
       const stopped = await api<Zone>(`/api/admin/zones/${zoneId}/stop-coverage`, { method: "POST" });
       setZones((current) => current.map((zone) => zone.id === zoneId ? stopped : zone));
       await loadZones();
       setNotice(`${stopped.name} coverage stopped. The camera is offline.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not stop camera coverage."); }
-    finally { setBusyZoneId(undefined); }
+    finally { setBusyZoneIds((current) => { const next = new Set(current); next.delete(zoneId); return next; }); }
   }
 
   if (loading) return <AppShell user={user} title="Video ingestion" active="Video Ingestion" navItems={navItems}><Spinner label="Loading camera coverage" /></AppShell>;
@@ -142,7 +143,7 @@ function AdminUpload({ user }: { user: UserInfo }) {
     <section className={styles.intro}><div><span className={styles.kicker}>CAMERA MANAGEMENT</span><h1>Connect your camera network</h1><p>Each zone behaves like a security camera. Connect footage once and Nirikshan keeps processing it in a real-time loop until you stop coverage.</p></div><div className={styles.networkState}><i />{zones.filter((zone) => zone.feedStatus === "LIVE").length} of {zones.length} cameras live</div></section>
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
-    <section className={styles.cameraGrid} aria-label="Camera coverage by zone">{zones.map((zone) => <CameraCard key={zone.id} zone={zone} busy={busyZoneId === zone.id} onPick={(file) => connect(zone.id, file)} onDrop={(file) => connect(zone.id, file)} onStop={() => stop(zone.id)} />)}</section>
+    <section className={styles.cameraGrid} aria-label="Camera coverage by zone">{zones.map((zone) => <CameraCard key={zone.id} zone={zone} busy={busyZoneIds.has(zone.id)} onPick={(file) => connect(zone.id, file)} onDrop={(file) => connect(zone.id, file)} onStop={() => stop(zone.id)} />)}</section>
     <Card className={styles.simulationNote}><span className={styles.noteIcon}><Icon name="activity" /></span><div><strong>Live simulation mode</strong><p>Uploaded recordings are looped from frame 0. Every signal is timestamped with the current wall-clock time, so the map, heatmap, zone cards, and trend charts stay current for demonstrations.</p></div></Card>
   </AppShell>;
 }

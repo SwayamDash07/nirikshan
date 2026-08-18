@@ -128,6 +128,12 @@ public class ZoneFeedRunner {
                 int exitCode = activeProcess.waitFor();
                 log.warn("CV worker exited for zone {} with exitCode={}, pid={}, currentFeed={}",
                         zoneId, exitCode, activeProcess.pid(), isCurrentFeed(zoneId, videoPath));
+                if (exitCode == 137) {
+                    log.error("CV worker for zone {} was killed for exceeding the container memory limit; "
+                            + "not restarting automatically", zoneId);
+                    markOfflineIfCurrent(zoneId, videoPath);
+                    break;
+                }
                 if (privacyFailed || !isCurrentFeed(zoneId, videoPath)) break;
                 log.warn("Continuous camera loop for zone {} stopped with exit code {} (pid={}); retrying", zoneId, exitCode, activeProcess.pid());
                 Thread.sleep(RETRY_DELAY_MILLIS);

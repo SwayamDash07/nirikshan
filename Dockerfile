@@ -26,4 +26,4 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=60", "-jar", "/app/nirikshan.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=35", "-jar", "/app/nirikshan.jar"]

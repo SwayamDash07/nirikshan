@@ -276,6 +276,8 @@ Always run this against the same database shown by `/api/health`.
 
 The admin Video ingestion page treats each campus zone as a security camera. An administrator connects a pre-recorded video file to a zone, and the backend starts a persistent `ZoneFeed` that loops the footage from frame 0 until coverage is stopped. Loop-mode processing emits one risk event approximately every real second and re-bases each event timestamp to the current wall-clock time, so the dashboard, map, heatmap, zone cards, and trend chart always look current rather than replaying stale video timestamps.
 
+The Railway runtime uses one shared `cv-pipeline/shared_worker.py` process for all active zones. It loads the YOLO model once, keeps one privacy-safe stream state per zone, round-robins sampled frames, and emits the same risk-event fields used by the dashboard and WebSocket. Uploads are independent and can complete concurrently; processing is bounded by the shared worker so multiple model copies cannot exhaust the container. If more throughput is required later, scale the service or split workers by zone group rather than silently increasing per-zone model processes.
+
 This is a demonstration simulator, not a production camera ingest path. In production, the same per-second processing and WebSocket event pipeline would consume frames from an actual RTSP/CCTV stream instead of a looped local file. The architecture does not change; only the frame source changes.
 
 The admin API for this flow is:

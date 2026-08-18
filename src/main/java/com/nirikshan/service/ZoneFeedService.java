@@ -91,11 +91,18 @@ public class ZoneFeedService {
     @Transactional
     public AdminZoneResponse stop(Long zoneId) {
         ZoneFeed feed = feedRepository.findByZone_Id(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone feed", zoneId));
-        runner.stop(zoneId);
         feed.setStatus(ZoneFeedStatus.OFFLINE);
         retention.deleteFeedSource(feed.getVideoPath(), zoneId);
         feed.setStartedAt(null);
         feedRepository.save(feed);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() { runner.reconcile(); }
+            });
+        } else {
+            runner.reconcile();
+        }
         return response(feed.getZone(), feed);
     }
 

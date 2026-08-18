@@ -104,9 +104,10 @@ public class ZoneFeedRunner {
         builder.environment().putIfAbsent("MKL_NUM_THREADS", "1");
         builder.environment().putIfAbsent("OPENBLAS_NUM_THREADS", "1");
         builder.environment().putIfAbsent("NUMEXPR_NUM_THREADS", "1");
-        process = builder.start();
-        log.info("Started shared CV worker pid={} for active video zones", process.pid());
-        java.util.concurrent.CompletableFuture.runAsync(() -> monitorProcess(process));
+        Process started = builder.start();
+        process = started;
+        log.info("Started shared CV worker pid={} for active video zones", started.pid());
+        java.util.concurrent.CompletableFuture.runAsync(() -> monitorProcess(started));
     }
 
     private void monitorProcess(Process observed) {

@@ -16,7 +16,7 @@ import cv2
 
 from privacy import FaceBlurProcessor
 from process_video import (
-    CentroidTracker, detect_hotspots, detect_people, load_json, load_model,
+    CentroidTracker, Detection, detect_hotspots, detect_people, load_json, load_model,
     perspective_weighted_people, post_event, resolve_device, rolling_average,
 )
 from risk_scoring import calculate_zone_risk
@@ -45,6 +45,38 @@ class Stream:
     smoother: FlowSignalSmoother = field(default_factory=lambda: FlowSignalSmoother(5, 2, 0.35))
     raw_history: deque[tuple[float, float, float]] = field(default_factory=lambda: deque(maxlen=80))
     smoothed_history: deque[tuple[float, float, float]] = field(default_factory=lambda: deque(maxlen=80))
+
+
+def detect_people_tiled(model: Any, frame: Any, confidence: float, device: str, imgsz: int) -> list[Detection]:
+    """Use overlapping tiles so small people in long views occupy more pixels."""
+    height, width = frame.shape[:2]
+    overlap = 0.20
+    tile_width = min(width, max(1, round(width / 2 / (1.0 - overlap))))
+    tile_height = min(height, max(1, round(height / 2 / (1.0 - overlap))))
+    x_starts = sorted({0, max(0, width - tile_width)})
+    y_starts = sorted({0, max(0, height - tile_height)})
+    detections: list[Detection] = []
+    for top in y_starts:
+        for left in x_starts:
+            crop = frame[top:top + tile_height, left:left + tile_width]
+            for detection in detect_people(model, crop, confidence, device, augment=False, imgsz=imgsz):
+                box = (detection.box[0] + left, detection.box[1] + top,
+                       detection.box[2] + left, detection.box[3] + top)
+                detections.append(Detection(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), box))
+    kept: list[Detection] = []
+    for candidate in sorted(detections, key=lambda item: (item.box[2] - item.box[0]) * (item.box[3] - item.box[1]), reverse=True):
+        left, top, right, bottom = candidate.box
+        overlaps = False
+        for existing in kept:
+            e_left, e_top, e_right, e_bottom = existing.box
+            intersection = max(0, min(right, e_right) - max(left, e_left)) * max(0, min(bottom, e_bottom) - max(top, e_top))
+            union = (right - left) * (bottom - top) + (e_right - e_left) * (e_bottom - e_top) - intersection
+            if union > 0 and intersection / union >= 0.50:
+                overlaps = True
+                break
+        if not overlaps:
+            kept.append(candidate)
+    return kept
 
 
 def read_manifest(path: Path) -> list[dict[str, Any]]:
@@ -85,9 +117,8 @@ def sync_streams(streams: dict[int, Stream], manifest: list[dict[str, Any]]) -> 
 def emit_for_stream(stream: Stream, frame: Any, model: Any, privacy: FaceBlurProcessor,
                     thresholds: dict[str, Any], device: str, post_url: str, timeout: float) -> None:
     clean = privacy.sanitize(frame).frame
-    detections = detect_people(model, clean, float(thresholds.get("personConfidence", 0.28)), device,
-                               augment=bool(thresholds.get("augment", False)),
-                               imgsz=int(thresholds.get("sharedInferenceImageSize", 416)))
+    detections = detect_people_tiled(model, clean, float(thresholds.get("personConfidence", 0.24)), device,
+                                     int(thresholds.get("sharedInferenceImageSize", 640)))
     calibration = thresholds.get("zoneCalibration", {}).get(str(stream.zone_id), {})
     visible_area = max(float(calibration.get("visibleAreaSqMeters", 100.0)), 0.001)
     weighted_people = perspective_weighted_people(detections, calibration)
@@ -178,7 +209,7 @@ def main() -> None:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--thresholds", required=True)
     parser.add_argument("--post-url", required=True)
-    parser.add_argument("--model", default="yolov8n.pt")
+    parser.add_argument("--model", default="yolo26s.pt")
     parser.add_argument("--timeout", type=float, default=8.0)
     run(parser.parse_args())
 

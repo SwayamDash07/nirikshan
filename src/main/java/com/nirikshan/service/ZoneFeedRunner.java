@@ -94,7 +94,7 @@ public class ZoneFeedRunner {
                 pythonExecutable, "shared_worker.py",
                 "--manifest", pipelineDir.relativize(manifest).toString(),
                 "--thresholds", "thresholds_config.json",
-                "--model", "yolov8n.pt",
+                "--model", "yolo26s.pt",
                 "--post-url", riskEventUrl
         );
         ProcessBuilder builder = new ProcessBuilder(command)

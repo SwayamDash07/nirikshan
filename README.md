@@ -6,6 +6,8 @@ Spring Boot 3.3 / Java 17 backend for the Nirikshan crowd-risk prototype. The Py
 
 Nirikshan is a privacy-aware crowd-safety platform for campus and venue operations. It accepts self-recorded crowd videos, extracts aggregate movement signals, predicts rising risk, recommends safer interventions, and distributes role-appropriate alerts to administrators, security staff, and citizens.
 
+> **Live-demo performance limitation:** the free Railway tier has limited CPU, RAM, and no guaranteed GPU. Nirikshan therefore uses one shared `YOLO26s` worker, 640px inference, and overlapping tiles for distant people instead of one detector process per zone. This improves long-view detection and prevents the previous multi-process out-of-memory crashes, but updates arrive round-robin and can be slower when many videos are active. Higher-frequency simultaneous processing requires a larger Railway plan or GPU worker.
+
 ```mermaid
 flowchart LR
     V[Self-recorded crowd video] --> P[Python CV pipeline]
@@ -165,7 +167,7 @@ If `torch.cuda.is_available()` returns `False`, CUDA is unavailable to that inte
 
 ### Railway deployment with video processing
 
-The repository includes a root `Dockerfile`. Railway will use it automatically on the next deployment and install Java, Python, FFmpeg, CPU PyTorch, OpenCV, and the lightweight `yolov8n` model in one container. The image sets:
+The repository includes a root `Dockerfile`. Railway will use it automatically on the next deployment and install Java, Python, FFmpeg, CPU PyTorch, OpenCV, and the shared `yolo26s` model in one container. The image sets:
 
 ```text
 NIRIKSHAN_PYTHON=/usr/local/bin/python3
@@ -174,7 +176,7 @@ NIRIKSHAN_CV_PIPELINE_DIR=/app/cv-pipeline
 
 In Railway, open the backend service, choose **Settings → Source**, confirm the repository root is the service root, then deploy the latest commit. Under **Variables**, keep `SPRING_PROFILES_ACTIVE=prod` and the database/admin variables. You may also add `NIRIKSHAN_PYTHON=/usr/local/bin/python3` there, although the Dockerfile already supplies it. Do not set it to `python` unless that executable exists in the image.
 
-The Railway image uses CPU inference and `yolov8n` to control memory. Connect one recording first and monitor the service before connecting additional zones. Raw recordings remain on the container filesystem and are deleted according to the privacy-retention settings; Railway volumes or external object storage are required if footage must survive redeployments.
+The Railway image uses one shared CPU `yolo26s` worker with tiled inference for distant views. The free tier remains the throughput constraint; increase service memory/CPU or move inference to a GPU for more simultaneous zones. Raw recordings remain on the container filesystem and are deleted according to the privacy-retention settings; Railway volumes or external object storage are required if footage must survive redeployments.
 
 ```text
 mvn spring-boot:run

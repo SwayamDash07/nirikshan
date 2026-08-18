@@ -23,7 +23,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision \
     && python -m pip install --no-cache-dir -r /app/cv-pipeline/requirements-railway.txt \
     && cd /app/cv-pipeline \
-    && python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+    && python -c "from ultralytics import YOLO; YOLO('yolo26s.pt')"
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=35", "-jar", "/app/nirikshan.jar"]

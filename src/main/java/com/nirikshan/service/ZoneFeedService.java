@@ -12,6 +12,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -71,7 +73,18 @@ public class ZoneFeedService {
         feed.setCurrentLoopIteration(0);
         feed = feedRepository.save(feed);
         audit.record("UPLOAD", "LIVE_FEED", zoneId, "Camera source stored privately for active processing");
-        runner.start(zoneId, feed.getVideoPath());
+        String committedVideoPath = feed.getVideoPath();
+        // The async worker must not inspect the old feed while this transaction
+        // is still uncommitted. This race only appeared when a second zone was
+        // connected while another zone was already live.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() { runner.start(zoneId, committedVideoPath); }
+            });
+        } else {
+            runner.start(zoneId, committedVideoPath);
+        }
         return response(zone, feed);
     }
 

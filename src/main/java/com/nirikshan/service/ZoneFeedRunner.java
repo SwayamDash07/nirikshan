@@ -126,6 +126,8 @@ public class ZoneFeedRunner {
                     }
                 }
                 int exitCode = activeProcess.waitFor();
+                log.warn("CV worker exited for zone {} with exitCode={}, pid={}, currentFeed={}",
+                        zoneId, exitCode, activeProcess.pid(), isCurrentFeed(zoneId, videoPath));
                 if (privacyFailed || !isCurrentFeed(zoneId, videoPath)) break;
                 log.warn("Continuous camera loop for zone {} stopped with exit code {} (pid={}); retrying", zoneId, exitCode, activeProcess.pid());
                 Thread.sleep(RETRY_DELAY_MILLIS);
@@ -155,10 +157,17 @@ public class ZoneFeedRunner {
                 "--model", "yolov8n.pt",
                 "--loop", "--post-live", "--post-url", riskEventUrl
         );
-        Process process = new ProcessBuilder(command)
+        ProcessBuilder builder = new ProcessBuilder(command)
                 .directory(pipelineDir.toFile())
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true);
+        // Keep one lightweight CPU worker from creating a large native thread pool
+        // inside the small Railway container. This is especially important when
+        // more than one campus zone is connected at the same time.
+        builder.environment().putIfAbsent("OMP_NUM_THREADS", "1");
+        builder.environment().putIfAbsent("MKL_NUM_THREADS", "1");
+        builder.environment().putIfAbsent("OPENBLAS_NUM_THREADS", "1");
+        builder.environment().putIfAbsent("NUMEXPR_NUM_THREADS", "1");
+        Process process = builder.start();
         processes.put(zoneId, process);
         return process;
     }

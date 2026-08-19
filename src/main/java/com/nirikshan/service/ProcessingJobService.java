@@ -18,16 +18,18 @@ public class ProcessingJobService {
     private final ZoneRepository zoneRepository;
     private final Path pipelineDir;
     private final PrivacyAuditService audit;
+    private final CvExecutionPolicy cvPolicy;
 
     public ProcessingJobService(ProcessingJobRepository jobRepository, ZoneRepository zoneRepository,
-                                @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir, PrivacyAuditService audit) {
+                                @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir, PrivacyAuditService audit,
+                                CvExecutionPolicy cvPolicy) {
         this.jobRepository = jobRepository; this.zoneRepository = zoneRepository;
-        this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize();
-        this.audit = audit;
+        this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize(); this.audit = audit; this.cvPolicy = cvPolicy;
     }
 
     @Transactional
     public ProcessingJobResponse createUpload(Long zoneId, MultipartFile file) throws IOException {
+        cvPolicy.requireBackendProcessingEnabled("Video upload processing");
         if (file.isEmpty()) throw new IllegalArgumentException("A non-empty video file is required");
         Zone zone = zoneRepository.findById(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone", zoneId));
         String original = file.getOriginalFilename() == null ? "uploaded-video.mp4" : file.getOriginalFilename();

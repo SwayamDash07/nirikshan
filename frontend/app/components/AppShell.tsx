@@ -15,13 +15,13 @@ import styles from "./shell.module.css";
 export type NavItem = { label: string; href: string; icon: IconName; count?: number; exact?: boolean };
 export type PreviewRole = "SECURITY" | "CITIZEN";
 
+const localCvEnabled = process.env.NEXT_PUBLIC_LOCAL_CV_ENABLED === "true";
 export const primaryNavItems: NavItem[] = [
   { label: "Dashboard", href: "/console", icon: "grid" },
   { label: "Administration", href: "/console/admin", icon: "users" },
   { label: "Citizen reports", href: "/console/reports", icon: "activity" },
   { label: "3D Model", href: "/console/3d-map", icon: "map" },
-  { label: "Video Ingestion", href: "/admin", icon: "upload" },
-  { label: "Simulator", href: "/admin/scenarios", icon: "activity" },
+  ...(localCvEnabled ? [{ label: "Video Ingestion", href: "/admin", icon: "upload" as IconName }, { label: "Simulator", href: "/admin/scenarios", icon: "activity" as IconName }] : []),
   { label: "Security", href: "/alerts/security", icon: "lock" },
 ];
 

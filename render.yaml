@@ -11,10 +11,8 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
-      - key: NIRIKSHAN_PYTHON
-        value: /usr/local/bin/python3
-      - key: NIRIKSHAN_CV_PIPELINE_DIR
-        value: /app/cv-pipeline
+      - key: NIRIKSHAN_CV_BACKEND_PROCESSING_ENABLED
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: NIRIKSHAN_JWT_SECRET

@@ -1,17 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$projectRoot = $PSScriptRoot
-$cvPython = Join-Path $projectRoot "cv-pipeline\venv\Scripts\python.exe"
-$cvPipeline = Join-Path $projectRoot "cv-pipeline"
-
-if (-not (Test-Path -LiteralPath $cvPython)) {
-    throw "CV venv interpreter not found at $cvPython. Create cv-pipeline\venv first."
-}
-
-$env:NIRIKSHAN_PYTHON = $cvPython
-$env:NIRIKSHAN_CV_PIPELINE_DIR = $cvPipeline
-Write-Host "NIRIKSHAN_PYTHON=$env:NIRIKSHAN_PYTHON"
-Write-Host "Starting backend with the CV venv..."
+Write-Host "Starting event-only Spring Boot backend; run cv-pipeline\run_local_cv_workers.py separately for local GPU inference."
 
 $maven = Get-Command mvn.cmd -ErrorAction SilentlyContinue
 if ($maven) {

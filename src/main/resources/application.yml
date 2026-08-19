@@ -29,6 +29,7 @@ nirikshan:
     pipeline-dir: ${NIRIKSHAN_CV_PIPELINE_DIR:cv-pipeline}
     python-executable: ${NIRIKSHAN_PYTHON:python}
     risk-event-url: ${NIRIKSHAN_RISK_EVENT_URL:http://localhost:8080/api/risk-events}
+    backend-processing-enabled: ${NIRIKSHAN_CV_BACKEND_PROCESSING_ENABLED:false}
   privacy:
     raw-video-retention-hours: ${NIRIKSHAN_RAW_VIDEO_RETENTION_HOURS:0}
     processed-frame-retention-hours: ${NIRIKSHAN_PROCESSED_FRAME_RETENTION_HOURS:24}

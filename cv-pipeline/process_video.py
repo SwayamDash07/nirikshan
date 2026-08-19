@@ -13,6 +13,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import signal
 import socket
 import shutil
 import subprocess
@@ -323,6 +325,8 @@ def resolve_device() -> str:
         device_name = torch.cuda.get_device_name(0)
         print(f"Using device: cuda ({device_name})")
         return "cuda"
+    if os.environ.get("NIRIKSHAN_REQUIRE_CUDA") == "1":
+        raise RuntimeError("CUDA is required for the local zone worker but torch.cuda.is_available() is false; check the CUDA PyTorch environment")
     print("Using device: cpu (no GPU detected)")
     return "cpu"
 
@@ -653,9 +657,16 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     process_args = parse_args()
     process_lock = ZoneProcessLock(process_args.zone_id)
+    def stop_on_signal(_signum: int, _frame: Any) -> None:
+        raise KeyboardInterrupt
+
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, stop_on_signal)
     try:
         process_lock.acquire()
         process_video(process_args)
+    except KeyboardInterrupt:
+        print(f"Stopped zone worker cleanly: zone={process_args.zone_id}", flush=True)
     except (OSError, RuntimeError, ValueError, requests.RequestException) as error:
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(1)

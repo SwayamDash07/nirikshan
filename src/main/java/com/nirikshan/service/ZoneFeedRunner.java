@@ -1,143 +1,48 @@
 package com.nirikshan.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nirikshan.model.PrivacyStatus;
-import com.nirikshan.model.ZoneFeed;
 import com.nirikshan.model.ZoneFeedStatus;
 import com.nirikshan.repository.ZoneFeedRepository;
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-/** Owns one shared Python CV process for every active video zone. */
+/**
+ * Compatibility coordinator for the legacy feed API.
+ *
+ * The backend intentionally owns no Python process. Local operators run
+ * run_local_cv_workers.py, which owns one process per zone and posts events
+ * to this service. Keeping this bean allows existing feed records and API
+ * wiring to remain harmless if an older database contains them.
+ */
 @Service
 public class ZoneFeedRunner {
     private static final Logger log = LoggerFactory.getLogger(ZoneFeedRunner.class);
     private final ZoneFeedRepository feedRepository;
-    private final ObjectMapper objectMapper;
-    private final Path pipelineDir;
-    private final String pythonExecutable;
-    private final String riskEventUrl;
-    private final Path manifest;
-    private Process process;
 
-    public ZoneFeedRunner(ZoneFeedRepository feedRepository, ObjectMapper objectMapper,
-                          @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir,
-                          @Value("${nirikshan.cv.python-executable:python}") String pythonExecutable,
-                          @Value("${nirikshan.cv.risk-event-url:http://localhost:8080/api/risk-events}") String riskEventUrl) {
+    public ZoneFeedRunner(ZoneFeedRepository feedRepository) {
         this.feedRepository = feedRepository;
-        this.objectMapper = objectMapper;
-        this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize();
-        this.pythonExecutable = pythonExecutable;
-        this.riskEventUrl = riskEventUrl;
-        this.manifest = this.pipelineDir.resolve("outputs/live/shared-zones.json");
     }
 
     @PostConstruct
-    void restartPersistedLiveFeeds() { reconcile(); }
+    void logExternalProcessingMode() {
+        log.info("CV execution is external-only; Spring Boot will not launch shared or per-zone Python workers");
+    }
 
-    @PreDestroy
-    void stopAll() { synchronized (this) { stopProcess(); } }
-
-    /** Reconciles active database feeds with the one shared worker. */
     @Scheduled(fixedDelay = 15_000)
-    public synchronized void reconcile() {
-        try {
-            List<Map<String, Object>> active = feedRepository.findByStatus(ZoneFeedStatus.LIVE).stream()
-                    .filter(feed -> Files.exists(pipelineDir.resolve(feed.getVideoPath())))
-                    .map(this::manifestEntry)
-                    .toList();
-            Files.createDirectories(manifest.getParent());
-            objectMapper.writeValue(manifest.toFile(), active);
-            if (active.isEmpty()) {
-                stopProcess();
-            } else if (process == null || !process.isAlive()) {
-                launchSharedWorker();
-            }
-            log.info("Shared CV health: activeZones={}, pid={}, alive={}", active.size(),
-                    process == null ? "none" : process.pid(), process != null && process.isAlive());
-        } catch (Exception error) {
-            log.error("Shared CV worker reconciliation failed", error);
+    public void reconcile() {
+        long active = feedRepository.findByStatus(ZoneFeedStatus.LIVE).size();
+        if (active > 0) {
+            log.debug("External CV health: active feed records={}, no backend worker is launched", active);
         }
     }
 
-    /** Called after a feed transaction commits. */
-    public synchronized void start(Long ignoredZoneId, String ignoredVideoPath) { reconcile(); }
-
-    /** Refreshes the manifest without stopping other zones. */
-    public synchronized void stop(Long ignoredZoneId) { reconcile(); }
-
-    private Map<String, Object> manifestEntry(ZoneFeed feed) {
-        return Map.of(
-                "zoneId", feed.getZone().getId(),
-                "input", feed.getVideoPath(),
-                "sourceClipId", feed.getVideoFilename()
-        );
+    public void start(Long ignoredZoneId, String ignoredVideoPath) {
+        log.info("Zone feed start requested for zone={}, but CV is managed by the local GPU runner", ignoredZoneId);
     }
 
-    private void launchSharedWorker() throws IOException {
-        List<String> command = List.of(
-                pythonExecutable, "shared_worker.py",
-                "--manifest", pipelineDir.relativize(manifest).toString(),
-                "--thresholds", "thresholds_config.json",
-                "--model", "yolo26s.pt",
-                "--post-url", riskEventUrl
-        );
-        ProcessBuilder builder = new ProcessBuilder(command)
-                .directory(pipelineDir.toFile())
-                .redirectErrorStream(true);
-        builder.environment().putIfAbsent("OMP_NUM_THREADS", "2");
-        builder.environment().putIfAbsent("MKL_NUM_THREADS", "2");
-        builder.environment().putIfAbsent("OPENBLAS_NUM_THREADS", "2");
-        builder.environment().putIfAbsent("NUMEXPR_NUM_THREADS", "2");
-        Process started = builder.start();
-        process = started;
-        log.info("Started shared CV worker pid={} for active video zones", started.pid());
-        java.util.concurrent.CompletableFuture.runAsync(() -> monitorProcess(started));
-    }
-
-    private void monitorProcess(Process observed) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(observed.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.isBlank()) log.info("Shared CV: {}", line);
-            }
-            int exitCode = observed.waitFor();
-            log.warn("Shared CV worker exited with exitCode={}, pid={}", exitCode, observed.pid());
-            if (exitCode == 137) log.error("Shared CV worker was killed by the container memory limit");
-        } catch (Exception error) {
-            log.error("Shared CV worker monitor failed", error);
-        } finally {
-            synchronized (this) {
-                if (process == observed) process = null;
-            }
-        }
-    }
-
-    private void stopProcess() {
-        if (process == null) return;
-        process.destroy();
-        try {
-            if (!process.waitFor(2, TimeUnit.SECONDS)) process.destroyForcibly();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            process.destroyForcibly();
-        }
-        log.info("Stopped shared CV worker");
-        process = null;
+    public void stop(Long ignoredZoneId) {
+        log.info("Zone feed stop requested for zone={}, no backend process to stop", ignoredZoneId);
     }
 }

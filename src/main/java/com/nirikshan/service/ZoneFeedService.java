@@ -30,14 +30,15 @@ public class ZoneFeedService {
     private final PrivacyAuditService audit;
     private final PrivacyRetentionService retention;
     private final Path pipelineDir;
+    private final CvExecutionPolicy cvPolicy;
 
     public ZoneFeedService(ZoneRepository zoneRepository, ZoneFeedRepository feedRepository, ZoneFeedRunner runner,
                             PrivacyAuditService audit, PrivacyRetentionService retention,
-                            @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir) {
+                            @Value("${nirikshan.cv.pipeline-dir:cv-pipeline}") String pipelineDir, CvExecutionPolicy cvPolicy) {
         this.zoneRepository = zoneRepository;
         this.feedRepository = feedRepository;
         this.audit = audit; this.retention = retention;
-        this.runner = runner;
+        this.runner = runner; this.cvPolicy = cvPolicy;
         this.pipelineDir = Path.of(pipelineDir).toAbsolutePath().normalize();
     }
 
@@ -48,6 +49,7 @@ public class ZoneFeedService {
 
     @Transactional
     public AdminZoneResponse connect(Long zoneId, MultipartFile file) throws IOException {
+        cvPolicy.requireBackendProcessingEnabled("Video ingestion");
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("A non-empty video file is required to connect footage");
         Zone zone = zoneRepository.findById(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone", zoneId));
         runner.stop(zoneId);

@@ -1,16 +1,22 @@
 # Nirikshan Backend
 
-Spring Boot 3.3 / Java 17 backend for the Nirikshan crowd-risk prototype. The Python CV pipeline supplies pre-computed density, movement, risk level, and explanation values; this service stores, broadcasts, and surfaces them.
+Spring Boot 3.3 / Java 17 event-serving backend for the Nirikshan crowd-risk prototype. The local Python CV pipeline supplies privacy-safe density, movement, risk level, and explanation values; this service stores, analyzes, broadcasts, and serves them.
 
 ## Product overview
 
-Nirikshan is a privacy-aware crowd-safety platform for campus and venue operations. It accepts self-recorded crowd videos, extracts aggregate movement signals, predicts rising risk, recommends safer interventions, and distributes role-appropriate alerts to administrators, security staff, and citizens.
+Nirikshan is a privacy-aware crowd-safety platform for campus and venue operations. A local GPU machine extracts aggregate movement signals from configured footage, then the backend predicts rising risk, recommends safer interventions, and distributes role-appropriate alerts to administrators, security staff, and citizens.
 
-> **Live-demo performance limitation:** the first Render deployment uses one shared CPU `YOLO26s` worker, 640px inference, and overlapping tiles for distant people instead of one detector process per zone. This keeps memory bounded while we measure performance; higher headcount recall or more simultaneous videos may require a larger Render instance or a GPU worker.
+> **Intentional hackathon architecture:** CV processing runs locally on a GPU-accelerated development machine. Six independent local workers process the configured zones—one YOLO process per zone—and POST privacy-safe risk events to the selected backend. The deployed Render backend does not run YOLO, SAHI, or Python video processing. It only receives, persists, analyzes, and serves the resulting event data.
+
+```text
+Local RTX 4050: six zone-specific YOLO workers
+        ↓ POST /api/risk-events
+Render: Spring Boot + PostgreSQL + REST + WebSocket + frontend data delivery
+```
 
 ```mermaid
 flowchart LR
-    V[Self-recorded crowd video] --> P[Python CV pipeline]
+    V[Local zone video] --> P[Local Python CV pipeline]
     P --> S[Privacy gate<br/>face blur before output]
     S --> E[Risk event API]
     E --> I[Risk intelligence<br/>forecast + flow analysis]
@@ -43,11 +49,11 @@ graph TD
         Actions[Recommendation and announcement workflow]
         Privacy[Privacy retention + audit]
     end
-    subgraph Processing[Python processing]
+    subgraph Processing[Local GPU processing]
         Video[Video ingestion]
         Blur[Face blurring]
         Signals[Density, speed, direction, hotspots]
-        Sim[Deterministic + agent-based simulation]
+        Sim[Local deterministic + agent-based replay]
     end
     DB[(PostgreSQL / H2)]
 
@@ -112,7 +118,7 @@ Offline mode deliberately caches only aggregate safety information and approved 
 
 | Role | Can view | Can do |
 |---|---|---|
-| Administrator | All zones, forecasts, recommendations, reports, feeds, audit state | Manage feeds, approve announcements, operate simulator, coordinate responses |
+| Administrator | All zones, forecasts, recommendations, reports, audit state | Review event telemetry, approve announcements, coordinate responses |
 | Security operator | Assigned-zone alerts, routes, interventions, reports | Acknowledge alerts and follow or execute staff instructions |
 | Citizen | Safe venue messages, localized alerts, routes, aggregate map context | Submit incident reports and receive safety guidance |
 
@@ -145,9 +151,9 @@ The hidden route is suitable only for a hackathon demo. A production deployment 
 
 ## Run locally
 
-Requirements: Java 17+, Maven 3.9+.
+Requirements: Java 17+, Maven 3.9+, Python 3.10+, and an NVIDIA CUDA-capable environment for the six local workers.
 
-The CV upload runner requires Python 3.10 and the project virtual environment. From `cv-pipeline/` on Windows PowerShell:
+Create the local CV environment from `cv-pipeline/` on Windows PowerShell:
 
 ```powershell
 python -m venv venv
@@ -155,34 +161,27 @@ python -m venv venv
 python -m pip install --upgrade pip
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
-[Environment]::SetEnvironmentVariable("NIRIKSHAN_PYTHON", "D:\\Nirikshan\\cv-pipeline\\venv\\Scripts\\python.exe", "User")
-$env:NIRIKSHAN_PYTHON = "D:\\Nirikshan\\cv-pipeline\\venv\\Scripts\\python.exe"
 ```
 
-Direct CV commands should be run after activating this venv. The backend job runner resolves `NIRIKSHAN_PYTHON` when it starts and logs the actual executable path. If the variable is missing, it logs a warning and falls back to system `python`.
+Direct CV commands should be run after activating this venv. The Spring Boot backend does not resolve or launch this interpreter.
 
-Annotated videos are converted to H.264 for browser playback. Install FFmpeg and place `ffmpeg.exe` on PATH if the admin page must play the generated MP4 directly.
+The local runner requires CUDA by default. If CUDA is unavailable, it stops the affected zone process with an explicit error instead of silently moving inference to the backend. Use `--allow-cpu` only for deliberate local diagnostics.
 
-If `torch.cuda.is_available()` returns `False`, CUDA is unavailable to that interpreter; the CV pipeline will report `Using device: cpu (no GPU detected)` and use slower CPU inference.
+### Render deployment: event-only backend
 
-### Render deployment with video processing
-
-The repository includes a root `Dockerfile` and a `render.yaml` Blueprint. Render builds the image and installs Java, Python, FFmpeg, CPU PyTorch, OpenCV, and the shared `yolo26s` model in one container. The image sets:
-
-```text
-NIRIKSHAN_PYTHON=/usr/local/bin/python3
-NIRIKSHAN_CV_PIPELINE_DIR=/app/cv-pipeline
-```
+The root `Dockerfile` builds and runs only the Java application. The Render image does not install Python, PyTorch, OpenCV, FFmpeg, YOLO weights, or a CV worker. `render.yaml` sets `SPRING_PROFILES_ACTIVE=prod` and `NIRIKSHAN_CV_BACKEND_PROCESSING_ENABLED=false`.
 
 In Render, create a **Blueprint** from this repository and review the prompted secret values before applying it. The Blueprint creates the backend in Singapore and uses `/api/health` as its health check. It is configured for Render's free web-service plan for an initial test, so it does not attach a persistent disk. Set `DATABASE_URL` to the existing PostgreSQL connection string if migrating the current database; the Blueprint intentionally does not create or replace a database. Set `NIRIKSHAN_ALLOWED_ORIGINS` to the deployed frontend URL, and add `GROQ_API_KEY` if AI summaries are enabled. Render supports the Dockerfile directly and uses the service's injected `PORT` automatically.
 
-The Render image uses one shared CPU `yolo26s` worker with tiled inference for distant views. The free instance is only for an initial test: it may sleep when idle, has limited CPU/RAM, and local uploaded recordings can disappear after a restart or redeploy. Increase CPU/RAM or move the worker to a GPU if headcount recall remains low. For reliable footage retention, use a paid persistent disk or external object storage.
+Render receives `POST /api/risk-events`, persists telemetry to PostgreSQL, runs backend intelligence/recommendations, and serves REST/WebSocket updates. Video uploads, per-zone workers, shared workers, scenario subprocesses, and automatic Python reconciliation are rejected/disabled in the backend.
+
+This is an intentional hackathon split: the local GPU machine owns video ingestion and YOLO/SAHI inference; Render owns the Spring Boot API, PostgreSQL, REST, WebSocket, and frontend data delivery. A future production deployment should use a dedicated GPU-backed inference service, queue, or inference server separate from the web backend.
 
 ```text
 mvn spring-boot:run
 ```
 
-On Windows, the recommended launcher sets the CV venv variables in the same process that starts Spring Boot:
+On Windows, the recommended launcher starts only Spring Boot:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -274,23 +273,37 @@ WHERE lower(email) = lower('admin@example.com');
 
 Always run this against the same database shown by `/api/health`.
 
-### Continuous camera coverage
+### Six independent local zone workers
 
-The admin Video ingestion page treats each campus zone as a security camera. An administrator connects a pre-recorded video file to a zone, and the backend starts a persistent `ZoneFeed` that loops the footage from frame 0 until coverage is stopped. Loop-mode processing emits one risk event approximately every real second and re-bases each event timestamp to the current wall-clock time, so the dashboard, map, heatmap, zone cards, and trend chart always look current rather than replaying stale video timestamps.
+Create `cv-pipeline/outputs/live/zones.json` with one entry per configured zone. Relative `input` paths are resolved from `cv-pipeline`:
 
-The Render runtime uses one shared `cv-pipeline/shared_worker.py` process for all active zones. It loads the YOLO model once, keeps one privacy-safe stream state per zone, round-robins sampled frames, and emits the same risk-event fields used by the dashboard and WebSocket. Uploads are independent and can complete concurrently; processing is bounded by the shared worker so multiple model copies cannot exhaust the container. If more throughput is required later, scale the service or split workers by zone group rather than silently increasing per-zone model processes.
+```json
+[
+  {"zoneId": 1, "input": "real_footage/main_gate.mp4", "sourceClipId": "main-gate"},
+  {"zoneId": 2, "input": "real_footage/hostel_gate.mp4", "sourceClipId": "hostel-gate"},
+  {"zoneId": 3, "input": "real_footage/cafeteria.mp4", "sourceClipId": "cafeteria"},
+  {"zoneId": 4, "input": "real_footage/a_block.mp4", "sourceClipId": "a-block"},
+  {"zoneId": 5, "input": "real_footage/c_block.mp4", "sourceClipId": "c-block"},
+  {"zoneId": 6, "input": "real_footage/main_gate_exit.mp4", "sourceClipId": "main-gate-exit"}
+]
+```
 
-This is a demonstration simulator, not a production camera ingest path. In production, the same per-second processing and WebSocket event pipeline would consume frames from an actual RTSP/CCTV stream instead of a looped local file. The architecture does not change; only the frame source changes.
+Start six concurrent local processes and send events to Render:
 
-The admin API for this flow is:
+```powershell
+python cv-pipeline/run_local_cv_workers.py `
+  --manifest cv-pipeline/outputs/live/zones.json `
+  --target-url https://<render-backend-url>/api/risk-events `
+  --workers 6
+```
 
-- `GET /api/admin/zones` — list all zones with their current `OFFLINE`/`LIVE` feed state.
-- `POST /api/admin/zones/{zoneId}/connect-footage` — connect a multipart video file and start its continuous loop.
-- `POST /api/admin/zones/{zoneId}/stop-coverage` — stop the zone loop and take the camera offline.
+The supervisor logs each zone PID, keeps one child per zone, stops a worker when its manifest entry is disabled or its source disappears, and does not automatically restart a failed worker. Each child runs the existing `process_video.py` loop, owns its own YOLO model, applies the existing privacy/detection/risk/event logic, and posts events containing its assigned `zoneId`. CUDA/VRAM/model failures are tagged with the affected zone and process ID; tune `--workers`, `--model`, thresholds, or inference settings after inspecting the error. There is no cloud fallback.
 
-### Video processing jobs
+The web console intentionally has no upload or cloud-inference controls. It displays this architecture message; use the local runner for footage and the event APIs for stored results.
 
-The internal admin workspace is at `http://localhost:3000/admin`. Uploading a video creates a non-blocking processing job: the backend stores the clip in `cv-pipeline/uploads/{jobId}/`, runs `process_video.py`, generates its summary, then internally ingests the generated events through the existing risk-event service. Generated artefacts are isolated in `cv-pipeline/outputs/{jobId}/` and served from `/job-files/{jobId}/`.
+### Legacy video-processing endpoints
+
+The old multipart upload, `ZoneFeed`, and processing-job routes remain wired only for compatibility with stored records, but backend CV execution is disabled. They reject new processing requests rather than starting Python. This keeps Render and local Spring Boot event-only and prevents a duplicate worker topology.
 
 ### Privacy architecture and retention
 
@@ -306,14 +319,9 @@ Uploads, processing start/completion/failure, sanitized footage access, and dele
 
 The PWA stores only privacy-safe read data in browser IndexedDB: venue/zone coordinates, aggregate risk telemetry, routes, alerts, forecasts, and approved announcements. Raw video, frames, face data, credentials, and administrator actions are never cached. Citizen incident reports submitted without connectivity are stored in a local outbox with a client event ID and automatically retried when the browser returns online. The backend treats that ID as idempotent, so reconnect retries cannot create duplicate reports. Offline screens clearly state that cached data may be stale; a disconnected device cannot receive a brand-new live alert without a network or separate broadcast channel.
 
-The backend assumes that `python` can run the CV dependencies from the `cv-pipeline/` directory. Override these values when necessary:
+The backend does not require a Python runtime or YOLO weights. The local runner resolves the active Python interpreter from the shell/venv that launches it. `NIRIKSHAN_REQUIRE_CUDA=1` is set automatically for local workers unless `--allow-cpu` is supplied.
 
-```text
-NIRIKSHAN_PYTHON=C:\\path\\to\\python.exe
-NIRIKSHAN_CV_PIPELINE_DIR=C:\\path\\to\\nirikshan\\cv-pipeline
-```
-
-Uploads allow up to 1 GB for local prototype footage. The legacy `ProcessingJob` endpoints remain available for developer-only one-off CV runs; the main admin demo flow uses persistent `ZoneFeed` coverage instead.
+The event API accepts only privacy-safe aggregate telemetry. Raw footage remains on the local GPU machine and is never uploaded to Render by the Nirikshan CV workflow.
 
 To build:
 
@@ -346,22 +354,36 @@ Each ingested event stores current density, density change from the previous rea
 
 Recommendations use these exact local rules after at least 3 readings spanning 20 seconds: 65% MEDIUM+ readings, 40% HIGH+ readings, or a rising density delta of at least 0.35 with at least half the readings rising. A persistent hotspot plus slowdown selects `CLOSE_ENTRY`; rising density selects `REDIRECT`; HIGH risk plus slowdown selects `DEPLOY_SECURITY`; HIGH risk with no active security assignment selects `REASSIGN_PERSONNEL`; otherwise sustained MEDIUM selects `OPEN_ROUTE`. Two or more sustained high-risk zones create a venue-wide `ANNOUNCEMENT`. Pending recommendations are deduplicated by type and zone, have a two-minute cooldown, and are dismissed and broadcast when three or more low-risk readings span 20 seconds. Low-risk recovery also resolves recent active alerts.
 
-For a camera-free demo, create a labelled fixture and replay it through the normal ingestion path:
+For a camera-free live deployed demo, generate and replay locally into Render:
 
 ```powershell
-python cv-pipeline/replay_scenarios.py persistent --zone-id 1 --output cv-pipeline/outputs/demo-persistent.json
-python cv-pipeline/replay_events.py --events cv-pipeline/outputs/demo-persistent.json --url http://localhost:8080/api/risk-events --speed 20
+python cv-pipeline/replay_events.py `
+  --events cv-pipeline/outputs/demo-persistent.json `
+  --target-url https://<render-backend-url>/api/risk-events `
+  --speed 20
 ```
+
+Generate that fixture locally first with `python cv-pipeline/replay_scenarios.py persistent --zone-id 1 --output cv-pipeline/outputs/demo-persistent.json`. `replay_events.py` prefers `--target-url`; the existing `--url` flag remains supported for compatibility. Use `http://localhost:8080/api/risk-events` as the target for a local backend.
 
 Available fixtures are `normal`, `buildup`, `surge`, `persistent`, and `recovery`; every event is labelled `DEMO REPLAY` and uses a `DEMO_REPLAY_*` source id.
 
-### Scenario Simulator
+### Local Scenario Simulator
 
-The admin console also exposes `/admin/scenarios`, an internal staff-training and system-validation tool. Administrators can choose a zone, run `Gradual Buildup`, `Sudden Surge`, `Persistent Hotspot`, `Slowdown With Rising Density`, or `Recovery`, adjust replay speed, watch the run status, and stop a run at any time. The simulator launches the same deterministic replay scripts through the backend subprocess runner and posts through the normal risk-event ingestion path.
+Scenario generation and replay also happen locally. The backend never launches the generator or replay scripts, including in `prod`:
+
+```powershell
+python cv-pipeline/replay_scenarios.py persistent `
+  --zone-id 1 `
+  --output cv-pipeline/outputs/demo-persistent.json `
+  --target-url https://<render-backend-url>/api/risk-events `
+  --speed 20
+```
+
+The `/admin/scenarios` page explains this and disables controls that would imply a backend subprocess. Scenario events still carry `source: "SIMULATION"`, so the existing dashboard, alerts, recommendations, forecasts, and reports continue to label and process them normally.
 
 Scenario events carry `source: "SIMULATION"`; camera-derived events carry `source: "LIVE"`. While a run is active, the affected zone shows a dashed purple `SIMULATION MODE` treatment on the map and dashboard. Alerts, recommendations, trend data, and hotspot details remain in the same operational loop but are visibly simulation-backed. Completion or cancellation restores the latest live event, or resets the zone to an offline/low-telemetry state when no live feed exists. Security and citizen roles cannot access the simulator because its endpoints and page are administrator-only.
 
-The Scenario Simulator lets administrators run deterministic test scenarios (buildup, surge, hotspot, recovery) to validate system responses and train staff on procedures — distinct from live camera-derived data, clearly labeled when active.
+The local scenario runner lets administrators run deterministic test scenarios (buildup, surge, hotspot, recovery) to validate system responses and train staff on procedures — distinct from live camera-derived data, clearly labeled when active.
 
 ### Predictive early warning
 
@@ -373,19 +395,19 @@ The forecast response includes current and projected risk, density and movement 
 
 The simulator also supports `Slowdown With Rising Density`, which demonstrates `STABLE` → `RISING` → `SURGE_RISK`/`CRUSH_RISK` → `RECOVERING` as the deterministic replay progresses. All forecast-triggered recommendations explicitly say they are based on projected risk, not a confirmed current incident.
 
-An executable API smoke test is available at `cv-pipeline/smoke_scenario_api.py`. With the backend running and an administrator JWT, run for example: `python cv-pipeline/smoke_scenario_api.py buildup --zone-id 1 --token <ADMIN_JWT> --speed 20`. It starts the real Scenario Controller, polls its status, checks the normal risk-event/recommendation/alert APIs and the forecast endpoint, and fails if a recovery run leaves stale actions behind.
+The previous backend-driven `smoke_scenario_api.py` flow is no longer a supported way to launch replay because the Scenario Controller is intentionally event-only. Use the local replay command above, then verify the normal risk-event/recommendation/alert APIs and forecast endpoint from the dashboard.
 
 ### Manual end-to-end safety drill
 
 1. Start the backend with `.\run-backend.ps1`, start the frontend with `npm run dev` from `frontend/`, and sign in at `http://localhost:3000/console` as an administrator.
-2. Open **Simulator**, choose a zone, select **Gradual Buildup**, leave speed at `20x`, and select **Run Scenario**.
+2. From a local CV terminal, run the scenario generation/replay command above against localhost or Render.
 3. Return to **Dashboard**. Confirm the affected zone shows **SIMULATION MODE**, the map/zone card receives new density events, the trend rises, and hotspot/bottleneck details appear when enough persistent readings have arrived.
 4. Open **Administration**. Confirm the response action shows the simulation badge, a plain-language reason, and one current action for the zone rather than a growing duplicate list. Select **Take Action** and verify the instruction form is pre-filled on the separate **Send instructions** page for the same zone and source item.
 5. Send the instruction. Confirm the recommendation or alert is acknowledged/resolved, then open the security workspace and verify the security operator receives the instruction or alert. On `/alerts`, confirm any `OPEN_ROUTE` guidance is labelled **SIMULATION** and is visibly distinct from live data.
-6. Open **Simulator** again, choose **Recovery**, and run it for the same zone. Confirm the risk trend returns to LOW, stale alerts and recommendations disappear from the admin and citizen views, and the zone returns to its latest LIVE telemetry or explicitly shows offline/no live telemetry.
+6. Run a locally generated **Recovery** fixture for the same zone. Confirm the risk trend returns to LOW, stale alerts and recommendations disappear from the admin and citizen views, and the zone returns to its latest LIVE telemetry or explicitly shows offline/no live telemetry.
 7. Repeat with **Sudden Surge** and **Persistent Hotspot**. The surge should create a sharp density/risk jump; the persistent hotspot should keep the same hotspot region active long enough to show bottleneck state and prefer `CLOSE_ENTRY`. Stop a run mid-way once to verify cleanup/restoration also happens on cancellation.
 
-If browser automation is not installed, the equivalent executable API check is `python cv-pipeline/smoke_scenario_api.py persistent_hotspot --zone-id 1 --token <ADMIN_JWT> --speed 20`; repeat with `buildup`, `surge`, and `recovery`.
+If browser automation is not installed, replay the corresponding local fixture against the target URL and inspect the same dashboard/API behavior.
 
 Example requests are in [`requests.http`](requests.http).
 

@@ -32,6 +32,11 @@ public class ApiExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.nirikshan.service.CvProcessingDisabledException.class)
+    ResponseEntity<Map<String, Object>> cvDisabled(com.nirikshan.service.CvProcessingDisabledException e, HttpServletRequest request) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String, Object>> validation(MethodArgumentNotValidException e, HttpServletRequest request) {
         String message = e.getBindingResult().getFieldErrors().stream()

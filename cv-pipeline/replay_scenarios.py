@@ -144,9 +144,23 @@ def main() -> None:
     parser.add_argument("scenario", choices=SCENARIOS)
     parser.add_argument("--zone-id", type=int, default=1)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--target-url", help="When supplied, replay the generated fixture to this backend URL locally")
+    parser.add_argument("--url", help="Backward-compatible alias for --target-url")
+    parser.add_argument("--speed", type=float, default=1.0)
+    parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--rebase-now", action="store_true")
     args = parser.parse_args()
-    Path(args.output).write_text(json.dumps(generate_scenario(args.scenario, args.zone_id), indent=2), encoding="utf-8")
+    output = Path(args.output)
+    events = generate_scenario(args.scenario, args.zone_id)
+    output.write_text(json.dumps(events, indent=2), encoding="utf-8")
     print(f"Wrote DEMO REPLAY fixture: {args.output}")
+    target_url = args.target_url or args.url
+    if target_url:
+        from replay_events import replay
+        if args.speed <= 0 or args.timeout <= 0:
+            raise SystemExit("--speed and --timeout must be greater than zero")
+        successful, skipped = replay(events, target_url, args.speed, args.timeout, args.rebase_now)
+        print(f"Scenario replay complete: {successful} posted, {skipped} skipped")
 
 
 if __name__ == "__main__":

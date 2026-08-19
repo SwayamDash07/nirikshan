@@ -3,7 +3,7 @@ services:
     name: nirikshan-backend
     runtime: docker
     region: singapore
-    plan: standard
+    plan: free
     autoDeploy: true
     healthCheckPath: /api/health
     dockerfilePath: ./Dockerfile
@@ -29,7 +29,3 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-    disk:
-      name: nirikshan-footage
-      mountPath: /app/cv-pipeline/uploads
-      sizeGB: 20

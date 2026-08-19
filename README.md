@@ -174,9 +174,9 @@ NIRIKSHAN_PYTHON=/usr/local/bin/python3
 NIRIKSHAN_CV_PIPELINE_DIR=/app/cv-pipeline
 ```
 
-In Render, create a **Blueprint** from this repository and review the prompted secret values before applying it. The Blueprint creates the backend in Singapore, uses `/api/health` as its health check, and attaches a persistent disk at `/app/cv-pipeline/uploads`. Set `DATABASE_URL` to the existing PostgreSQL connection string if migrating the current database; the Blueprint intentionally does not create or replace a database. Set `NIRIKSHAN_ALLOWED_ORIGINS` to the deployed frontend URL, and add `GROQ_API_KEY` if AI summaries are enabled. Render supports the Dockerfile directly and uses the service's injected `PORT` automatically.
+In Render, create a **Blueprint** from this repository and review the prompted secret values before applying it. The Blueprint creates the backend in Singapore and uses `/api/health` as its health check. It is configured for Render's free web-service plan for an initial test, so it does not attach a persistent disk. Set `DATABASE_URL` to the existing PostgreSQL connection string if migrating the current database; the Blueprint intentionally does not create or replace a database. Set `NIRIKSHAN_ALLOWED_ORIGINS` to the deployed frontend URL, and add `GROQ_API_KEY` if AI summaries are enabled. Render supports the Dockerfile directly and uses the service's injected `PORT` automatically.
 
-The Render image uses one shared CPU `yolo26s` worker with tiled inference for distant views. The `standard` instance is used for the first performance test; increase CPU/RAM or move the worker to a GPU if headcount recall remains low. Raw recordings are stored on the attached disk and are deleted according to the privacy-retention settings. The disk is single-instance storage, so use external object storage before scaling horizontally.
+The Render image uses one shared CPU `yolo26s` worker with tiled inference for distant views. The free instance is only for an initial test: it may sleep when idle, has limited CPU/RAM, and local uploaded recordings can disappear after a restart or redeploy. Increase CPU/RAM or move the worker to a GPU if headcount recall remains low. For reliable footage retention, use a paid persistent disk or external object storage.
 
 ```text
 mvn spring-boot:run

@@ -14,11 +14,13 @@ import argparse
 import json
 import math
 import os
+import queue
 import signal
 import socket
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -409,6 +411,9 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     next_live_emit_at = time.monotonic()
     next_frame_due = time.monotonic()
     live_mode = bool(args.loop or args.post_live)
+    # Keep cloud delivery off the camera/inference thread. The queue is
+    # deliberately bounded so a slow backend cannot grow worker memory.
+    delivery_queue = EventDeliveryQueue(args.post_url or "http://localhost:8080/api/risk-events", args.timeout) if args.loop and args.post_live else None
     latest_risk: ZoneRisk | None = None
     latest_trend = "→"
     latest_density = 0.0
@@ -553,7 +558,7 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                     })
                     if live_mode:
                         if args.loop:
-                            post_event(events[-1], args.post_url or "http://localhost:8080/api/risk-events", args.timeout)
+                            delivery_queue.submit(events[-1]) if delivery_queue else post_event(events[-1], args.post_url or "http://localhost:8080/api/risk-events", args.timeout)
                             next_live_emit_at = now_monotonic + emit_every
                         else:
                             if last_posted_video_seconds is not None:
@@ -597,6 +602,8 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 next_frame_due += 1.0 / max(fps, 1.0)
                 time.sleep(max(0.0, next_frame_due - time.monotonic()))
     finally:
+        if delivery_queue is not None:
+            delivery_queue.close()
         capture.release()
         if writer is not None:
             writer.release()
@@ -610,6 +617,60 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
 
     Path(args.output).write_text(json.dumps(events, indent=2), encoding="utf-8")
     return events
+
+
+class EventDeliveryQueue:
+    """Bounded, retrying event delivery isolated from the camera loop."""
+
+    def __init__(self, url: str, timeout: float) -> None:
+        self.url = url
+        self.timeout = timeout
+        self.pending: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=2)
+        self.stop = threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True, name="risk-event-delivery")
+        self.thread.start()
+
+    def submit(self, event: dict[str, Any]) -> None:
+        try:
+            self.pending.put_nowait(event)
+        except queue.Full:
+            try:
+                self.pending.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self.pending.put_nowait(event)
+                print(f"EVENT_DELIVERY_COALESCED zone={event['zoneId']} reason=backend_slow", flush=True)
+            except queue.Full:
+                print(f"EVENT_DELIVERY_DROPPED zone={event['zoneId']} reason=queue_full", file=sys.stderr, flush=True)
+
+    def _run(self) -> None:
+        while not self.stop.is_set():
+            try:
+                event = self.pending.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            if event is None:
+                return
+            for attempt in range(1, 4):
+                try:
+                    response = requests.post(self.url, json=event, timeout=self.timeout)
+                    response.raise_for_status()
+                    print(f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} timestamp={event['timestamp']}", flush=True)
+                    break
+                except requests.RequestException as error:
+                    if attempt < 3 and not self.stop.wait(min(2 ** (attempt - 1), 4)):
+                        continue
+                    print(f"EVENT_DELIVERY_FAILED zone={event['zoneId']} attempts={attempt} error={error}", file=sys.stderr, flush=True)
+            self.pending.task_done()
+
+    def close(self) -> None:
+        self.stop.set()
+        try:
+            self.pending.put_nowait(None)
+        except queue.Full:
+            pass
+        self.thread.join(timeout=1.0)
 
 
 def post_events(events: list[dict[str, Any]], url: str, timeout: float) -> None:

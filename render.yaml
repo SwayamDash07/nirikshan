@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: nirikshan-backend
+    runtime: docker
+    region: singapore
+    plan: standard
+    autoDeploy: true
+    healthCheckPath: /api/health
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: NIRIKSHAN_PYTHON
+        value: /usr/local/bin/python3
+      - key: NIRIKSHAN_CV_PIPELINE_DIR
+        value: /app/cv-pipeline
+      - key: DATABASE_URL
+        sync: false
+      - key: NIRIKSHAN_JWT_SECRET
+        generateValue: true
+      - key: ADMIN_SEED_EMAIL
+        sync: false
+      - key: ADMIN_SEED_PASSWORD
+        sync: false
+      - key: ADMIN_SEED_FORCE_RESET
+        value: "false"
+      - key: NIRIKSHAN_ALLOWED_ORIGINS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+    disk:
+      name: nirikshan-footage
+      mountPath: /app/cv-pipeline/uploads
+      sizeGB: 20

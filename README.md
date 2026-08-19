@@ -6,7 +6,7 @@ Spring Boot 3.3 / Java 17 backend for the Nirikshan crowd-risk prototype. The Py
 
 Nirikshan is a privacy-aware crowd-safety platform for campus and venue operations. It accepts self-recorded crowd videos, extracts aggregate movement signals, predicts rising risk, recommends safer interventions, and distributes role-appropriate alerts to administrators, security staff, and citizens.
 
-> **Live-demo performance limitation:** the free Railway tier has limited CPU, RAM, and no guaranteed GPU. Nirikshan therefore uses one shared `YOLO26s` worker, 640px inference, and overlapping tiles for distant people instead of one detector process per zone. This improves long-view detection and prevents the previous multi-process out-of-memory crashes, but updates arrive round-robin and can be slower when many videos are active. Higher-frequency simultaneous processing requires a larger Railway plan or GPU worker.
+> **Live-demo performance limitation:** the first Render deployment uses one shared CPU `YOLO26s` worker, 640px inference, and overlapping tiles for distant people instead of one detector process per zone. This keeps memory bounded while we measure performance; higher headcount recall or more simultaneous videos may require a larger Render instance or a GPU worker.
 
 ```mermaid
 flowchart LR
@@ -165,18 +165,18 @@ Annotated videos are converted to H.264 for browser playback. Install FFmpeg and
 
 If `torch.cuda.is_available()` returns `False`, CUDA is unavailable to that interpreter; the CV pipeline will report `Using device: cpu (no GPU detected)` and use slower CPU inference.
 
-### Railway deployment with video processing
+### Render deployment with video processing
 
-The repository includes a root `Dockerfile`. Railway will use it automatically on the next deployment and install Java, Python, FFmpeg, CPU PyTorch, OpenCV, and the shared `yolo26s` model in one container. The image sets:
+The repository includes a root `Dockerfile` and a `render.yaml` Blueprint. Render builds the image and installs Java, Python, FFmpeg, CPU PyTorch, OpenCV, and the shared `yolo26s` model in one container. The image sets:
 
 ```text
 NIRIKSHAN_PYTHON=/usr/local/bin/python3
 NIRIKSHAN_CV_PIPELINE_DIR=/app/cv-pipeline
 ```
 
-In Railway, open the backend service, choose **Settings → Source**, confirm the repository root is the service root, then deploy the latest commit. Under **Variables**, keep `SPRING_PROFILES_ACTIVE=prod` and the database/admin variables. You may also add `NIRIKSHAN_PYTHON=/usr/local/bin/python3` there, although the Dockerfile already supplies it. Do not set it to `python` unless that executable exists in the image.
+In Render, create a **Blueprint** from this repository and review the prompted secret values before applying it. The Blueprint creates the backend in Singapore, uses `/api/health` as its health check, and attaches a persistent disk at `/app/cv-pipeline/uploads`. Set `DATABASE_URL` to the existing PostgreSQL connection string if migrating the current database; the Blueprint intentionally does not create or replace a database. Set `NIRIKSHAN_ALLOWED_ORIGINS` to the deployed frontend URL, and add `GROQ_API_KEY` if AI summaries are enabled. Render supports the Dockerfile directly and uses the service's injected `PORT` automatically.
 
-The Railway image uses one shared CPU `yolo26s` worker with tiled inference for distant views. The free tier remains the throughput constraint; increase service memory/CPU or move inference to a GPU for more simultaneous zones. Raw recordings remain on the container filesystem and are deleted according to the privacy-retention settings; Railway volumes or external object storage are required if footage must survive redeployments.
+The Render image uses one shared CPU `yolo26s` worker with tiled inference for distant views. The `standard` instance is used for the first performance test; increase CPU/RAM or move the worker to a GPU if headcount recall remains low. Raw recordings are stored on the attached disk and are deleted according to the privacy-retention settings. The disk is single-instance storage, so use external object storage before scaling horizontally.
 
 ```text
 mvn spring-boot:run
@@ -202,7 +202,7 @@ $env:GROQ_API_KEY="gsk_your_key_here"
 mvn spring-boot:run
 ```
 
-If using `.\run-backend.ps1`, set `$env:GROQ_API_KEY` before running the script; it passes the existing backend environment through and never imports the frontend env file. For Railway, open the backend service, select the **Variables** tab, add a variable named `GROQ_API_KEY` with the Groq key as its value, then redeploy. Do not put this secret in `frontend/.env.local`; that file is only for browser-safe `NEXT_PUBLIC_*` settings.
+If using `.\run-backend.ps1`, set `$env:GROQ_API_KEY` before running the script; it passes the existing backend environment through and never imports the frontend env file. For Render, add `GROQ_API_KEY` during Blueprint setup or in the backend service's **Environment** tab, then redeploy. Do not put this secret in `frontend/.env.local`; that file is only for browser-safe `NEXT_PUBLIC_*` settings.
 
 At startup, the backend logs either `GROQ_API_KEY found` with a masked value or `GROQ_API_KEY missing`. AI responses return a localized unavailable message only when the key or API is unavailable.
 
@@ -226,13 +226,13 @@ $env:DATABASE_PASSWORD="your-local-password"
 mvn spring-boot:run
 ```
 
-`DATABASE_URL` may also be a Railway-style `postgresql://...` URL. The backend converts it to the JDBC form automatically. `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` override the `DATABASE_*` variables when present.
+`DATABASE_URL` may also be a `postgresql://...` URL. The backend converts it to the JDBC form automatically. `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` override the `DATABASE_*` variables when present.
 
-For Railway deployment, attach a Railway PostgreSQL service and set the backend service variables from the database service. The production profile seeds the Campus 25 venue/zones and creates an administrator only when the explicit admin seed variables are present. The usual Railway URL is shaped like this (keep the real credential in Railway variables, never in source control):
+For Render deployment, keep the existing PostgreSQL database or create a Render PostgreSQL service separately, then set `DATABASE_URL` in the backend service. The production profile seeds the Campus 25 venue/zones and creates an administrator only when the explicit admin seed variables are present. Keep the real credential in Render variables, never in source control:
 
 ```text
 SPRING_PROFILES_ACTIVE=prod
-DATABASE_URL=postgresql://postgres:<password>@postgres.railway.internal:5432/railway
+DATABASE_URL=postgresql://<user>:<password>@<render-postgres-host>:5432/<database>
 NIRIKSHAN_JWT_SECRET=<long-random-secret>
 ADMIN_SEED_EMAIL=<admin-email>
 ADMIN_SEED_PASSWORD=<strong-admin-password>
@@ -241,7 +241,7 @@ ADMIN_SEED_FORCE_RESET=false
 
 For first-time recovery of a live administrator account, temporarily set `ADMIN_SEED_EMAIL` to the intended administrator email, set a new `ADMIN_SEED_PASSWORD`, and set `ADMIN_SEED_FORCE_RESET=true` in the backend deployment environment. Redeploy once, confirm login at `/console/login`, then immediately set `ADMIN_SEED_FORCE_RESET=false` and redeploy again. Never commit these values to the repository. Browser location requires an HTTPS live URL and user permission; if location is denied, citizens can still search for **KIIT Campus 25** manually.
 
-Railway may alternatively expose `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`; the `prod` profile supports those variables too. For local testing against the Railway database, use the database service's reachable/public URL if `postgres.railway.internal` is only resolvable inside Railway:
+Render provides `DATABASE_URL` directly. The `prod` profile also supports `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` if you prefer separate variables. For local testing against a Render database, use its external connection URL rather than the private internal hostname:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE="prod"
@@ -278,7 +278,7 @@ Always run this against the same database shown by `/api/health`.
 
 The admin Video ingestion page treats each campus zone as a security camera. An administrator connects a pre-recorded video file to a zone, and the backend starts a persistent `ZoneFeed` that loops the footage from frame 0 until coverage is stopped. Loop-mode processing emits one risk event approximately every real second and re-bases each event timestamp to the current wall-clock time, so the dashboard, map, heatmap, zone cards, and trend chart always look current rather than replaying stale video timestamps.
 
-The Railway runtime uses one shared `cv-pipeline/shared_worker.py` process for all active zones. It loads the YOLO model once, keeps one privacy-safe stream state per zone, round-robins sampled frames, and emits the same risk-event fields used by the dashboard and WebSocket. Uploads are independent and can complete concurrently; processing is bounded by the shared worker so multiple model copies cannot exhaust the container. If more throughput is required later, scale the service or split workers by zone group rather than silently increasing per-zone model processes.
+The Render runtime uses one shared `cv-pipeline/shared_worker.py` process for all active zones. It loads the YOLO model once, keeps one privacy-safe stream state per zone, round-robins sampled frames, and emits the same risk-event fields used by the dashboard and WebSocket. Uploads are independent and can complete concurrently; processing is bounded by the shared worker so multiple model copies cannot exhaust the container. If more throughput is required later, scale the service or split workers by zone group rather than silently increasing per-zone model processes.
 
 This is a demonstration simulator, not a production camera ingest path. In production, the same per-second processing and WebSocket event pipeline would consume frames from an actual RTSP/CCTV stream instead of a looped local file. The architecture does not change; only the frame source changes.
 

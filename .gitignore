@@ -3,6 +3,7 @@ target/
 
 frontend/node_modules/
 frontend/.next/
+frontend/tsconfig.tsbuildinfo
 frontend/out/
 frontend/.vercel/
 frontend/public/sw.js
@@ -24,6 +25,7 @@ cv-pipeline/uploads/*
 cv-pipeline/outputs/**/*
 !cv-pipeline/outputs/.gitkeep
 _archived_test_runs/
+tmp/
 
 .env
 .env.local

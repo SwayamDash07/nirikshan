@@ -9,12 +9,23 @@ spring:
     default: local-postgres
   jpa:
     open-in-view: false
+  datasource:
+    hikari:
+      maximum-pool-size: ${NIRIKSHAN_DB_POOL_MAX:3}
+      minimum-idle: ${NIRIKSHAN_DB_POOL_MIN:1}
+      connection-timeout: ${NIRIKSHAN_DB_CONNECTION_TIMEOUT_MS:10000}
   jackson:
     serialization:
       write-dates-as-timestamps: false
 
 server:
   port: ${PORT:8080}
+  tomcat:
+    threads:
+      max: ${NIRIKSHAN_TOMCAT_MAX_THREADS:20}
+      min-spare: ${NIRIKSHAN_TOMCAT_MIN_SPARE_THREADS:2}
+    max-connections: ${NIRIKSHAN_TOMCAT_MAX_CONNECTIONS:100}
+    accept-count: ${NIRIKSHAN_TOMCAT_ACCEPT_COUNT:50}
 
 nirikshan:
   web:

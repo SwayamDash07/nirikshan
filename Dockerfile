@@ -10,4 +10,4 @@ WORKDIR /app
 COPY --from=backend-build /build/target/nirikshan-0.0.1-SNAPSHOT.jar /app/nirikshan.jar
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=35", "-jar", "/app/nirikshan.jar"]
+ENTRYPOINT ["java", "-Xms64m", "-Xmx192m", "-XX:MaxMetaspaceSize=96m", "-XX:MaxDirectMemorySize=32m", "-XX:ActiveProcessorCount=1", "-XX:+UseSerialGC", "-XX:+ExitOnOutOfMemoryError", "-jar", "/app/nirikshan.jar"]

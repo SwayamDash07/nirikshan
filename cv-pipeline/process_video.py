@@ -450,11 +450,15 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 smoothed_history.clear()
                 print(f"LOOP_ITERATION {loop_iteration}", flush=True)
                 continue
-            # Privacy is applied before detection, annotation, output, or display.
-            # The source frame remains in memory only for this transformation.
-            frame = privacy.sanitize(frame).frame
             timestamp_seconds = frame_index / fps
-            if frame_index % process_every == 0:
+            is_detection_frame = frame_index % process_every == 0
+            # Skipped loop frames are only read to advance the video position and
+            # are never detected or emitted. Keep privacy processing for frames
+            # that are actually used, plus every frame when annotation output is
+            # enabled so written video remains privacy-safe.
+            if is_detection_frame or writer is not None:
+                frame = privacy.sanitize(frame).frame
+            if is_detection_frame:
                 detections = detect_people(model, frame, confidence, device=device, augment=augment)
                 current_total_people = len(detections)
                 latest_hotspots = detect_hotspots(detections, frame_width, frame_height)

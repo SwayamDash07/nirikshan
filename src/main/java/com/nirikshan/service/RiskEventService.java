@@ -32,8 +32,11 @@ public class RiskEventService {
     @Transactional
     public RiskEventResponse ingest(RiskEventRequest request) {
         Zone zone = zoneRepository.findById(request.zoneId()).orElseThrow(() -> new ResourceNotFoundException("Zone", request.zoneId()));
+        boolean completeLiveTelemetry = hasCompleteLiveTelemetry(request);
         RiskLevel previousRisk = zone.getCurrentRiskLevel();
-        RiskEvent previousEvent = eventRepository.findByZoneIdOrderByTimestampDesc(zone.getId(), PageRequest.of(0, 1)).stream().findFirst().orElse(null);
+        RiskEvent previousEvent = completeLiveTelemetry
+                ? null
+                : eventRepository.findByZoneIdOrderByTimestampDesc(zone.getId(), PageRequest.of(0, 1)).stream().findFirst().orElse(null);
         RiskEvent event = new RiskEvent();
         event.setZone(zone); event.setTimestamp(request.timestamp()); event.setDensityScore(request.densityScore()); event.setPeopleCount(request.peopleCount());
         event.setMovementSpeed(request.movementSpeed()); event.setRiskLevel(request.riskLevel());
@@ -49,11 +52,18 @@ public class RiskEventService {
         event.setDensityChange(request.densityChange() == null ? relativeChange(previousEvent == null ? 0 : previousEvent.getDensityScore(), request.densityScore()) : request.densityChange());
         event.setMovementSlowdown(request.movementSlowdown() == null ? relativeDrop(previousEvent == null ? request.movementSpeed() : previousEvent.getMovementSpeed(), request.movementSpeed()) : request.movementSlowdown());
         event.setHotspotPersistenceSeconds(request.hotspotPersistenceSeconds() == null ? hotspotPersistenceSeconds(zone.getId(), request.timestamp(), request.hotspotRegions()) : Math.max(0, Math.round(request.hotspotPersistenceSeconds())));
-        FlowBehaviorService.Analysis flow = flowBehaviorService.analyze(zone.getId(), request, previousEvent);
-        event.setBehaviorState(flow.state());
-        event.setBehaviorExplanation(request.behaviorExplanation() == null || request.behaviorExplanation().isBlank() ? flow.explanation() : request.behaviorExplanation());
-        if (flow.state() == com.nirikshan.model.FlowBehaviorState.INSUFFICIENT_DATA) {
-            event.setDominantDirection(event.getDominantDirection() == null ? "INSUFFICIENT_DATA" : event.getDominantDirection());
+        if (completeLiveTelemetry) {
+            event.setBehaviorState(request.behaviorState());
+            event.setBehaviorExplanation(request.behaviorExplanation() == null || request.behaviorExplanation().isBlank()
+                    ? "Flow state supplied by the live telemetry worker."
+                    : request.behaviorExplanation());
+        } else {
+            FlowBehaviorService.Analysis flow = flowBehaviorService.analyze(zone.getId(), request, previousEvent);
+            event.setBehaviorState(flow.state());
+            event.setBehaviorExplanation(request.behaviorExplanation() == null || request.behaviorExplanation().isBlank() ? flow.explanation() : request.behaviorExplanation());
+            if (flow.state() == com.nirikshan.model.FlowBehaviorState.INSUFFICIENT_DATA) {
+                event.setDominantDirection(event.getDominantDirection() == null ? "INSUFFICIENT_DATA" : event.getDominantDirection());
+            }
         }
         RiskEvent saved = eventRepository.save(event);
         zone.setCurrentDensity(request.densityScore()); zone.setCurrentPeopleCount(request.peopleCount()); zone.setCurrentRiskLevel(request.riskLevel()); zone.setLastUpdated(request.timestamp());
@@ -148,6 +158,13 @@ public class RiskEventService {
     private RiskEventSource parseSource(String source, String clipId) {
         if (source != null && source.equalsIgnoreCase("SIMULATION")) return RiskEventSource.SIMULATION;
         return clipId != null && clipId.startsWith("DEMO_REPLAY_") ? RiskEventSource.SIMULATION : RiskEventSource.LIVE;
+    }
+    private boolean hasCompleteLiveTelemetry(RiskEventRequest request) {
+        return parseSource(request.source(), request.sourceClipId()) == RiskEventSource.LIVE
+                && request.densityChange() != null
+                && request.movementSlowdown() != null
+                && request.hotspotPersistenceSeconds() != null
+                && request.behaviorState() != null;
     }
     private RiskEventResponse toResponse(RiskEvent e) {
         boolean flowAvailable = e.getBehaviorState() != null

@@ -11,7 +11,7 @@ spring:
     open-in-view: false
   datasource:
     hikari:
-      maximum-pool-size: ${NIRIKSHAN_DB_POOL_MAX:3}
+      maximum-pool-size: ${NIRIKSHAN_DB_POOL_MAX:8}
       minimum-idle: ${NIRIKSHAN_DB_POOL_MIN:1}
       connection-timeout: ${NIRIKSHAN_DB_CONNECTION_TIMEOUT_MS:10000}
   jackson:

@@ -408,7 +408,9 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
     frame_index = 0
     loop_iteration = 0
     last_emit = -emit_every
-    next_live_emit_at = time.monotonic()
+    # Stagger zones across the emission window so six workers do not create a
+    # synchronized burst against a small hosted backend at startup.
+    next_live_emit_at = time.monotonic() + ((max(1, args.zone_id) - 1) % 6) * (emit_every / 6.0)
     next_frame_due = time.monotonic()
     live_mode = bool(args.loop or args.post_live)
     # Keep cloud delivery off the camera/inference thread. The queue is
@@ -649,6 +651,7 @@ class EventDeliveryQueue:
                 print(f"EVENT_DELIVERY_DROPPED zone={event['zoneId']} reason=queue_full", file=sys.stderr, flush=True)
 
     def _run(self) -> None:
+        session = requests.Session()
         while not self.stop.is_set():
             try:
                 event = self.pending.get(timeout=0.25)
@@ -661,7 +664,7 @@ class EventDeliveryQueue:
             for attempt in range(1, 2):
                 request_started_at = time.perf_counter()
                 try:
-                    response = requests.post(self.url, json=event, timeout=self.timeout)
+                    response = session.post(self.url, json=event, timeout=self.timeout)
                     response.raise_for_status()
                     round_trip_ms = (time.perf_counter() - request_started_at) * 1000
                     print(
@@ -679,6 +682,7 @@ class EventDeliveryQueue:
                         flush=True,
                     )
             self.pending.task_done()
+        session.close()
 
     def close(self) -> None:
         self.stop.set()

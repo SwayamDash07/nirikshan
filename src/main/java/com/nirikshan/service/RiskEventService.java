@@ -32,16 +32,20 @@ public class RiskEventService {
     @Transactional
     public RiskEventResponse ingest(RiskEventRequest request) {
         Zone zone = zoneRepository.findById(request.zoneId()).orElseThrow(() -> new ResourceNotFoundException("Zone", request.zoneId()));
+        RiskEventSource source = parseSource(request.source(), request.sourceClipId());
+        java.time.Instant effectiveTimestamp = source == RiskEventSource.LIVE
+                ? java.time.Instant.now()
+                : request.timestamp();
         boolean completeLiveTelemetry = hasCompleteLiveTelemetry(request);
         RiskLevel previousRisk = zone.getCurrentRiskLevel();
         RiskEvent previousEvent = completeLiveTelemetry
                 ? null
                 : eventRepository.findByZoneIdOrderByTimestampDesc(zone.getId(), PageRequest.of(0, 1)).stream().findFirst().orElse(null);
         RiskEvent event = new RiskEvent();
-        event.setZone(zone); event.setTimestamp(request.timestamp()); event.setDensityScore(request.densityScore()); event.setPeopleCount(request.peopleCount());
+        event.setZone(zone); event.setTimestamp(effectiveTimestamp); event.setDensityScore(request.densityScore()); event.setPeopleCount(request.peopleCount());
         event.setMovementSpeed(request.movementSpeed()); event.setRiskLevel(request.riskLevel());
         event.setExplanation(request.explanation()); event.setSourceClipId(request.sourceClipId());
-        event.setSource(parseSource(request.source(), request.sourceClipId()));
+        event.setSource(source);
         event.setDominantDirection(request.dominantDirection());
         event.setDirectionDegrees(request.directionDegrees());
         event.setDirectionConfidence(request.directionConfidence() == null ? 0 : request.directionConfidence());
@@ -51,7 +55,7 @@ public class RiskEventService {
         event.setHotspotRegions(writeHotspots(request.hotspotRegions()));
         event.setDensityChange(request.densityChange() == null ? relativeChange(previousEvent == null ? 0 : previousEvent.getDensityScore(), request.densityScore()) : request.densityChange());
         event.setMovementSlowdown(request.movementSlowdown() == null ? relativeDrop(previousEvent == null ? request.movementSpeed() : previousEvent.getMovementSpeed(), request.movementSpeed()) : request.movementSlowdown());
-        event.setHotspotPersistenceSeconds(request.hotspotPersistenceSeconds() == null ? hotspotPersistenceSeconds(zone.getId(), request.timestamp(), request.hotspotRegions()) : Math.max(0, Math.round(request.hotspotPersistenceSeconds())));
+        event.setHotspotPersistenceSeconds(request.hotspotPersistenceSeconds() == null ? hotspotPersistenceSeconds(zone.getId(), effectiveTimestamp, request.hotspotRegions()) : Math.max(0, Math.round(request.hotspotPersistenceSeconds())));
         if (completeLiveTelemetry) {
             event.setBehaviorState(request.behaviorState());
             event.setBehaviorExplanation(request.behaviorExplanation() == null || request.behaviorExplanation().isBlank()
@@ -66,7 +70,7 @@ public class RiskEventService {
             }
         }
         RiskEvent saved = eventRepository.save(event);
-        zone.setCurrentDensity(request.densityScore()); zone.setCurrentPeopleCount(request.peopleCount()); zone.setCurrentRiskLevel(request.riskLevel()); zone.setLastUpdated(request.timestamp());
+        zone.setCurrentDensity(request.densityScore()); zone.setCurrentPeopleCount(request.peopleCount()); zone.setCurrentRiskLevel(request.riskLevel()); zone.setLastUpdated(effectiveTimestamp);
         updateBottleneck(zone);
         zoneRepository.save(zone);
         RiskEventResponse response = toResponse(saved);

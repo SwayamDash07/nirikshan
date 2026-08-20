@@ -870,11 +870,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         setConnected(true);
         client.subscribe("/topic/risk-updates", (message: IMessage) => {
           const event = JSON.parse(message.body) as RiskEvent;
-          console.log("[console] risk-update received", {
-            rawParsedMessage: event,
-            zoneId: event.zoneId,
-            zoneIdType: typeof event.zoneId,
-          });
           const eventZoneId = Number(event.zoneId);
           setZones((current) =>
             current.map((zone) =>

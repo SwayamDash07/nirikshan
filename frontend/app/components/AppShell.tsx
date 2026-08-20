@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { api, clearSession, type Role, type UserInfo } from "../lib/auth";
 import Icon, { IconName } from "./Icon";
 import ThemeToggle from "./ThemeToggle";
@@ -35,11 +35,14 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   const [offline, setOffline] = useState(false);
   const [pendingReports, setPendingReports] = useState(0);
   const [language, setLanguage] = useState<AiLanguage>("en");
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const roleMenuRef = useRef<HTMLDivElement>(null);
   const [queryPreview, setQueryPreview] = useState<PreviewRole | undefined>(() => {
     if (typeof window === "undefined") return undefined;
     const preview = new URLSearchParams(window.location.search).get("preview");
     return preview === "security" ? "SECURITY" : preview === "customer" ? "CITIZEN" : undefined;
   });
+  const [previewBannerVisible, setPreviewBannerVisible] = useState(false);
   const workspaceRole = previewRole || queryPreview || user.role;
   const homeHref = workspaceRole === "ADMIN" ? "/console" : workspaceRole === "SECURITY" ? "/security" : "/alerts";
   usePageLanguage(language);
@@ -52,6 +55,38 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     if (preview === "security") setQueryPreview("SECURITY");
     if (preview === "customer") setQueryPreview("CITIZEN");
   }, []);
+
+  useEffect(() => {
+    if (!queryPreview) {
+      setPreviewBannerVisible(false);
+      return;
+    }
+    const previewKey = `nirikshan.preview-banner.${queryPreview.toLowerCase()}`;
+    if (window.sessionStorage.getItem(previewKey) === "shown") {
+      setPreviewBannerVisible(false);
+      return;
+    }
+    window.sessionStorage.setItem(previewKey, "shown");
+    setPreviewBannerVisible(true);
+    const timer = window.setTimeout(() => setPreviewBannerVisible(false), 10000);
+    return () => window.clearTimeout(timer);
+  }, [queryPreview]);
+
+  useEffect(() => {
+    if (!roleMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!roleMenuRef.current?.contains(event.target as Node)) setRoleMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRoleMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [roleMenuOpen]);
 
   useEffect(() => {
     const refresh = () => pendingOfflineReports().then((items) => setPendingReports(items.length)).catch(() => undefined);
@@ -82,9 +117,15 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     window.location.replace("/alerts");
   }
 
-  function changeWorkspace(event: ChangeEvent<HTMLSelectElement>) {
+  function changeWorkspace(nextRole: Role) {
     const destinations: Record<Role, string> = { ADMIN: "/console", SECURITY: "/security?preview=security", CITIZEN: "/alerts?preview=customer" };
-    window.location.assign(destinations[event.target.value as Role]);
+    if (nextRole === "CITIZEN") {
+      window.sessionStorage.removeItem("nirikshan.preview-banner.citizen");
+      window.sessionStorage.removeItem("nirikshan.preview-customer.location-shown");
+    }
+    if (nextRole === "SECURITY") window.sessionStorage.removeItem("nirikshan.preview-banner.security");
+    setRoleMenuOpen(false);
+    window.location.assign(destinations[nextRole]);
   }
 
   function previewHref(href: string) {
@@ -103,10 +144,19 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     <aside className={sidebarClass} aria-label="Application sidebar">
       <div className={styles.sidebarTop}>
         <div className={styles.brandRow}>
-          <a className={styles.brand} href={decoratedHomeHref} onClick={() => setMobileOpen(false)}><span className={styles.brandMark}>N</span><span><b>Nirikshan</b><small>Safety intelligence</small></span></a>
+          <a className={styles.brand} href={decoratedHomeHref} onClick={() => setMobileOpen(false)}><span><b>Nirikshan</b><small>Safety intelligence</small></span></a>
           <button className={styles.sidebarToggle} type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><Icon name="menu" /></button>
         </div>
-        {user.role !== "CITIZEN" && <div className={styles.workspaceSwitch}><span className={styles.workspaceDot} />{user.role === "ADMIN" ? <><label className={styles.srOnly} htmlFor="workspace-view">Switch workspace view</label><select id="workspace-view" className={styles.workspaceSelect} value={workspaceRole} onChange={changeWorkspace}><option value="ADMIN">{switchLabels.ADMIN}</option><option value="SECURITY">{switchLabels.SECURITY}</option><option value="CITIZEN">{switchLabels.CITIZEN}</option></select><Icon name="chevron" /></> : <><span>{roleLabels[user.role]}</span><Icon name="chevron" /></>}</div>}
+        {user.role !== "CITIZEN" && <div ref={roleMenuRef} className={`${styles.workspaceSwitch} ${roleMenuOpen ? styles.workspaceOpen : ""}`}>
+          {user.role === "ADMIN" ? <>
+            <button type="button" className={styles.workspaceTrigger} aria-haspopup="listbox" aria-expanded={roleMenuOpen} onClick={() => setRoleMenuOpen((current) => !current)}>
+              <span>{switchLabels[workspaceRole]}</span><Icon name="chevron" />
+            </button>
+            {roleMenuOpen && <div className={styles.workspaceMenu} role="listbox" aria-label="Workspace view">
+              {(["ADMIN", "SECURITY", "CITIZEN"] as Role[]).map((role) => <button key={role} type="button" className={`${styles.workspaceOption} ${workspaceRole === role ? styles.workspaceOptionSelected : ""}`} role="option" aria-selected={workspaceRole === role} onClick={() => changeWorkspace(role)}>{switchLabels[role]}</button>)}
+            </div>}
+          </> : <><span>{roleLabels[user.role]}</span><Icon name="chevron" /></>}
+        </div>}
       </div>
       <nav className={styles.sideNav} aria-label="Primary navigation">{navItems.map((item) => <a key={item.href} className={`${styles.navItem} ${active === item.label ? styles.active : ""}`} href={previewHref(item.href)} aria-current={active === item.label ? "page" : undefined} onClick={() => setMobileOpen(false)}><Icon name={item.icon} /><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}</a>)}</nav>
       <div className={styles.sidebarBottom}>
@@ -115,11 +165,11 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
       </div>
     </aside>
     {mobileOpen && <button className={styles.mobileBackdrop} type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-    <header className={styles.mobileHeader}><a className={styles.brand} href={decoratedHomeHref}><span className={styles.brandMark}>N</span><b>Nirikshan</b></a><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /><button className={styles.mobileMenu} type="button" onClick={() => setMobileOpen((current) => !current)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen}><Icon name="menu" /></button></header>
+    <header className={styles.mobileHeader}><a className={styles.brand} href={decoratedHomeHref}><b>Nirikshan</b></a><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /><button className={styles.mobileMenu} type="button" onClick={() => setMobileOpen((current) => !current)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen}><Icon name="menu" /></button></header>
     <main className={mainClass}>
       <div className={styles.mobileNav}>{navItems.map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={previewHref(item.href)}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
       <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /></div></header>
-      {queryPreview && <div className={styles.previewBanner} role="status">{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</div>}
+      {queryPreview && previewBannerVisible && <div className={styles.previewBanner} role="status"><span>{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</span><small className={styles.previewDuration}>10s</small><i className={styles.previewProgress} aria-hidden="true" /></div>}
       {(offline || pendingReports > 0) && <div className={styles.offlineBanner} role="status">{offline ? "Offline mode: showing the last safe data available." : "Connection restored."}{pendingReports > 0 && ` ${pendingReports} incident report${pendingReports === 1 ? "" : "s"} waiting to sync.`}</div>}
       {children}
       <AssistantChatWidget language={language} onLanguageChange={changeLanguage} zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />

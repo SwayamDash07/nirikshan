@@ -1,5 +1,5 @@
-.toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface); cursor: pointer; font-size: 12px; font-weight: 600; transition: border-color .18s ease, color .18s ease, background .18s ease; }
-.toggle:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-subtle); }
+.toggle { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 50%; color: var(--text-secondary); background: var(--surface); cursor: pointer; transition: border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease; }
+.toggle:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-subtle); transform: translateY(-1px); }
 .toggle:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .toggleIcon { display: grid; place-items: center; width: 16px; height: 16px; }
 .toggleIcon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }

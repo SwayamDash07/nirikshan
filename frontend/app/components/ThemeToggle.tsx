@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTheme } from "./ThemeProvider";
 import styles from "./theme.module.css";
 
@@ -12,8 +13,21 @@ function MoonIcon() {
 }
 
 export default function ThemeToggle() {
-  const { mode, changeTheme } = useTheme();
-  const next = mode === "dark" ? "light" : mode === "light" ? "system" : "dark";
-  const label = mode === "system" ? "System theme" : mode === "dark" ? "Dark theme" : "Light theme";
-  return <button className={styles.toggle} type="button" onClick={() => changeTheme(next)} aria-label={`${label}. Switch to ${next} theme`} title={`${label}. Switch to ${next} theme`}><span className={styles.toggleIcon}>{mode === "dark" ? <MoonIcon /> : <SunIcon />}</span><span>{mode === "system" ? "System" : mode === "dark" ? "Dark" : "Light"}</span></button>;
+  const { changeTheme } = useTheme();
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setResolvedTheme(root.dataset.theme === "dark" ? "dark" : "light");
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+
+  const isDark = resolvedTheme === "dark";
+  const next = isDark ? "light" : "dark";
+  const label = isDark ? "Dark theme" : "Light theme";
+
+  return <button className={styles.toggle} type="button" onClick={() => changeTheme(next)} aria-label={label + ". Switch to " + next + " theme"} title={label + ". Switch to " + next + " theme"}><span className={styles.toggleIcon}>{isDark ? <MoonIcon /> : <SunIcon />}</span></button>;
 }

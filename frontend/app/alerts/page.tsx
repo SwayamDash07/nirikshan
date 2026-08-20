@@ -53,7 +53,6 @@ type CitizenRoute = { routeName: string; guidance: string; exitOrGate: string; e
 type PublicAnnouncement = { id: number; targetZoneId?: number | null; targetZoneName?: string | null; englishText: string; hindiText: string; odiaText: string; urgency: RiskLevel; source: "LIVE" | "SIMULATION"; sent: boolean };
 type RiskEvent = { zoneId: number; timestamp: string; densityScore: number; peopleCount: number; riskLevel: RiskLevel; source?: "LIVE" | "SIMULATION" };
 type CitizenForecast = { zoneId: number; zoneName: string; generatedAt: string; lastTelemetryAt?: string; currentRisk: RiskLevel; projectedRisk: RiskLevel; state: "STABLE" | "RISING" | "SURGE_RISK" | "CRUSH_RISK" | "RECOVERING" | "INSUFFICIENT_DATA"; message: string; stale: boolean; source?: "LIVE" | "SIMULATION" };
-type IncidentSummary = { summary: string; language: string; scope: string; generatedAt: string };
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
 type Point = { lat: number; lng: number };
 const labels: Record<RiskLevel, string> = {
@@ -84,6 +83,10 @@ function point(zones: Zone[], id: number): Point {
   return zone
     ? { lat: zone.latitude, lng: zone.longitude }
     : { lat: 20.3641, lng: 85.8163 };
+}
+
+function isCampus25(venue?: CampusVenue) {
+  return Boolean(venue && /campus[- ]?25/i.test(venue.name));
 }
 
 function Auth({ done }: { done: (session: Session) => void }) {
@@ -214,41 +217,9 @@ function Auth({ done }: { done: (session: Session) => void }) {
   );
 }
 
-function CitizenSummary({ enabled }: { enabled: boolean }) {
-  const { language } = useAiLanguage();
-  const [summary, setSummary] = useState<IncidentSummary>();
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [summaryError, setSummaryError] = useState("");
-
-  async function generateSummary() {
-    setSummaryLoading(true);
-    setSummaryError("");
-    try {
-      const next = await api<IncidentSummary>(`/api/venue/incident-summary?language=${language}`);
-      setSummary(next);
-    } catch (reason) {
-      setSummaryError(reason instanceof Error ? reason.message : "Could not generate a campus summary");
-    } finally {
-      setSummaryLoading(false);
-    }
-  }
-
-  return <section className={styles.aiSummaryCard} aria-live="polite">
-    <div>
-      <span className={styles.kicker}>AI CAMPUS SUMMARY</span>
-      <h2>Current safety overview</h2>
-      <p>Generate a concise, live overview in the selected language.</p>
-    </div>
-    <button className={styles.refreshButton} type="button" onClick={generateSummary} disabled={summaryLoading || !enabled}>
-      {summaryLoading ? "Generating" : "Generate summary"}
-    </button>
-    {summary && <p className={styles.aiSummaryText}>{summary.summary}</p>}
-    {summaryError && <p className={styles.aiSummaryError} role="alert">{summaryError}</p>}
-  </section>;
-}
-
 function Citizen({ session }: { session: Session }) {
   const { language } = useAiLanguage();
+  const customerPreview = session.user.role === "ADMIN" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "customer";
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
@@ -260,10 +231,22 @@ function Citizen({ session }: { session: Session }) {
   const [simulationActive, setSimulationActive] = useState(false);
   const [densityHistory, setDensityHistory] = useState<number[]>([]);
   const [location, setLocation] = useState<Point>();
+  const [pendingVenue, setPendingVenue] = useState<Venue>();
   const [selectionSource, setSelectionSource] =
     useState<VenueSelectionSource>("default");
+  const [locationIntroVisible, setLocationIntroVisible] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!customerPreview) {
+      setLocationIntroVisible(true);
+      return;
+    }
+    const key = "nirikshan.preview-customer.location-shown";
+    if (window.sessionStorage.getItem(key) === "shown") return;
+    window.sessionStorage.setItem(key, "shown");
+    setLocationIntroVisible(true);
+  }, [customerPreview]);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -326,11 +309,15 @@ function Citizen({ session }: { session: Session }) {
   }, []);
   const selectVenue = useCallback(
     (next: CampusVenue, source: VenueSelectionSource) => {
+      if (source === "search" && isCampus25(next) && next.id !== venue?.id) {
+        setPendingVenue(next);
+        return;
+      }
       setSelectionSource(source);
       setVenue(next);
       window.localStorage.setItem("nirikshan.selectedVenue", String(next.id));
     },
-    [],
+    [venue?.id],
   );
   useEffect(() => {
     if (!venue || !venues.length) return;
@@ -386,6 +373,13 @@ function Citizen({ session }: { session: Session }) {
     location &&
     venue &&
     !venueIsCovered(venue, location);
+  const campus25Venue = venues.find(isCampus25);
+  const locationFarFromCampus25 = Boolean(
+    location && campus25Venue && !venueIsCovered(campus25Venue, location),
+  );
+  const showLocationView = customerPreview
+    ? locationIntroVisible && (!location || locationFarFromCampus25)
+    : !location || locationFarFromCampus25;
   if (session.user.mustChangePassword) {
     window.location.replace("/alerts/security");
     return <main className={styles.centerState}>Opening account security</main>;
@@ -399,29 +393,13 @@ function Citizen({ session }: { session: Session }) {
       navItems={navItems}
       assistantZones={zones.map((zone) => ({ id: zone.id, name: zone.name }))}
     >
-      <div className={styles.citizenIntro}>
-        <div>
-          <span className={styles.eyebrow}>YOUR SAFETY BRIEFING</span>
-          <h2>Good to see you, {session.user.name.split(" ")[0]}.</h2>
-          <p>Here is the latest picture from your campus safety network.</p>
-        </div>
-        <button
-          className={styles.refreshButton}
-          type="button"
-          onClick={load}
-          disabled={loading}
-        >
-          {loading ? "Refreshing" : "Refresh data"}
-        </button>
-      </div>
-      <CitizenSummary enabled={Boolean(venue)} />
-      <CampusLocationPicker
-        venues={venues}
-        selectedVenue={venue}
-        location={location}
-        onLocationChange={onLocationChange}
-        onSelect={selectVenue}
-      />
+      {showLocationView && <CampusLocationPicker
+          venues={venues}
+          selectedVenue={venue}
+          location={location}
+          onLocationChange={onLocationChange}
+          onSelect={selectVenue}
+        />}
       {error && (
         <div className={styles.errorBanner} role="alert">
           {error}
@@ -463,6 +441,8 @@ function Citizen({ session }: { session: Session }) {
                 location={location}
               />
             </Card>
+            <Card className={styles.trendCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>LIVE SIGNAL</span><h2>Campus density trend</h2><p>Recent readings with live updates from the venue risk loop.</p></div></div><LiveDensityChart values={densityHistory} /></Card>
+            <Card className={styles.routeCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>ROUTE RECOMMENDATIONS</span><h2>Safer routes</h2><p>Simple guidance for moving through campus.</p></div><span className={styles.routeCount}>{recommendations.length}</span></div>{routeGuidance && <article className={styles.routeList}><strong>{routeGuidance.guidance}</strong><span>{routeGuidance.routeName}</span><small>{routeGuidance.routeAvailable ? `About ${routeGuidance.expectedTravelTimeSeconds}s · ${routeGuidance.exitOrGate}` : "Follow staff directions."}{routeGuidance.source === "SIMULATION" && " · SIMULATION"}</small></article>}{recommendations.length ? <div className={styles.routeList}>{recommendations.map((recommendation) => <article key={recommendation.id}><span className={`${styles.severity} ${styles[`severity${recommendation.severity}`]}`}>{labels[recommendation.severity]}</span>{recommendation.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}<strong>{recommendation.message}</strong><small>{ago(recommendation.createdAt)}</small></article>)}</div> : !routeGuidance && <div className={styles.routeEmpty}>No route changes are recommended right now.</div>}</Card>
             <Card className={styles.briefCard}>
               <span className={styles.kicker}>LIVE BRIEFING</span>
               <h2>
@@ -491,10 +471,6 @@ function Citizen({ session }: { session: Session }) {
           {simulationActive || alerts.some((alert) => alert.source === "SIMULATION") || recommendations.some((recommendation) => recommendation.source === "SIMULATION") || forecasts.some((forecast) => forecast.source === "SIMULATION") ? <div className={styles.simulationBanner} role="status">SIMULATION MODE: Deterministic drill data is being shown. It is not live camera telemetry.</div> : null}
           {announcements.length ? <section className={styles.alertSection} aria-live="polite"><div className={styles.sectionHeading}><div><span className={styles.kicker}>APPROVED SAFETY ANNOUNCEMENTS</span><h2>Follow these staff-approved instructions</h2></div><span>{announcements.length} sent</span></div><div className={styles.alertGrid}>{announcements.map((announcement) => <article className={styles.alertCard} key={announcement.id}><div className={styles.alertTop}><span className={`${styles.severity} ${styles[`severity${announcement.urgency}`]}`}>{labels[announcement.urgency]}</span>{announcement.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</div><h3>{announcement.targetZoneName || "Campus safety update"}</h3><p>{language === "hi" ? announcement.hindiText : language === "or" ? announcement.odiaText : announcement.englishText}</p><small>Only staff-approved announcements are shown here.</small></article>)}</div></section> : null}
           {forecasts.filter((forecast) => forecast.state !== "STABLE" || forecast.stale).map((forecast) => <Card className={styles.forecastCard} key={forecast.zoneId}><div className={styles.cardHeader}><div><span className={styles.kicker}>EARLY SAFETY UPDATE</span><h2>{forecast.zoneName}</h2><p>{forecast.message}</p></div>{forecast.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}</div><small className={styles.forecastAge}>{forecast.stale ? "Stale data" : `Updated ${ago(forecast.lastTelemetryAt || forecast.generatedAt)}`}</small></Card>)}
-          <section className={styles.customerLiveGrid}>
-            <Card className={styles.trendCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>LIVE SIGNAL</span><h2>Campus density trend</h2><p>Recent readings with live updates from the venue risk loop.</p></div></div><LiveDensityChart values={densityHistory} /></Card>
-            <Card className={styles.routeCard}><div className={styles.cardHeader}><div><span className={styles.kicker}>ROUTE RECOMMENDATIONS</span><h2>Safer routes</h2><p>Simple guidance for moving through campus.</p></div><span className={styles.routeCount}>{recommendations.length}</span></div>{routeGuidance && <article className={styles.routeList}><strong>{routeGuidance.guidance}</strong><span>{routeGuidance.routeName}</span><small>{routeGuidance.routeAvailable ? `About ${routeGuidance.expectedTravelTimeSeconds}s · ${routeGuidance.exitOrGate}` : "Follow staff directions."}{routeGuidance.source === "SIMULATION" && " · SIMULATION"}</small></article>}{recommendations.length ? <div className={styles.routeList}>{recommendations.map((recommendation) => <article key={recommendation.id}><span className={`${styles.severity} ${styles[`severity${recommendation.severity}`]}`}>{labels[recommendation.severity]}</span>{recommendation.source === "SIMULATION" && <span className={styles.simulationBadge}>SIMULATION</span>}<strong>{recommendation.message}</strong><small>{ago(recommendation.createdAt)}</small></article>)}</div> : !routeGuidance && <div className={styles.routeEmpty}>No route changes are recommended right now.</div>}</Card>
-          </section>
           <section id="alerts" className={styles.alertSection}>
             <div className={styles.sectionHeading}>
               <div>
@@ -539,15 +515,30 @@ function Citizen({ session }: { session: Session }) {
           </section>
         </>
       )}
+      {pendingVenue && <div className={styles.confirmBackdrop} role="presentation">
+        <section className={styles.confirmDialog} role="dialog" aria-modal="true" aria-labelledby="campus-confirm-title">
+          <span className={styles.kicker}>CAMPUS SELECTION</span>
+          <h2 id="campus-confirm-title">Continue with {pendingVenue.name}?</h2>
+          <p>We’ll load the live safety view for this campus even though your current location is outside its service area.</p>
+          <div className={styles.confirmActions}>
+            <button type="button" className={styles.secondaryAction} onClick={() => setPendingVenue(undefined)}>Cancel</button>
+            <button type="button" className={styles.primaryAction} onClick={() => { setSelectionSource("search"); setVenue(pendingVenue); window.localStorage.setItem("nirikshan.selectedVenue", String(pendingVenue.id)); setPendingVenue(undefined); }}>Continue</button>
+          </div>
+        </section>
+      </div>}
     </AppShell>
   );
 }
 
 export default function Page() {
   const [session, setSession] = useState<Session | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   useEffect(() => {
     const next = readSession();
-    if (!next) return;
+    if (!next) {
+      setCheckingSession(false);
+      return;
+    }
     const customerPreview =
       next.user.role === "ADMIN" &&
       new URLSearchParams(window.location.search).get("preview") === "customer";
@@ -560,7 +551,9 @@ export default function Page() {
       return;
     }
     setSession(next);
+    setCheckingSession(false);
   }, []);
+  if (checkingSession) return <main className={styles.centerState}>Checking access</main>;
   if (!session) return <Auth done={setSession} />;
   return <Citizen session={session} />;
 }

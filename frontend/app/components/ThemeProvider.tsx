@@ -12,12 +12,12 @@ function resolveTheme(mode: ThemeMode) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>("system");
-
-  useEffect(() => {
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "system";
     const saved = window.localStorage.getItem(storageKey);
-    if (saved === "light" || saved === "dark" || saved === "system") setMode(saved);
-  }, []);
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
 
   useEffect(() => {
     const apply = () => document.documentElement.dataset.theme = resolveTheme(mode);

@@ -149,7 +149,7 @@ type RouteRecommendation = {
 };
 type RouteGraph = { nodes: Array<{ id: string; label: string; kind: string }>; paths: Array<{ id: string; fromNodeId: string; toNodeId: string; capacity: number; travelTimeSeconds: number; open: boolean; blocked: boolean }> };
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || `${(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "").replace(/^http/, "ws")}/ws`;
 const riskMeta: Record<
   RiskLevel,
   { label: string; color: string; soft: string }

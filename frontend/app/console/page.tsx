@@ -520,8 +520,10 @@ function ZoneRow({
 
 type TrendPoint = { timestamp: number; density: number | null };
 
+const TREND_WINDOW_MS = 30 * 1000;
+const TREND_TICK_MS = 5 * 1000;
+
 function buildTrendData(events: RiskEvent[], now: number): TrendPoint[] {
-  const trendWindowMs = 5 * 60 * 1000;
   const points = events
     .map((event) => ({
       timestamp: new Date(event.timestamp).valueOf(),
@@ -529,12 +531,14 @@ function buildTrendData(events: RiskEvent[], now: number): TrendPoint[] {
     }))
     .filter(
       (point) =>
-        Number.isFinite(point.timestamp) && now - point.timestamp <= trendWindowMs,
+        Number.isFinite(point.timestamp) &&
+        point.timestamp <= now &&
+        now - point.timestamp <= TREND_WINDOW_MS,
     )
     .sort((a, b) => a.timestamp - b.timestamp);
   return points.reduce<TrendPoint[]>((result, point, index) => {
     const previous = points[index - 1];
-    if (previous && point.timestamp - previous.timestamp > 8000) {
+    if (previous && point.timestamp - previous.timestamp > TREND_TICK_MS + 1500) {
       result.push({ timestamp: previous.timestamp + 1, density: null });
     }
     result.push(point);
@@ -550,16 +554,12 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
   }, []);
   const data = buildTrendData(events, now);
   const actualPoints = data.filter((point) => point.density !== null);
-  const latest = actualPoints[actualPoints.length - 1]?.timestamp || now;
-  const earliest = actualPoints[0]?.timestamp || latest;
-  const visibleDuration = Math.max(
-    15000,
-    Math.min(5 * 60 * 1000, latest - earliest || 15000),
-  );
-  const windowStart = latest - visibleDuration;
+  const visibleDuration = TREND_WINDOW_MS;
+  const windowStart = now - visibleDuration;
+  const windowEnd = now;
   const ticks = Array.from(
     { length: 7 },
-    (_, index) => windowStart + (visibleDuration * index) / 6,
+    (_, index) => windowStart + TREND_TICK_MS * index,
   );
   const clock = new Date(now).toLocaleTimeString([], {
     hour: "2-digit",
@@ -570,7 +570,7 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
     new Date(value).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
-      second: visibleDuration < 60000 ? "2-digit" : undefined,
+      second: "2-digit",
       hour12: false,
     });
   return (
@@ -594,7 +594,7 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
               <XAxis
                 type="number"
                 dataKey="timestamp"
-                domain={[windowStart, latest]}
+                domain={[windowStart, windowEnd]}
                 ticks={ticks}
                 tick={{ fill: "var(--text-muted)", fontSize: 9 }}
                 tickLine={false}
@@ -836,25 +836,70 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   }, []);
   useEffect(() => {
     if (!selectedZoneId) return;
+    let refreshInFlight = false;
+    let disposed = false;
     const refresh = async () => {
+      if (refreshInFlight || disposed) return;
+      refreshInFlight = true;
       try {
         await Promise.all([
           api<Zone[]>("/api/admin/zones", { cache: "no-store" }).then((latestZones) => {
-            setZones((current) => latestZones.map((zone) => ({
-              ...zone,
-              simulationActive: current.find((item) => item.id === zone.id)?.simulationActive ?? zone.simulationActive,
-            })));
+            setZones((current) => latestZones.map((zone) => {
+              const local = current.find((item) => item.id === zone.id);
+              const serverTime = new Date(zone.lastUpdated).valueOf();
+              const localTime = local ? new Date(local.lastUpdated).valueOf() : 0;
+              return local && localTime > serverTime
+                ? local
+                : {
+                    ...zone,
+                    simulationActive: local?.simulationActive ?? zone.simulationActive,
+                  };
+            }));
+            setLiveTelemetryAtByZone((current) => {
+              const next = { ...current };
+              latestZones.forEach((zone) => {
+                const incomingTime = new Date(zone.lastUpdated).valueOf();
+                const currentTime = new Date(next[zone.id] || 0).valueOf();
+                if (Number.isFinite(incomingTime) && incomingTime >= currentTime) {
+                  next[zone.id] = zone.lastUpdated;
+                }
+              });
+              return next;
+            });
           }),
           api<RiskEvent[]>(`/api/zones/${selectedZoneId}/risk-events?limit=50`, { cache: "no-store" }).then((recent) => {
-            setEvents(recent);
-            setHotspotEventsByZone((current) => ({ ...current, [selectedZoneId]: recent }));
+            setEvents((current) => {
+              const merged = new Map(current.map((event) => [event.timestamp, event]));
+              recent.forEach((event) => merged.set(event.timestamp, event));
+              return [...merged.values()]
+                .sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf())
+                .slice(0, 50);
+            });
+            setHotspotEventsByZone((current) => {
+              const existing = current[selectedZoneId] || [];
+              const merged = new Map(existing.map((event) => [event.timestamp, event]));
+              recent.forEach((event) => merged.set(event.timestamp, event));
+              return {
+                ...current,
+                [selectedZoneId]: [...merged.values()]
+                  .sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf())
+                  .slice(0, 50),
+              };
+            });
           }),
         ]);
       } catch {
         // WebSocket delivery remains active; retain the last good snapshot if polling fails.
+      } finally {
+        refreshInFlight = false;
       }
     };
     void refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
   }, [selectedZoneId]);
   useEffect(() => {
     if (selectedZoneId) loadForecast(selectedZoneId);

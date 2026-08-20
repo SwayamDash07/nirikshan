@@ -656,17 +656,28 @@ class EventDeliveryQueue:
                 continue
             if event is None:
                 return
-            retry_delays = (2.0, 5.0, 10.0)
-            for attempt in range(1, len(retry_delays) + 2):
+            # Live telemetry is latest-first. Do not block a zone for tens of
+            # seconds retrying an obsolete event while newer readings queue up.
+            for attempt in range(1, 2):
+                request_started_at = time.perf_counter()
                 try:
                     response = requests.post(self.url, json=event, timeout=self.timeout)
                     response.raise_for_status()
-                    print(f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} timestamp={event['timestamp']}", flush=True)
+                    round_trip_ms = (time.perf_counter() - request_started_at) * 1000
+                    print(
+                        f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} "
+                        f"timestamp={event['timestamp']} roundTripMs={round_trip_ms:.0f} attempt={attempt}",
+                        flush=True,
+                    )
                     break
                 except requests.RequestException as error:
-                    if attempt <= len(retry_delays) and not self.stop.wait(retry_delays[attempt - 1]):
-                        continue
-                    print(f"EVENT_DELIVERY_FAILED zone={event['zoneId']} attempts={attempt} error={error}", file=sys.stderr, flush=True)
+                    round_trip_ms = (time.perf_counter() - request_started_at) * 1000
+                    print(
+                        f"EVENT_DELIVERY_FAILED zone={event['zoneId']} attempts={attempt} latest_first=true "
+                        f"roundTripMs={round_trip_ms:.0f} error={error}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
             self.pending.task_done()
 
     def close(self) -> None:
@@ -716,7 +727,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--post-live", action="store_true", help="POST each generated event during processing")
     parser.add_argument("--loop", action="store_true", help="Run continuously, restart at EOF, and timestamp each event with current UTC time")
     parser.add_argument("--post-delay", type=float, default=0.0, help="Extra seconds added between live POSTs")
-    parser.add_argument("--timeout", type=float, default=60.0, help="HTTP POST timeout in seconds (default: 60)")
+    parser.add_argument("--timeout", type=float, default=5.0, help="HTTP POST timeout in seconds (default: 5 for live latest-first delivery)")
     return parser.parse_args()
 
 

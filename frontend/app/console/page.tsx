@@ -521,6 +521,7 @@ function ZoneRow({
 type TrendPoint = { timestamp: number; density: number | null };
 
 function buildTrendData(events: RiskEvent[], now: number): TrendPoint[] {
+  const trendWindowMs = 5 * 60 * 1000;
   const points = events
     .map((event) => ({
       timestamp: new Date(event.timestamp).valueOf(),
@@ -528,7 +529,7 @@ function buildTrendData(events: RiskEvent[], now: number): TrendPoint[] {
     }))
     .filter(
       (point) =>
-        Number.isFinite(point.timestamp) && now - point.timestamp <= 60000,
+        Number.isFinite(point.timestamp) && now - point.timestamp <= trendWindowMs,
     )
     .sort((a, b) => a.timestamp - b.timestamp);
   return points.reduce<TrendPoint[]>((result, point, index) => {
@@ -553,7 +554,7 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
   const earliest = actualPoints[0]?.timestamp || latest;
   const visibleDuration = Math.max(
     15000,
-    Math.min(60000, latest - earliest || 15000),
+    Math.min(5 * 60 * 1000, latest - earliest || 15000),
   );
   const windowStart = latest - visibleDuration;
   const ticks = Array.from(
@@ -636,8 +637,8 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
         </div>
       ) : (
         <div className={styles.chartEmpty}>
-          Waiting for live events.
-          <span>Connect a camera feed to populate this signal.</span>
+          No recent readings for this zone.
+          <span>The live worker has not supplied a reading in the chart window.</span>
         </div>
       )}
     </Card>
@@ -784,14 +785,15 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         try { return [zone.id, await api<RiskEvent[]>(`/api/zones/${zone.id}/risk-events?limit=50`)] as const; }
         catch { return [zone.id, []] as const; }
       }));
-      setHotspotEventsByZone(Object.fromEntries(recentEvents));
-      setReports(nextReports);
-      setHealth(status);
-      setSelectedZoneId((current) =>
-        current && venueZones.some((zone) => zone.id === current)
-          ? current
-          : venueZones[0]?.id,
-      );
+       const recentEventsByZone = Object.fromEntries(recentEvents) as Record<number, RiskEvent[]>;
+       setHotspotEventsByZone(recentEventsByZone);
+       setReports(nextReports);
+       setHealth(status);
+       const nextSelectedZoneId = selectedZoneIdRef.current && venueZones.some((zone) => zone.id === selectedZoneIdRef.current)
+         ? selectedZoneIdRef.current
+         : venueZones[0]?.id;
+       setSelectedZoneId(nextSelectedZoneId);
+       setEvents(nextSelectedZoneId ? recentEventsByZone[nextSelectedZoneId] || [] : []);
     } catch (reason) {
       setError(
         reason instanceof Error

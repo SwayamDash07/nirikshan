@@ -1,6 +1,6 @@
 {
   "lookbackSeconds": 10.0,
-  "emitEverySeconds": 1.0,
+  "emitEverySeconds": 5.0,
   "processEveryNFrames": 3,
   "personConfidence": 0.24,
   "augment": false,

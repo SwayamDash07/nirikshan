@@ -4,6 +4,7 @@ import com.nirikshan.dto.*;
 import com.nirikshan.model.*;
 import com.nirikshan.repository.*;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +24,9 @@ public class RiskEventService {
     private final ObjectMapper objectMapper;
     private final RiskForecastService forecastService;
     private final FlowBehaviorService flowBehaviorService;
-    public RiskEventService(RiskEventRepository eventRepository, ZoneRepository zoneRepository, AlertRepository alertRepository, RecommendationService recommendationService, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper, RiskForecastService forecastService, FlowBehaviorService flowBehaviorService) {
-        this.eventRepository = eventRepository; this.zoneRepository = zoneRepository; this.alertRepository = alertRepository; this.recommendationService = recommendationService; this.messagingTemplate = messagingTemplate; this.objectMapper = objectMapper; this.forecastService = forecastService; this.flowBehaviorService = flowBehaviorService;
+    private final ApplicationEventPublisher eventPublisher;
+    public RiskEventService(RiskEventRepository eventRepository, ZoneRepository zoneRepository, AlertRepository alertRepository, RecommendationService recommendationService, SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper, RiskForecastService forecastService, FlowBehaviorService flowBehaviorService, ApplicationEventPublisher eventPublisher) {
+        this.eventRepository = eventRepository; this.zoneRepository = zoneRepository; this.alertRepository = alertRepository; this.recommendationService = recommendationService; this.messagingTemplate = messagingTemplate; this.objectMapper = objectMapper; this.forecastService = forecastService; this.flowBehaviorService = flowBehaviorService; this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -57,21 +59,10 @@ public class RiskEventService {
         zone.setCurrentDensity(request.densityScore()); zone.setCurrentPeopleCount(request.peopleCount()); zone.setCurrentRiskLevel(request.riskLevel()); zone.setLastUpdated(request.timestamp());
         updateBottleneck(zone);
         zoneRepository.save(zone);
-        recommendationService.evaluate(zone, saved, previousRisk, previousEvent);
-        if (request.riskLevel() == RiskLevel.LOW) resolveStaleAlerts(zone, request.timestamp());
         RiskEventResponse response = toResponse(saved);
         messagingTemplate.convertAndSend("/topic/risk-updates", response);
-        var forecast = forecastService.forecast(zone.getId());
-        messagingTemplate.convertAndSend("/topic/risk-forecasts", forecast);
-        messagingTemplate.convertAndSend("/topic/risk-intelligence", forecast);
-        if (request.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal()
-                || (forecast.stampedeLikelihood() != null && "HIGH".equals(forecast.stampedeLikelihood().level()))) {
-            RiskLevel alertSeverity = request.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal() ? request.riskLevel() : RiskLevel.HIGH;
-            String alertMessage = forecast.stampedeLikelihood() != null && "HIGH".equals(forecast.stampedeLikelihood().level())
-                    ? "Heuristic stampede likelihood HIGH: " + forecast.stampedeLikelihood().explanation() : request.explanation();
-            Alert alert = upsertActiveAlert(zone, request.timestamp(), alertMessage, alertSeverity, saved.getSource());
-            messagingTemplate.convertAndSend("/topic/alerts", toResponse(alert));
-        }
+        eventPublisher.publishEvent(new RiskEventIngestedEvent(saved.getId(), zone.getId(), previousRisk,
+                previousEvent == null ? null : previousEvent.getId()));
         return response;
     }
     @Transactional(readOnly = true)

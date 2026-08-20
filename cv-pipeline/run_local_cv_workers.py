@@ -246,7 +246,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-url", "--url", dest="target_url", default="http://localhost:8080/api/risk-events", help="Risk-event POST target")
     parser.add_argument("--workers", type=int, default=6, help="Maximum concurrent zone processes (default: 6)")
     parser.add_argument("--thresholds", default=str(PIPELINE_DIR / "thresholds_config.json"), help="Threshold/calibration JSON")
-    parser.add_argument("--model", default="yolo26s.pt", help="Independent YOLO weights loaded by every zone process")
+    parser.add_argument("--model", default="yolov8n.pt", help="Independent YOLO weights loaded by every zone process (default: yolov8n.pt)")
     parser.add_argument("--timeout", type=float, default=60.0, help="Risk-event POST timeout (default: 60 seconds)")
     parser.add_argument("--manifest-poll-seconds", type=float, default=2.0, help="Manifest/source reconciliation interval")
     parser.add_argument("--worker-start-delay", type=float, default=1.5, help="Delay between starting zone workers (default: 1.5 seconds)")

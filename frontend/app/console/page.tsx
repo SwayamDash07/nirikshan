@@ -399,21 +399,20 @@ function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSumm
   compact?: boolean;
   onViewMore?: () => void;
 }) {
-  const analysisPeopleCount = selectedAnalysis?.analysisPeopleCount ?? 0;
   if (compact) {
     return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
       <div className={styles.cardHeader}>
         <div><span className={styles.kicker}>SELECTED ZONE</span><h2>{selectedZone?.name || "No zone selected"}</h2></div>
-        <StatusBadge level={selectedAnalysis?.currentRisk || selectedZone?.currentRiskLevel || "LOW"} />
+        <StatusBadge level={selectedZone?.currentRiskLevel || "LOW"} />
       </div>
       {selectedZone ? <>
         {analysisBottleneck && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
         <div className={styles.contextStats}>
-          <div><span>Headcount</span><strong>{selectedAnalysis ? analysisPeopleCount : selectedZone.currentPeopleCount ?? 0}</strong></div>
-          <div><span>Density</span><strong>{(selectedAnalysis?.currentDensity ?? selectedZone.currentDensity).toFixed(2)}</strong></div>
+          <div><span>Headcount</span><strong>{selectedZone.currentPeopleCount ?? 0}</strong></div>
+          <div><span>Density</span><strong>{selectedZone.currentDensity.toFixed(2)}</strong></div>
           <div><span>Last telemetry</span><strong>{formatTime(liveTelemetryAt)}</strong></div>
         </div>
-        <div className={styles.summaryRow}><span>Risk</span><strong>{selectedAnalysis?.currentRisk || selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{formatTime(selectedAnalysis?.analysisGeneratedAt)}</strong></div>
+        <div className={styles.summaryRow}><span>Risk</span><strong>{selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{formatTime(selectedAnalysis?.analysisGeneratedAt)}</strong></div>
         <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
       </> : <p className={styles.noDataNotice}>Select a zone from the map.</p>}
     </Card>;
@@ -425,14 +424,14 @@ function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSumm
         <h2>{selectedZone?.name || "No zone selected"}</h2>
         {selectedZone?.simulationActive && <span className={styles.simulationBadge}>SIMULATION MODE</span>}
       </div>
-      <StatusBadge level={selectedAnalysis?.currentRisk || selectedZone?.currentRiskLevel || "LOW"} />
+      <StatusBadge level={selectedZone?.currentRiskLevel || "LOW"} />
     </div>
     {selectedZone ? (
       <>
         {analysisBottleneck && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
         <div className={styles.contextStats}>
-          <div><span>Headcount</span><strong>{selectedAnalysis ? analysisPeopleCount : selectedZone.currentPeopleCount ?? 0}</strong></div>
-          <div><span>Density</span><strong>{(selectedAnalysis?.currentDensity ?? selectedZone.currentDensity).toFixed(2)}</strong></div>
+          <div><span>Headcount</span><strong>{selectedZone.currentPeopleCount ?? 0}</strong></div>
+          <div><span>Density</span><strong>{selectedZone.currentDensity.toFixed(2)}</strong></div>
           <div><span>Last telemetry</span><strong>{formatTime(liveTelemetryAt)}</strong></div>
         </div>
         {selectedAnalysis ? <div className={styles.signalFacts}>
@@ -835,7 +834,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   }, []);
   useEffect(() => {
     if (!selectedZoneId) return;
-    let cancelled = false;
     const refresh = async () => {
       try {
         await Promise.all([
@@ -855,13 +853,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       }
     };
     void refresh();
-    const timer = window.setInterval(() => {
-      if (!cancelled) void refresh();
-    }, 1000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
   }, [selectedZoneId]);
   useEffect(() => {
     if (selectedZoneId) loadForecast(selectedZoneId);

@@ -652,14 +652,15 @@ class EventDeliveryQueue:
                 continue
             if event is None:
                 return
-            for attempt in range(1, 4):
+            retry_delays = (2.0, 5.0, 10.0)
+            for attempt in range(1, len(retry_delays) + 2):
                 try:
                     response = requests.post(self.url, json=event, timeout=self.timeout)
                     response.raise_for_status()
                     print(f"POST {response.status_code}: zone={event['zoneId']} level={event['riskLevel']} timestamp={event['timestamp']}", flush=True)
                     break
                 except requests.RequestException as error:
-                    if attempt < 3 and not self.stop.wait(min(2 ** (attempt - 1), 4)):
+                    if attempt <= len(retry_delays) and not self.stop.wait(retry_delays[attempt - 1]):
                         continue
                     print(f"EVENT_DELIVERY_FAILED zone={event['zoneId']} attempts={attempt} error={error}", file=sys.stderr, flush=True)
             self.pending.task_done()
@@ -711,7 +712,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--post-live", action="store_true", help="POST each generated event during processing")
     parser.add_argument("--loop", action="store_true", help="Run continuously, restart at EOF, and timestamp each event with current UTC time")
     parser.add_argument("--post-delay", type=float, default=0.0, help="Extra seconds added between live POSTs")
-    parser.add_argument("--timeout", type=float, default=10.0, help="HTTP POST timeout in seconds")
+    parser.add_argument("--timeout", type=float, default=60.0, help="HTTP POST timeout in seconds (default: 60)")
     return parser.parse_args()
 
 

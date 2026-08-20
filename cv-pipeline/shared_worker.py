@@ -210,7 +210,7 @@ def main() -> None:
     parser.add_argument("--thresholds", required=True)
     parser.add_argument("--post-url", required=True)
     parser.add_argument("--model", default="yolo26s.pt")
-    parser.add_argument("--timeout", type=float, default=8.0)
+    parser.add_argument("--timeout", type=float, default=60.0, help="HTTP POST timeout in seconds (default: 60)")
     run(parser.parse_args())
 
 

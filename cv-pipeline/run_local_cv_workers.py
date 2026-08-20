@@ -20,12 +20,17 @@ import subprocess
 import sys
 import threading
 import time
+from urllib.parse import urlsplit, urlunsplit
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+import requests
 
 
 PIPELINE_DIR = Path(__file__).resolve().parent
+BACKEND_WAKEUP_TIMEOUT = 60.0
+BACKEND_WAKEUP_RETRY_DELAYS = (2.0, 5.0, 10.0)
 
 
 @dataclass
@@ -100,6 +105,36 @@ def command_for(zone_id: int, input_path: Path, source_clip_id: str, args: argpa
     ]
 
 
+def health_url(target_url: str) -> str:
+    parsed = urlsplit(target_url)
+    api_marker = "/api/"
+    api_index = parsed.path.find(api_marker)
+    base_path = parsed.path[:api_index] if api_index >= 0 else parsed.path.rstrip("/")
+    return urlunsplit((parsed.scheme, parsed.netloc, f"{base_path}/api/health", "", ""))
+
+
+def wait_for_backend(target_url: str, stopping: Callable[[], bool]) -> None:
+    url = health_url(target_url)
+    attempt = 0
+    while not stopping():
+        attempt += 1
+        try:
+            response = requests.get(url, timeout=BACKEND_WAKEUP_TIMEOUT)
+            response.raise_for_status()
+            print(f"BACKEND_READY url={url} status={response.status_code} attempts={attempt}", flush=True)
+            return
+        except requests.RequestException as error:
+            delay = BACKEND_WAKEUP_RETRY_DELAYS[min(attempt - 1, len(BACKEND_WAKEUP_RETRY_DELAYS) - 1)]
+            print(
+                f"Waiting for backend to wake up... url={url} attempt={attempt} "
+                f"retry_in={delay:g}s error={error}",
+                flush=True,
+            )
+            if stopping():
+                return
+            time.sleep(delay)
+
+
 def terminate_worker(worker: Worker, reason: str) -> None:
     if worker.process.poll() is not None:
         return
@@ -163,6 +198,8 @@ def run(args: argparse.Namespace) -> int:
         flush=True,
     )
     try:
+        print(f"BACKEND_WAKEUP_CHECK url={health_url(args.target_url)}", flush=True)
+        wait_for_backend(args.target_url, lambda: stopping)
         while not stopping:
             entries = load_manifest(manifest_path)
             desired = desired_workers(manifest_path, entries, args.workers)
@@ -188,6 +225,8 @@ def run(args: argparse.Namespace) -> int:
                 if zone_id in workers or failed_sources.get(zone_id) == source:
                     continue
                 workers[zone_id] = start_worker(zone_id, source, source_path, clip_id, args, output_dir)
+                if not stopping:
+                    time.sleep(args.worker_start_delay)
 
             time.sleep(max(0.5, args.manifest_poll_seconds))
     finally:
@@ -199,19 +238,24 @@ def run(args: argparse.Namespace) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run independent local YOLO workers, one per zone")
-    parser.add_argument("--manifest", default="outputs/live/zones.json", help="Zone manifest JSON (default: outputs/live/zones.json)")
+    parser.add_argument(
+        "--manifest",
+        default=str(PIPELINE_DIR / "outputs" / "live" / "zones.json"),
+        help="Zone manifest JSON (default: cv-pipeline/outputs/live/zones.json)",
+    )
     parser.add_argument("--target-url", "--url", dest="target_url", default="http://localhost:8080/api/risk-events", help="Risk-event POST target")
     parser.add_argument("--workers", type=int, default=6, help="Maximum concurrent zone processes (default: 6)")
     parser.add_argument("--thresholds", default=str(PIPELINE_DIR / "thresholds_config.json"), help="Threshold/calibration JSON")
     parser.add_argument("--model", default="yolo26s.pt", help="Independent YOLO weights loaded by every zone process")
-    parser.add_argument("--timeout", type=float, default=10.0, help="Risk-event POST timeout")
+    parser.add_argument("--timeout", type=float, default=60.0, help="Risk-event POST timeout (default: 60 seconds)")
     parser.add_argument("--manifest-poll-seconds", type=float, default=2.0, help="Manifest/source reconciliation interval")
+    parser.add_argument("--worker-start-delay", type=float, default=1.5, help="Delay between starting zone workers (default: 1.5 seconds)")
     parser.add_argument("--allow-cpu", action="store_true", help="Allow local CPU inference; GPU is required by default")
     args = parser.parse_args()
     if args.workers <= 0:
         raise SystemExit("--workers must be greater than zero")
-    if args.timeout <= 0 or args.manifest_poll_seconds <= 0:
-        raise SystemExit("--timeout and --manifest-poll-seconds must be greater than zero")
+    if args.timeout <= 0 or args.manifest_poll_seconds <= 0 or args.worker_start_delay < 0:
+        raise SystemExit("--timeout and --manifest-poll-seconds must be greater than zero; --worker-start-delay cannot be negative")
     return args
 
 

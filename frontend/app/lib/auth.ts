@@ -41,8 +41,9 @@ export function clearSession() { window.localStorage.removeItem(key); }
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const session = readSession();
   const method = (init.method || "GET").toUpperCase();
+  const bypassMemoryCache = init.cache === "no-store";
   const cacheKey = `${session?.token || "anonymous"}:${path}`;
-  if (method === "GET") {
+  if (method === "GET" && !bypassMemoryCache) {
     const cached = responseCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
     const pending = pendingGets.get(cacheKey);
@@ -89,6 +90,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     return payload as T;
   })();
   if (method !== "GET") { responseCache.clear(); return request; }
+  if (bypassMemoryCache) return request;
   pendingGets.set(cacheKey, request);
   try {
     const value = await request;

@@ -739,6 +739,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const [now, setNow] = useState(() => Date.now());
   const stompRef = useRef<Client | null>(null);
   const forecastRef = useRef<RiskForecast | undefined>(undefined);
+  const selectedZoneIdRef = useRef<number>();
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
   const selectedHotspotSummary = forecast?.analysisHotspotRegions?.length
     ? { regions: forecast.analysisHotspotRegions, durationSeconds: forecast.hotspotPersistenceSeconds }
@@ -757,6 +758,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const selectedAnalysis = forecast?.zoneId === selectedZoneId ? forecast : undefined;
   const analysisBottleneck = selectedAnalysis?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
   useEffect(() => { forecastRef.current = forecast; }, [forecast]);
+  useEffect(() => { selectedZoneIdRef.current = selectedZoneId; }, [selectedZoneId]);
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -801,15 +803,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       setLoading(false);
     }
   }, []);
-  const loadEvents = useCallback(async (zoneId: number) => {
-    try {
-      const recent = await api<RiskEvent[]>(`/api/zones/${zoneId}/risk-events?limit=50`);
-      setEvents(recent);
-      setHotspotEventsByZone((current) => ({ ...current, [zoneId]: recent }));
-    } catch {
-      setEvents([]);
-    }
-  }, []);
   const loadForecast = useCallback(async (zoneId: number) => {
     setForecastLoading(true);
     setForecast(undefined);
@@ -841,8 +834,35 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (selectedZoneId) loadEvents(selectedZoneId);
-  }, [selectedZoneId, loadEvents]);
+    if (!selectedZoneId) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        await Promise.all([
+          api<Zone[]>("/api/admin/zones", { cache: "no-store" }).then((latestZones) => {
+            setZones((current) => latestZones.map((zone) => ({
+              ...zone,
+              simulationActive: current.find((item) => item.id === zone.id)?.simulationActive ?? zone.simulationActive,
+            })));
+          }),
+          api<RiskEvent[]>(`/api/zones/${selectedZoneId}/risk-events?limit=50`, { cache: "no-store" }).then((recent) => {
+            setEvents(recent);
+            setHotspotEventsByZone((current) => ({ ...current, [selectedZoneId]: recent }));
+          }),
+        ]);
+      } catch {
+        // WebSocket delivery remains active; retain the last good snapshot if polling fails.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (!cancelled) void refresh();
+    }, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [selectedZoneId]);
   useEffect(() => {
     if (selectedZoneId) loadForecast(selectedZoneId);
   }, [selectedZoneId, loadForecast]);
@@ -857,9 +877,10 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         setConnected(true);
         client.subscribe("/topic/risk-updates", (message: IMessage) => {
           const event = JSON.parse(message.body) as RiskEvent;
+          const eventZoneId = Number(event.zoneId);
           setZones((current) =>
             current.map((zone) =>
-              zone.id === event.zoneId
+              Number(zone.id) === eventZoneId
                 ? {
                     ...zone,
                     currentDensity: event.densityScore,
@@ -878,17 +899,17 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               ? { ...current, totalRiskEvents: current.totalRiskEvents + 1 }
               : current,
           );
-          setLiveTelemetryAtByZone((current) => ({ ...current, [event.zoneId]: event.timestamp }));
-          if (event.zoneId === selectedZoneId)
+          setLiveTelemetryAtByZone((current) => ({ ...current, [eventZoneId]: event.timestamp }));
+          if (eventZoneId === Number(selectedZoneIdRef.current))
             setEvents((current) => [event, ...current].slice(0, 50));
           setHotspotEventsByZone((current) => ({
             ...current,
-            [event.zoneId]: [event, ...(current[event.zoneId] || [])].slice(0, 50),
+            [eventZoneId]: [event, ...(current[eventZoneId] || [])].slice(0, 50),
           }));
         });
         client.subscribe("/topic/risk-forecasts", (message: IMessage) => {
           const nextForecast = JSON.parse(message.body) as RiskForecast;
-          const selected = nextForecast.zoneId === selectedZoneId;
+          const selected = nextForecast.zoneId === selectedZoneIdRef.current;
           const currentForecast = forecastRef.current;
           if (!selected) return;
           if (nextForecast.lastTelemetryAt) setLiveTelemetryAtByZone((current) => ({ ...current, [nextForecast.zoneId]: nextForecast.lastTelemetryAt! }));
@@ -909,7 +930,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       client.deactivate();
       stompRef.current = null;
     };
-  }, [selectedZoneId]);
+  }, []);
   function takeAction(id: number, zoneId: number | null | undefined, zoneName: string | null | undefined, message: string) {
     const params = new URLSearchParams();
     if (zoneId) params.set("zoneId", String(zoneId));

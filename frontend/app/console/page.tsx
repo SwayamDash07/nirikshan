@@ -225,6 +225,18 @@ function directionDataIsAvailable(forecast?: RiskForecast) {
       forecast.dominantDirection !== "Unknown",
   );
 }
+function flowPresentation(forecast?: RiskForecast) {
+  const state = forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
+  const sufficient = flowDataIsSufficient(forecast);
+  const directionAvailable = directionDataIsAvailable(forecast);
+  const behaviorStabilizing = !sufficient && directionAvailable && state === "INSUFFICIENT_DATA";
+  return {
+    stateLabel: behaviorStabilizing ? "STABILIZING" : state.replaceAll("_", " "),
+    resultLabel: forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable ? "PARTIAL" : "INSUFFICIENT_DATA",
+    sufficient,
+    directionAvailable,
+  };
+}
 function highestRisk(zones: Zone[]): RiskLevel {
   return zones.reduce<RiskLevel>(
     (highest, zone) =>
@@ -256,15 +268,16 @@ function gridPositionLabel(position: string) {
   const [row, column] = position.split(",").map(Number);
   return `${row === 1 ? "top" : row === 3 ? "bottom" : "center"}-${column === 1 ? "left" : column === 3 ? "right" : "center"}`;
 }
+const LIVE_SIGNAL_WINDOW_MS = 30_000;
 function summarizeHotspots(events: RiskEvent[], now = Date.now()): HotspotSummary | undefined {
   const ordered = [...events].sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf());
   const latest = ordered[0];
   if (!latest?.hotspotRegions?.length) return undefined;
   const latestTime = new Date(latest.timestamp).valueOf();
-  const anchor = now - latestTime <= 15000 ? now : latestTime;
+  const anchor = now - latestTime <= LIVE_SIGNAL_WINDOW_MS ? now : latestTime;
   let oldest = latest;
   for (const event of ordered.slice(1)) {
-    if (!event.hotspotRegions?.length || latestTime - new Date(event.timestamp).valueOf() > 15000) break;
+    if (!event.hotspotRegions?.length || latestTime - new Date(event.timestamp).valueOf() > LIVE_SIGNAL_WINDOW_MS) break;
     oldest = event;
   }
   return {
@@ -330,14 +343,9 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forec
 
 function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, compact = false, onViewMore }: { forecast?: RiskForecast; route?: RouteRecommendation; graph?: RouteGraph; now: number; compact?: boolean; onViewMore?: () => void }) {
   const forecast = inputForecast;
-  const state = forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
-  const sufficient = flowDataIsSufficient(forecast);
-  const directionAvailable = directionDataIsAvailable(forecast);
-  const behaviorStabilizing = !sufficient && directionAvailable && state === "INSUFFICIENT_DATA";
-  const stateLabel = behaviorStabilizing ? "STABILIZING" : state.replaceAll("_", " ");
+  const { stateLabel, resultLabel, sufficient, directionAvailable } = flowPresentation(forecast);
   const reverseWarning = sufficient && (forecast?.reverseMovementRatio || 0) >= 0.45;
   const conflictWarning = sufficient && (forecast?.conflictingMovementRatio || 0) >= 0.30;
-  const resultLabel = forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable ? "PARTIAL" : "INSUFFICIENT_DATA";
   if (compact) {
     return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
       <div className={styles.cardHeader}>
@@ -741,13 +749,14 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const [now, setNow] = useState(() => Date.now());
   const stompRef = useRef<Client | null>(null);
   const forecastRef = useRef<RiskForecast | undefined>(undefined);
+  const forecastRefreshAtRef = useRef<number>();
   const selectedZoneIdRef = useRef<number>();
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
   const selectedHotspotSummary = forecast?.analysisHotspotRegions?.length
     ? { regions: forecast.analysisHotspotRegions, durationSeconds: forecast.hotspotPersistenceSeconds }
     : undefined;
   const zonesRequiringAttention = zones.filter((zone) => riskRank[zone.currentRiskLevel] >= riskRank.MEDIUM).length;
-  const freshSignals = zones.filter((zone) => zone.lastUpdated && now - new Date(zone.lastUpdated).valueOf() <= 15000).length;
+  const freshSignals = zones.filter((zone) => zone.lastUpdated && now - new Date(zone.lastUpdated).valueOf() <= LIVE_SIGNAL_WINDOW_MS).length;
   const totalHeadcount = zones.reduce(
     (sum, zone) => sum + (zone.currentPeopleCount ?? 0),
     0,
@@ -756,7 +765,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const overallMeta = riskMeta[overallRisk];
   const simulationZoneIds = new Set(zones.filter((zone) => zone.simulationActive).map((zone) => zone.id));
   const liveTelemetryAt = selectedZoneId ? liveTelemetryAtByZone[selectedZoneId] || selectedZone?.lastUpdated : selectedZone?.lastUpdated;
-  const telemetryStale = Boolean(liveTelemetryAt) && now - new Date(liveTelemetryAt!).valueOf() > 15000;
+  const telemetryStale = Boolean(liveTelemetryAt) && now - new Date(liveTelemetryAt!).valueOf() > LIVE_SIGNAL_WINDOW_MS;
   const selectedAnalysis = forecast?.zoneId === selectedZoneId ? forecast : undefined;
   const analysisBottleneck = selectedAnalysis?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
   useEffect(() => { forecastRef.current = forecast; }, [forecast]);
@@ -806,13 +815,23 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       setLoading(false);
     }
   }, []);
-  const loadForecast = useCallback(async (zoneId: number) => {
+  const loadForecast = useCallback(async (zoneId: number, clearCurrent = false) => {
     setForecastLoading(true);
-    setForecast(undefined);
-    setForecastUpdatedAt(undefined);
+    if (clearCurrent) {
+      setForecast(undefined);
+      setForecastUpdatedAt(undefined);
+    }
     setForecastError("");
-    try { setForecast(await api<RiskForecast>(`/api/zones/${zoneId}/risk-forecast`)); setForecastUpdatedAt(Date.now()); }
-    catch (reason) { setForecast(undefined); setForecastError(reason instanceof Error ? reason.message : "Could not load the risk forecast."); }
+    try {
+      const nextForecast = await api<RiskForecast>(`/api/zones/${zoneId}/risk-forecast`);
+      if (selectedZoneIdRef.current === zoneId) {
+        setForecast(nextForecast);
+        setForecastUpdatedAt(Date.now());
+      }
+    } catch (reason) {
+      if (clearCurrent) setForecast(undefined);
+      setForecastError(reason instanceof Error ? reason.message : "Could not load the risk forecast.");
+    }
     finally { setForecastLoading(false); }
   }, []);
   const loadRoutes = useCallback(async (zoneId: number, venueId?: number) => {
@@ -904,8 +923,14 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     };
   }, [selectedZoneId]);
   useEffect(() => {
-    if (selectedZoneId) loadForecast(selectedZoneId);
+    if (selectedZoneId) loadForecast(selectedZoneId, true);
   }, [selectedZoneId, loadForecast]);
+  useEffect(() => {
+    const nextAnalysisAt = forecast?.nextAnalysisAt ? new Date(forecast.nextAnalysisAt).valueOf() : NaN;
+    if (!selectedZoneId || !Number.isFinite(nextAnalysisAt) || now < nextAnalysisAt || forecastLoading || forecastRefreshAtRef.current === nextAnalysisAt) return;
+    forecastRefreshAtRef.current = nextAnalysisAt;
+    void loadForecast(selectedZoneId);
+  }, [forecast?.nextAnalysisAt, forecastLoading, loadForecast, now, selectedZoneId]);
   useEffect(() => {
     if (selectedZoneId && venue?.id) loadRoutes(selectedZoneId, venue.id);
   }, [selectedZoneId, venue?.id, loadRoutes]);
@@ -1100,7 +1125,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           <Metric
             label="Fresh signals"
             value={freshSignals}
-            detail="Updated in the last 15s"
+            detail="Updated in the last 30s"
             tone={freshSignals === zones.length && zones.length ? "success" : "danger"}
           />
           <Metric

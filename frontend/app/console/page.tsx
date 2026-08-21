@@ -135,6 +135,27 @@ type RiskForecast = {
   panicPropagation?: { state: string; sourceZoneId?: number; sourceZoneName?: string; affectedZoneIds: number[]; confidence: number; explanation: string; source: "LIVE" | "SIMULATION" };
   unusualBehavior?: { detected: boolean; state: string; persistentReadings: number; confidence: number; evidence: string[]; explanation: string };
 };
+type FlowStatus = {
+  zoneId: number;
+  zoneName: string;
+  observedAt?: string;
+  dominantDirection?: string;
+  directionDegrees?: number;
+  directionConfidence: number;
+  directionalConsistency: number;
+  reverseMovementRatio: number;
+  conflictingMovementRatio: number;
+  behaviorState: FlowBehaviorState;
+  behaviorExplanation: string;
+  sufficientData: boolean;
+  analysisGeneratedAt?: string;
+  analysisWindowStart?: string;
+  analysisWindowEnd?: string;
+  nextAnalysisAt?: string;
+  analysisIntervalSeconds?: number;
+  dataSufficiency?: string;
+  unusualBehavior?: RiskForecast["unusualBehavior"];
+};
 type RouteRecommendation = {
   recommendedRoute?: { routeId: string; routeName: string; exitOrGate: string; expectedTravelTimeSeconds: number; riskScore: number; reason: string; nodeLabels: string[] };
   rejectedRoutes: Array<{ routeName: string; exitOrGate: string; expectedTravelTimeSeconds: number; riskScore: number; reason: string; blocked: boolean }>;
@@ -215,30 +236,39 @@ function analysisWindowLabel(start?: string, end?: string) {
   if (!start || !end) return "Unavailable";
   return `${formatTime(start)}–${formatTime(end)}`;
 }
-function flowDataIsSufficient(forecast?: RiskForecast) {
+function flowDataIsSufficient(forecast?: RiskForecast, flowStatus?: FlowStatus) {
+  if (flowStatus) return flowStatus.sufficientData;
   return Boolean(forecast && (forecast.flowState || forecast.behaviorState) !== "INSUFFICIENT_DATA" && forecast.dataSufficiency === "SUFFICIENT");
 }
-function directionDataIsAvailable(forecast?: RiskForecast) {
+function directionDataIsAvailable(forecast?: RiskForecast, flowStatus?: FlowStatus) {
   return Boolean(
-    forecast &&
-      !forecast.stale &&
-      forecast.directionDegrees != null &&
-      forecast.directionConfidence != null &&
-      forecast.directionConfidence > 0 &&
-      forecast.dominantDirection &&
-      forecast.dominantDirection !== "Unknown",
+    (flowStatus || forecast) &&
+      (flowStatus ? true : !forecast?.stale) &&
+      (flowStatus?.directionDegrees ?? forecast?.directionDegrees) != null &&
+      (flowStatus?.directionConfidence ?? forecast?.directionConfidence ?? 0) > 0 &&
+      (flowStatus?.dominantDirection ?? forecast?.dominantDirection) &&
+      (flowStatus?.dominantDirection ?? forecast?.dominantDirection) !== "Unknown",
   );
 }
-function flowPresentation(forecast?: RiskForecast) {
-  const state = forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
-  const sufficient = flowDataIsSufficient(forecast);
-  const directionAvailable = directionDataIsAvailable(forecast);
+function flowPresentation(forecast?: RiskForecast, flowStatus?: FlowStatus) {
+  const state = flowStatus?.behaviorState || forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
+  const sufficient = flowDataIsSufficient(forecast, flowStatus);
+  const directionAvailable = directionDataIsAvailable(forecast, flowStatus);
   const behaviorStabilizing = !sufficient && directionAvailable && state === "INSUFFICIENT_DATA";
   return {
     stateLabel: behaviorStabilizing ? "STABILIZING" : state.replaceAll("_", " "),
-    resultLabel: forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable ? "PARTIAL" : "INSUFFICIENT_DATA",
+    resultLabel: forecast?.stale && !flowStatus ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable ? "PARTIAL" : "INSUFFICIENT_DATA",
     sufficient,
     directionAvailable,
+    dominantDirection: flowStatus?.dominantDirection ?? forecast?.dominantDirection,
+    directionDegrees: flowStatus?.directionDegrees ?? forecast?.directionDegrees,
+    directionConfidence: flowStatus?.directionConfidence ?? forecast?.directionConfidence,
+    behaviorExplanation: flowStatus?.behaviorExplanation || forecast?.behaviorExplanation,
+    analysisGeneratedAt: flowStatus?.analysisGeneratedAt ?? forecast?.analysisGeneratedAt,
+    analysisWindowStart: flowStatus?.analysisWindowStart ?? forecast?.analysisWindowStart,
+    analysisWindowEnd: flowStatus?.analysisWindowEnd ?? forecast?.analysisWindowEnd,
+    nextAnalysisAt: flowStatus?.nextAnalysisAt ?? forecast?.nextAnalysisAt,
+    analysisIntervalSeconds: flowStatus?.analysisIntervalSeconds ?? forecast?.analysisIntervalSeconds,
   };
 }
 type DetailForecastSample = { forecast: RiskForecast; receivedAt: number };
@@ -394,11 +424,11 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt, stampedeC
   </Card>;
 }
 
-function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, compact = false, onViewMore }: { forecast?: RiskForecast; route?: RouteRecommendation; graph?: RouteGraph; now: number; compact?: boolean; onViewMore?: () => void }) {
+function FlowIntelligencePanel({ forecast: inputForecast, flowStatus, route, graph, now, compact = false, onViewMore }: { forecast?: RiskForecast; flowStatus?: FlowStatus; route?: RouteRecommendation; graph?: RouteGraph; now: number; compact?: boolean; onViewMore?: () => void }) {
   const forecast = inputForecast;
-  const { stateLabel, resultLabel, sufficient, directionAvailable } = flowPresentation(forecast);
-  const reverseWarning = sufficient && (forecast?.reverseMovementRatio || 0) >= 0.45;
-  const conflictWarning = sufficient && (forecast?.conflictingMovementRatio || 0) >= 0.30;
+  const { stateLabel, resultLabel, sufficient, directionAvailable, dominantDirection, directionDegrees, directionConfidence, behaviorExplanation, analysisGeneratedAt, analysisWindowStart, analysisWindowEnd, nextAnalysisAt, analysisIntervalSeconds } = flowPresentation(forecast, flowStatus);
+  const reverseWarning = sufficient && (flowStatus?.reverseMovementRatio ?? forecast?.reverseMovementRatio ?? 0) >= 0.45;
+  const conflictWarning = sufficient && (flowStatus?.conflictingMovementRatio ?? forecast?.conflictingMovementRatio ?? 0) >= 0.30;
   if (compact) {
     return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
       <div className={styles.cardHeader}>
@@ -407,8 +437,8 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
       </div>
       <div className={styles.contextStats}>
         <div><span>Behavior</span><strong>{stateLabel}</strong></div>
-        <div><span>Direction</span><strong>{directionAvailable && forecast?.dominantDirection && forecast.directionDegrees != null ? `${forecast.dominantDirection} · ${Math.round(forecast.directionDegrees)}°` : "Unknown"}</strong></div>
-        <div><span>Confidence</span><strong>{directionAvailable && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
+        <div><span>Direction</span><strong>{directionAvailable && dominantDirection && directionDegrees != null ? `${dominantDirection} · ${Math.round(directionDegrees)}°` : "Unknown"}</strong></div>
+        <div><span>Confidence</span><strong>{directionAvailable && directionConfidence != null ? `${Math.round(directionConfidence * 100)}%` : "Unavailable"}</strong></div>
       </div>
       <div className={styles.summaryRow}>
         <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
@@ -422,11 +452,11 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
      <div className={styles.cardHeader}><div><span className={styles.kicker}>VENUE FLOW INTELLIGENCE</span><h2>Observed flow & route action</h2><p>Observed behavior, predicted risk, and recommended action are shown separately.</p></div><span className={forecast?.source === "SIMULATION" ? styles.simulationBadge : styles.forecastHeld}>{resultLabel}</span></div>
     <div className={styles.contextStats}>
       <div><span>Observed behavior</span><strong>{stateLabel}</strong></div>
-      <div><span>Dominant direction</span><strong>{directionAvailable && forecast?.dominantDirection && forecast.directionDegrees != null ? `${forecast.dominantDirection} · ${Math.round(forecast.directionDegrees)}°` : "Unknown"}</strong></div>
-      <div><span>Flow confidence</span><strong>{directionAvailable && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
+      <div><span>Dominant direction</span><strong>{directionAvailable && dominantDirection && directionDegrees != null ? `${dominantDirection} · ${Math.round(directionDegrees)}°` : "Unknown"}</strong></div>
+      <div><span>Flow confidence</span><strong>{directionAvailable && directionConfidence != null ? `${Math.round(directionConfidence * 100)}%` : "Unavailable"}</strong></div>
     </div>
-    <p className={styles.signalFacts}>{forecast?.behaviorExplanation || "No tracked-person movement is available for a reliable flow estimate."}</p>
-    <div className={styles.forecastMeta}><span>Last analysis: {formatTime(forecast?.analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(forecast?.analysisWindowStart, forecast?.analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(forecast?.nextAnalysisAt, now)}</span><span>Interval: {forecast?.analysisIntervalSeconds || 30}s</span></div>
+    <p className={styles.signalFacts}>{behaviorExplanation || "No tracked-person movement is available for a reliable flow estimate."}</p>
+    <div className={styles.forecastMeta}><span>Last analysis: {formatTime(analysisGeneratedAt)}</span><span>Window: {analysisWindowLabel(analysisWindowStart, analysisWindowEnd)}</span><span>Next analysis: {formatCountdown(nextAnalysisAt, now)}</span><span>Interval: {analysisIntervalSeconds || 30}s</span></div>
     {(reverseWarning || conflictWarning) && <p className={styles.forecastNotice}>{reverseWarning ? "Reverse movement warning." : "Conflicting movement warning."} {conflictWarning ? "Crossing flow is elevated." : "People are moving against the dominant direction."}</p>}
     <div className={styles.signalFacts}><span className={styles.kicker}>PREDICTED RISK</span><p>{forecast ? `${forecast.currentRisk} now → ${forecast.projectedRisk} projected. ${forecast.explanation}` : "Forecast unavailable."}</p></div>
     <div className={styles.signalFacts}><span className={styles.kicker}>RECOMMENDED ACTION</span>{route?.recommendedRoute ? <><p><strong>{route.recommendedRoute.routeName}</strong> · {route.expectedTravelTimeSeconds}s · risk score {route.riskScore.toFixed(2)}</p><p>{route.reason}</p><p><strong>Route state:</strong> {route.blockage?.status || "UNKNOWN"} · {route.blockage?.reason || "No blockage evidence available."}</p><p><strong>Gate action:</strong> {route.gateActionDetail?.action.replaceAll("_", " ") || route.gateAction} · {route.gateActionDetail?.reason || route.gateActionReason}{route.gateActionDetail ? ` · ${Math.round(route.gateActionDetail.confidence * 100)}% confidence` : ""}</p><small>Gate actions are recommendations for staff approval; Nirikshan does not control physical gates.</small></> : <p>{route?.reason || "Route recommendation unavailable."}</p>}</div>
@@ -717,6 +747,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const [health, setHealth] = useState<Health>();
   const [events, setEvents] = useState<RiskEvent[]>([]);
   const [forecast, setForecast] = useState<RiskForecast>();
+  const [flowStatus, setFlowStatus] = useState<FlowStatus>();
   const [forecastUpdatedAt, setForecastUpdatedAt] = useState<number>();
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState("");
@@ -851,6 +882,15 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     }
     finally { setForecastLoading(false); }
   }, [recordDetailForecast]);
+  const loadFlowStatus = useCallback(async (zoneId: number, clearCurrent = false) => {
+    if (clearCurrent) setFlowStatus(undefined);
+    try {
+      const nextStatus = await api<FlowStatus>(`/api/zones/${zoneId}/flow-status`, { cache: "no-store" });
+      if (selectedZoneIdRef.current === zoneId) setFlowStatus(nextStatus);
+    } catch {
+      if (clearCurrent) setFlowStatus(undefined);
+    }
+  }, []);
   const loadRoutes = useCallback(async (zoneId: number, venueId?: number) => {
     if (!venueId) return;
     try {
@@ -892,6 +932,17 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         setStampedeConfidenceStable(forecastAggregation.confidenceStable);
       }
       if (zoneAggregation) setDisplayedZones((current) => ({ ...current, [selectedZoneId]: zoneAggregation }));
+      console.info("[console detail window close]", JSON.stringify({
+        timestamp: new Date(currentTime).toISOString(),
+        zoneId: selectedZoneId,
+        forecastSamples: detailForecastSamplesRef.current.length,
+        zoneSamples: (detailZoneSamplesRef.current[selectedZoneId] || []).length,
+        forecastGeneratedAt: forecastAggregation?.forecast.analysisGeneratedAt || null,
+        confidence: forecastAggregation?.forecast.confidence ?? null,
+        headcount: zoneAggregation?.currentPeopleCount ?? null,
+        density: zoneAggregation?.currentDensity ?? null,
+        lastUpdated: zoneAggregation?.lastUpdated || null,
+      }));
       detailForecastSamplesRef.current = [];
       detailZoneSamplesRef.current = {};
       detailWindowStartedAtRef.current = currentTime;
@@ -970,8 +1021,15 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     };
   }, [recordDetailZone, selectedZoneId]);
   useEffect(() => {
-    if (selectedZoneId) loadForecast(selectedZoneId, true);
-  }, [selectedZoneId, loadForecast]);
+    if (!selectedZoneId) {
+      setFlowStatus(undefined);
+      return;
+    }
+    loadForecast(selectedZoneId, true);
+    loadFlowStatus(selectedZoneId, true);
+    const timer = window.setInterval(() => loadFlowStatus(selectedZoneId), DETAIL_UPDATE_WINDOW_MS);
+    return () => window.clearInterval(timer);
+  }, [loadFlowStatus, loadForecast, selectedZoneId]);
   useEffect(() => {
     const nextAnalysisAt = forecast?.nextAnalysisAt ? new Date(forecast.nextAnalysisAt).valueOf() : NaN;
     if (!selectedZoneId || !Number.isFinite(nextAnalysisAt) || now < nextAnalysisAt || forecastLoading || forecastRefreshAtRef.current === nextAnalysisAt) return;
@@ -1176,10 +1234,10 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         </Card>
         <EarlyWarningPanel forecast={detailedForecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} stampedeConfidenceStable={stampedeConfidenceStable} />
         <div className={styles.insightGrid}>
-          <FlowIntelligencePanel compact forecast={detailedForecast} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
+          <FlowIntelligencePanel compact forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
           <SelectedZonePanel compact selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
         </div>
-        {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={detailedForecast} route={route} graph={routeGraph} now={now} /></DetailModal>}
+        {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} /></DetailModal>}
         {detailView === "zone" && <DetailModal title="Selected zone" onClose={() => setDetailView(undefined)}><SelectedZonePanel selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} /></DetailModal>}
         <div className={styles.lowerGrid}>
           <Card className={styles.zoneTableCard} id="zones">

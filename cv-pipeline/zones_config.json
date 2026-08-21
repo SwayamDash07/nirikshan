@@ -4,5 +4,5 @@
   {"clipId": "cafe", "zoneId": 3, "cameraLabel": "Cafeteria camera", "zoneName": "Cafeteria"},
   {"clipId": "a_block", "zoneId": 4, "cameraLabel": "A Block Entrance camera", "zoneName": "A Block Entrance"},
   {"clipId": "c_block", "zoneId": 5, "cameraLabel": "C Block Gate camera", "zoneName": "C Block Gate"},
-  {"clipId": "c_block_2", "zoneId": 5, "cameraLabel": "C Block Gate camera 2", "zoneName": "C Block Gate"}
+  {"clipId": "main_gate_exit", "zoneId": 6, "cameraLabel": "Main Gate Exit camera", "zoneName": "Main Gate Exit"}
 ]

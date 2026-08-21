@@ -346,7 +346,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
       </div>
       <div className={styles.contextStats}>
         <div><span>Behavior</span><strong>{stateLabel}</strong></div>
-        <div><span>Direction</span><strong>{forecast?.dominantDirection || "Unknown"}{forecast?.directionDegrees != null ? ` · ${Math.round(forecast.directionDegrees)}°` : ""}</strong></div>
+        <div><span>Direction</span><strong>{directionAvailable && forecast?.dominantDirection && forecast.directionDegrees != null ? `${forecast.dominantDirection} · ${Math.round(forecast.directionDegrees)}°` : "Unknown"}</strong></div>
         <div><span>Confidence</span><strong>{directionAvailable && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
       </div>
       <div className={styles.summaryRow}>
@@ -361,7 +361,7 @@ function FlowIntelligencePanel({ forecast: inputForecast, route, graph, now, com
      <div className={styles.cardHeader}><div><span className={styles.kicker}>VENUE FLOW INTELLIGENCE</span><h2>Observed flow & route action</h2><p>Observed behavior, predicted risk, and recommended action are shown separately.</p></div><span className={forecast?.source === "SIMULATION" ? styles.simulationBadge : styles.forecastHeld}>{resultLabel}</span></div>
     <div className={styles.contextStats}>
       <div><span>Observed behavior</span><strong>{stateLabel}</strong></div>
-      <div><span>Dominant direction</span><strong>{forecast?.dominantDirection || "Unknown"}{forecast?.directionDegrees != null ? ` · ${Math.round(forecast.directionDegrees)}°` : ""}</strong></div>
+      <div><span>Dominant direction</span><strong>{directionAvailable && forecast?.dominantDirection && forecast.directionDegrees != null ? `${forecast.dominantDirection} · ${Math.round(forecast.directionDegrees)}°` : "Unknown"}</strong></div>
       <div><span>Flow confidence</span><strong>{directionAvailable && forecast?.directionConfidence != null ? `${Math.round(forecast.directionConfidence * 100)}%` : "Unavailable"}</strong></div>
     </div>
     <p className={styles.signalFacts}>{forecast?.behaviorExplanation || "No tracked-person movement is available for a reliable flow estimate."}</p>
@@ -486,12 +486,14 @@ function ZoneRow({
   selected,
   onSelect,
   now,
+  lastSignalAt,
   hotspotSummary,
 }: {
   zone: Zone;
   selected: boolean;
   onSelect: () => void;
   now: number;
+  lastSignalAt?: string;
   hotspotSummary?: HotspotSummary;
 }) {
   return (
@@ -512,7 +514,7 @@ function ZoneRow({
         {zone.bottleneckDetected && <InformativeBottleneckBadge summary={hotspotSummary} />}
       </span>
       <span className={styles.rowAge}>
-        {formatAge(zone.lastUpdated, now)} <Icon name="arrow" />
+        {formatAge(lastSignalAt || zone.lastUpdated, now)} <Icon name="arrow" />
       </span>
     </button>
   );
@@ -1164,6 +1166,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                   selected={zone.id === selectedZoneId}
                   onSelect={() => setSelectedZoneId(zone.id)}
                   now={now}
+                  lastSignalAt={liveTelemetryAtByZone[zone.id] || zone.lastUpdated}
                   hotspotSummary={summarizeHotspots(hotspotEventsByZone[zone.id], now)}
                 />
               ))

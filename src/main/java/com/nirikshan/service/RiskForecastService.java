@@ -312,14 +312,14 @@ public class RiskForecastService {
                 .reduce((first, second) -> second)
                 .orElse(null);
         FlowBehaviorState behavior = stableBehaviorReading == null
-                ? FlowBehaviorState.INSUFFICIENT_DATA : stableBehaviorReading.getBehaviorState();
+                ? derivedBehavior(flowReadings) : stableBehaviorReading.getBehaviorState();
         if (behavior == FlowBehaviorState.INSUFFICIENT_DATA) {
             return withPartialFlow(withStableFacts(forecast, readings), direction, degrees, averageConfidence,
                     averageConsistency, reverse / flowReadings.size(), conflicting / flowReadings.size(),
                     "Movement direction is available, but behavior is still stabilizing.",
                     flowReadings.get(flowReadings.size() - 1).getPeopleCount(), stableHotspots(readings));
         }
-        String explanation = stableBehaviorReading.getBehaviorExplanation();
+        String explanation = stableBehaviorReading == null ? null : stableBehaviorReading.getBehaviorExplanation();
         if (explanation == null || explanation.isBlank()) explanation = "Valid tracked-person movement is consistent across the analysis window.";
         return new RiskForecastResponse(forecast.zoneId(), forecast.zoneName(), forecast.generatedAt(), forecast.lastTelemetryAt(),
                 forecast.currentRisk(), forecast.projectedRisk(), forecast.forecastHorizonSeconds(), forecast.estimatedSecondsToProjectedRisk(),
@@ -345,6 +345,17 @@ public class RiskForecastService {
                 forecast.behaviorExplanation(), forecast.analysisGeneratedAt(), forecast.analysisWindowStart(), forecast.analysisWindowEnd(),
                 forecast.nextAnalysisAt(), forecast.analysisIntervalSeconds(), forecast.dataSufficiency(), forecast.flowState(), forecast.direction(),
                 latest.getPeopleCount(), stableHotspots(readings));
+    }
+
+    private static FlowBehaviorState derivedBehavior(List<RiskEvent> flowReadings) {
+        double reverse = flowReadings.stream().mapToDouble(RiskEvent::getReverseMovementRatio).average().orElse(0);
+        double conflicting = flowReadings.stream().mapToDouble(RiskEvent::getConflictingMovementRatio).average().orElse(0);
+        RiskEvent latest = flowReadings.get(flowReadings.size() - 1);
+        if (reverse >= FlowBehaviorService.REVERSE_THRESHOLD) return FlowBehaviorState.REVERSE_FLOW;
+        if (conflicting >= FlowBehaviorService.CONFLICTING_THRESHOLD) return FlowBehaviorState.CONFLICTING_FLOW;
+        if (latest.getMovementSlowdown() >= .20) return FlowBehaviorState.SLOWING_FLOW;
+        if (latest.getDensityChange() >= .20) return FlowBehaviorState.RISING_FLOW;
+        return FlowBehaviorState.NORMAL_FLOW;
     }
 
     private static boolean validFlowReading(RiskEvent event) {

@@ -770,6 +770,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const detailWindowStartedAtRef = useRef(Date.now());
   const detailForecastSeededRef = useRef(false);
   const detailZoneSeededRef = useRef(false);
+  const lastRecordedDetailZoneAtRef = useRef<Record<number, string>>({});
   const [displayedForecast, setDisplayedForecast] = useState<RiskForecast>();
   const [displayedZones, setDisplayedZones] = useState<Record<number, Zone>>({});
   const [stampedeConfidenceStable, setStampedeConfidenceStable] = useState(false);
@@ -817,6 +818,13 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         .filter((sample) => now - sample.receivedAt <= DETAIL_UPDATE_WINDOW_MS * 4),
     };
   }, []);
+  useEffect(() => {
+    if (!selectedZoneId) return;
+    const selected = zones.find((zone) => zone.id === selectedZoneId);
+    if (!selected || !selected.lastUpdated || lastRecordedDetailZoneAtRef.current[selected.id] === selected.lastUpdated) return;
+    lastRecordedDetailZoneAtRef.current[selected.id] = selected.lastUpdated;
+    recordDetailZone(selected);
+  }, [recordDetailZone, selectedZoneId, zones]);
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -924,28 +932,23 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     if (!selectedZoneId) return;
     const timer = window.setInterval(() => {
       const currentTime = Date.now();
-      if (currentTime - detailWindowStartedAtRef.current < DETAIL_UPDATE_WINDOW_MS) return;
-      const forecastAggregation = aggregateForecastSamples(detailForecastSamplesRef.current);
-      const zoneAggregation = aggregateZoneSamples(detailZoneSamplesRef.current[selectedZoneId] || []);
-      if (forecastAggregation) {
-        setDisplayedForecast(forecastAggregation.forecast);
-        setStampedeConfidenceStable(forecastAggregation.confidenceStable);
+      try {
+        if (currentTime - detailWindowStartedAtRef.current < DETAIL_UPDATE_WINDOW_MS) return;
+        const forecastAggregation = aggregateForecastSamples(detailForecastSamplesRef.current);
+        const zoneAggregation = aggregateZoneSamples(detailZoneSamplesRef.current[selectedZoneId] || []);
+        if (forecastAggregation) {
+          setDisplayedForecast(forecastAggregation.forecast);
+          setStampedeConfidenceStable(forecastAggregation.confidenceStable);
+        }
+        if (zoneAggregation) {
+          setDisplayedZones((current) => ({ ...current, [selectedZoneId]: zoneAggregation }));
+        }
+        detailForecastSamplesRef.current = [];
+        detailZoneSamplesRef.current = {};
+        detailWindowStartedAtRef.current = currentTime;
+      } catch (reason) {
+        console.error("Console detail window update failed", reason);
       }
-      if (zoneAggregation) setDisplayedZones((current) => ({ ...current, [selectedZoneId]: zoneAggregation }));
-      console.info("[console detail window close]", JSON.stringify({
-        timestamp: new Date(currentTime).toISOString(),
-        zoneId: selectedZoneId,
-        forecastSamples: detailForecastSamplesRef.current.length,
-        zoneSamples: (detailZoneSamplesRef.current[selectedZoneId] || []).length,
-        forecastGeneratedAt: forecastAggregation?.forecast.analysisGeneratedAt || null,
-        confidence: forecastAggregation?.forecast.confidence ?? null,
-        headcount: zoneAggregation?.currentPeopleCount ?? null,
-        density: zoneAggregation?.currentDensity ?? null,
-        lastUpdated: zoneAggregation?.lastUpdated || null,
-      }));
-      detailForecastSamplesRef.current = [];
-      detailZoneSamplesRef.current = {};
-      detailWindowStartedAtRef.current = currentTime;
     }, 1000);
     return () => window.clearInterval(timer);
   }, [selectedZoneId]);
@@ -971,8 +974,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                       simulationActive: local?.simulationActive ?? zone.simulationActive,
                     };
               });
-              const selected = next.find((zone) => zone.id === selectedZoneId);
-              if (selected) recordDetailZone(selected);
               return next;
             });
             setLiveTelemetryAtByZone((current) => {
@@ -1019,7 +1020,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [recordDetailZone, selectedZoneId]);
+  }, [selectedZoneId]);
   useEffect(() => {
     if (!selectedZoneId) {
       setFlowStatus(undefined);
@@ -1063,8 +1064,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                   }
                 : zone,
             );
-            const selected = next.find((zone) => zone.id === eventZoneId);
-            if (selected) recordDetailZone(selected);
             return next;
           });
           setHealth((current) =>
@@ -1086,7 +1085,15 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           const currentForecast = forecastRef.current;
           if (!selected) return;
           recordDetailForecast(nextForecast);
-          if (nextForecast.lastTelemetryAt) setLiveTelemetryAtByZone((current) => ({ ...current, [nextForecast.zoneId]: nextForecast.lastTelemetryAt! }));
+          if (nextForecast.lastTelemetryAt) {
+            setLiveTelemetryAtByZone((current) => {
+              const incomingTime = new Date(nextForecast.lastTelemetryAt!).valueOf();
+              const currentTime = new Date(current[nextForecast.zoneId] || 0).valueOf();
+              return Number.isFinite(incomingTime) && incomingTime >= currentTime
+                ? { ...current, [nextForecast.zoneId]: nextForecast.lastTelemetryAt! }
+                : current;
+            });
+          }
           const committedSnapshotChanged = !currentForecast || currentForecast.analysisGeneratedAt !== nextForecast.analysisGeneratedAt;
           if (committedSnapshotChanged) {
             setForecast(nextForecast);
@@ -1104,7 +1111,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       client.deactivate();
       stompRef.current = null;
     };
-  }, [recordDetailForecast, recordDetailZone]);
+  }, [recordDetailForecast]);
   function takeAction(id: number, zoneId: number | null | undefined, zoneName: string | null | undefined, message: string) {
     const params = new URLSearchParams();
     if (zoneId) params.set("zoneId", String(zoneId));

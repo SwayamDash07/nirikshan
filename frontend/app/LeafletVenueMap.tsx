@@ -2,12 +2,14 @@
 
 import { useMemo } from "react";
 import { CircleMarker, MapContainer, Polyline, Popup, TileLayer } from "react-leaflet";
+import { routeWaypointsByPair } from "./config/routeWaypoints";
 import { riskColors, ZoneRiskMarker, type RiskLevel, type ZoneMarkerData } from "./components/ZoneRiskMarker";
 import styles from "./console/console.module.css";
 
 type Zone = ZoneMarkerData & { currentPeopleCount: number };
 type Venue = { name: string; latitude?: number; longitude?: number };
 type Point = [number, number];
+type RouteSegment = { positions: [Point, Point]; color: string };
 const MAIN_GATE_ZONE_ID = 1;
 const MAIN_GATE_EXIT_ZONE_ID = 6;
 const METERS_PER_LATITUDE_DEGREE = 111320;
@@ -35,50 +37,54 @@ function distanceToSegment(point: Point, start: Point, end: Point) {
   return Math.hypot(localPoint[0] - localEnd[0] * ratio, localPoint[1] - localEnd[1] * ratio);
 }
 
+function distanceToPath(point: Point, path: Point[]) {
+  return path.slice(0, -1).reduce((nearest, start, index) => Math.min(nearest, distanceToSegment(point, start, path[index + 1])), Number.POSITIVE_INFINITY);
+}
+
+function segmentColor(start: Point, end: Point, zones: Zone[]) {
+  const nearbyRisk = zones
+    .map((zone) => ({ zone, distance: distanceToSegment([zone.latitude, zone.longitude], start, end) }))
+    .filter(({ distance }) => distance <= COLLISION_DISTANCE_METERS)
+    .sort((left, right) => RISK_RANK[right.zone.currentRiskLevel] - RISK_RANK[left.zone.currentRiskLevel])[0]?.zone.currentRiskLevel;
+  return nearbyRisk && RISK_RANK[nearbyRisk] >= RISK_RANK.MEDIUM ? riskColors[nearbyRisk] : "var(--accent)";
+}
+
+function colorSegments(path: Point[], zones: Zone[]): RouteSegment[] {
+  return path.slice(0, -1).map((start, index) => {
+    const end = path[index + 1];
+    return { positions: [start, end], color: segmentColor(start, end, zones) };
+  });
+}
+
 function buildRoute(zones: Zone[]) {
   const mainGate = zones.find((zone) => zone.id === MAIN_GATE_ZONE_ID);
   const mainGateExit = zones.find((zone) => zone.id === MAIN_GATE_EXIT_ZONE_ID);
   if (!mainGate || !mainGateExit) {
-    return { path: [] as Point[], blockedIds: new Set<number>(), startName: "Campus", exitName: "Exit unavailable", recommendedExitId: undefined, mutedExitId: undefined, shelterInPlace: false, alternate: false };
+    return { path: [] as Point[], segments: [] as RouteSegment[], blockedIds: new Set<number>(), startName: "Campus", exitName: "Exit unavailable", recommendedExitId: undefined, mutedExitId: undefined, shelterInPlace: false, alternate: false };
   }
 
   const mainGateBlocked = RISK_RANK[mainGate.currentRiskLevel] >= RISK_RANK.MEDIUM;
   const mainGateExitBlocked = RISK_RANK[mainGateExit.currentRiskLevel] >= RISK_RANK.MEDIUM;
   if (mainGateBlocked && mainGateExitBlocked) {
-    return { path: [] as Point[], blockedIds: new Set<number>(), startName: "Campus", exitName: "Shelter in place", recommendedExitId: undefined, mutedExitId: undefined, shelterInPlace: true, alternate: false };
+    return { path: [] as Point[], segments: [] as RouteSegment[], blockedIds: new Set<number>(), startName: "Campus", exitName: "Shelter in place", recommendedExitId: undefined, mutedExitId: undefined, shelterInPlace: true, alternate: false };
   }
 
   const recommendedExit = mainGateExitBlocked ? mainGate : mainGateExit;
   const start = recommendedExit.id === MAIN_GATE_EXIT_ZONE_ID
     ? mainGate
     : zones.find((zone) => zone.id !== MAIN_GATE_ZONE_ID && zone.id !== MAIN_GATE_EXIT_ZONE_ID) || mainGateExit;
-  const finish: Point = [recommendedExit.latitude, recommendedExit.longitude];
-  const startPoint: Point = [start.latitude, start.longitude];
+  const defaultRoadPath: Point[] = routeWaypointsByPair["1-6"].map(([latitude, longitude]) => [latitude, longitude]);
+  const fallbackPath: Point[] = [[start.latitude, start.longitude], [recommendedExit.latitude, recommendedExit.longitude]];
+  const path = recommendedExit.id === MAIN_GATE_EXIT_ZONE_ID ? defaultRoadPath : fallbackPath;
   const blocked = zones
     .filter((zone) => zone.id !== start.id && zone.id !== recommendedExit.id && RISK_RANK[zone.currentRiskLevel] >= RISK_RANK.HIGH)
-    .map((zone) => ({ zone, distance: distanceToSegment([zone.latitude, zone.longitude], startPoint, finish) }))
+    .map((zone) => ({ zone, distance: distanceToPath([zone.latitude, zone.longitude], path) }))
     .filter(({ distance }) => distance <= 28)
     .sort((first, second) => first.distance - second.distance || first.zone.id - second.zone.id);
-  const route: Point[] = [startPoint];
-  const line = localMeters(finish, startPoint);
-  const length = Math.max(1, Math.hypot(line[0], line[1]));
 
-  blocked.forEach(({ zone }) => {
-    const point = localMeters([zone.latitude, zone.longitude], startPoint);
-    const side = zone.id % 2 === 0 ? 1 : -1;
-    const detourMeters = 34;
-    const normal = [-line[1] / length, line[0] / length];
-    const detourLocal: Point = [point[0] + normal[0] * detourMeters * side, point[1] + normal[1] * detourMeters * side];
-    const latitudeScale = Math.max(0.2, Math.cos(startPoint[0] * Math.PI / 180));
-    route.push([
-      startPoint[0] + detourLocal[0] / METERS_PER_LATITUDE_DEGREE,
-      startPoint[1] + detourLocal[1] / (METERS_PER_LATITUDE_DEGREE * latitudeScale),
-    ]);
-  });
-
-  route.push(finish);
   return {
-    path: route,
+    path,
+    segments: colorSegments(path, zones),
     blockedIds: new Set(blocked.map(({ zone }) => zone.id)),
     startName: start.name,
     exitName: recommendedExit.name,
@@ -109,7 +115,7 @@ export default function LeafletVenueMap({ venue, zones, selectedId, onSelect }: 
     <div className={styles.mapTopline}><span className={styles.liveLabel}><span className={styles.connectedDot} /> LIVE</span><span>Live venue telemetry</span><span className={styles.mapCoordinates}>OpenStreetMap, {venue?.name || "Venue map"}</span></div>
     <MapContainer center={center} zoom={16} scrollWheelZoom className={styles.leafletMap}>
       <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {route.path.length > 1 && <Polyline positions={route.path} pathOptions={{ color: "var(--accent)", weight: 5, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />}
+      {route.segments.map((segment, index) => <Polyline key={`route-segment-${index}`} positions={segment.positions} pathOptions={{ color: segment.color, weight: 5, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />)}
       {zones.map((zone) => {
         const blocked = route.blockedIds.has(zone.id);
         const muted = route.mutedExitId === zone.id;
@@ -118,10 +124,14 @@ export default function LeafletVenueMap({ venue, zones, selectedId, onSelect }: 
         return <ZoneRiskMarker key={zone.id} zone={zone} maxScale={maxHeadcount} onSelect={() => onSelect(zone.id)} popup={zonePopup(zone, false, false)} />;
       })}
     </MapContainer>
-    {route.shelterInPlace && <div className={styles.forecastNotice} role="status" style={{ border: "1px solid var(--risk-critical)", color: "var(--risk-critical)", background: "var(--risk-critical-soft)" }}><strong>Both exits are currently crowded.</strong> Shelter in place in the nearest building until crowd density clears. Do not attempt to exit through Main Gate or Main Gate Exit.</div>}
-    {route.alternate && <div className={styles.forecastNotice} role="status" style={{ border: `1px solid ${alternateColor}`, background: "var(--risk-medium-soft)" }}>Main Gate Exit is crowded. The highlighted route now favors Main Gate.</div>}
-    <div className={styles.mapLegend}><span><i style={{ background: riskColors.LOW }} />Normal</span><span><i style={{ background: riskColors.MEDIUM }} />Watch</span><span><i style={{ background: riskColors.HIGH }} />High</span><span><i style={{ background: riskColors.CRITICAL }} />Critical</span><span><i className={styles.simulationLegend} />Simulation</span></div>
-    <div className={styles.densityLegend}><strong>Recommended exit</strong><span>{route.shelterInPlace ? "Shelter in place" : `${route.startName} → ${route.exitName}${route.blockedIds.size ? " · bypass active" : route.alternate ? " · alternate exit" : " · primary exit"}`}</span></div>
+    <div className={styles.mapNotices}>
+      {route.shelterInPlace && <div className={`${styles.forecastNotice} ${styles.shelterNotice}`} role="status"><strong>Both exits are currently crowded.</strong> Shelter in place in the nearest building until crowd density clears. Do not attempt to exit through Main Gate or Main Gate Exit.</div>}
+      {route.alternate && <div className={`${styles.forecastNotice} ${styles.alternateNotice}`} role="status">Main Gate Exit is crowded. The highlighted route now favors Main Gate.</div>}
+    </div>
+    <div className={styles.mapFooter}>
+      <div className={styles.mapLegend}><span><i style={{ background: riskColors.LOW }} />Normal</span><span><i style={{ background: riskColors.MEDIUM }} />Watch</span><span><i style={{ background: riskColors.HIGH }} />High</span><span><i style={{ background: riskColors.CRITICAL }} />Critical</span><span><i className={styles.simulationLegend} />Simulation</span></div>
+      <div className={styles.densityLegend}><strong>Recommended exit</strong><span>{route.shelterInPlace ? "Shelter in place" : `${route.startName} → ${route.exitName}${route.blockedIds.size ? " · bypass active" : route.alternate ? " · alternate exit" : " · primary exit"}`}</span></div>
+    </div>
     <div className={styles.mapScale}><span>OPENSTREETMAP LAYER</span><strong>{zones.length} zones</strong></div>
   </div>;
 }

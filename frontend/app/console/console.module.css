@@ -740,6 +740,56 @@
 .densityLegend strong {
   color: var(--text);
 }
+.mapNotices {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.mapNotices:empty {
+  display: none;
+}
+.mapNotices .forecastNotice {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.shelterNotice {
+  border: 1px solid var(--risk-critical);
+  color: var(--risk-critical);
+  background: var(--risk-critical-soft);
+}
+.alternateNotice {
+  border: 1px solid var(--risk-medium);
+  background: var(--risk-medium-soft);
+}
+.mapFooter {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0 12px 12px;
+  flex-wrap: wrap;
+}
+.mapFooter .mapLegend,
+.mapFooter .densityLegend {
+  position: static;
+  z-index: auto;
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.mapFooter .mapLegend {
+  flex-wrap: wrap;
+}
+.mapFooter .densityLegend {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.mapFooter .densityLegend span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .heatLow {
   background: var(--success);
 }
@@ -903,7 +953,6 @@
   letter-spacing: 0.04em;
 }
 
-/* Single-column dashboard containment: every section owns its natural height. */
 .overviewGrid,
 .dashboardStack,
 .lowerGrid,

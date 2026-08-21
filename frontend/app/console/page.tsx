@@ -181,6 +181,10 @@ const riskRank: Record<RiskLevel, number> = {
   HIGH: 2,
   CRITICAL: 3,
 };
+const DETAIL_UPDATE_WINDOW_MS = 8_000;
+const DETAIL_CONFIDENCE_TOLERANCE = 0.05;
+const STAMPEDE_MEDIUM_SCORE = 0.4;
+const STAMPEDE_HIGH_SCORE = 0.7;
 const navItems = primaryNavItems;
 
 function formatTime(value?: string) {
@@ -236,6 +240,55 @@ function flowPresentation(forecast?: RiskForecast) {
     sufficient,
     directionAvailable,
   };
+}
+type DetailForecastSample = { forecast: RiskForecast; receivedAt: number };
+type DetailZoneSample = { zone: Zone; receivedAt: number };
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function aggregateForecastSamples(samples: DetailForecastSample[]) {
+  const ordered = [...samples].sort((left, right) => left.receivedAt - right.receivedAt);
+  const latest = ordered[ordered.length - 1]?.forecast;
+  if (!latest) return undefined;
+  const confidenceValues = ordered.map(({ forecast }) => forecast.confidence).filter(Number.isFinite);
+  const directionConfidenceValues = ordered.map(({ forecast }) => forecast.directionConfidence).filter((value): value is number => value != null && Number.isFinite(value));
+  const directionDegreesValues = ordered.map(({ forecast }) => forecast.directionDegrees).filter((value): value is number => value != null && Number.isFinite(value));
+  const stampedeValues = ordered.map(({ forecast }) => forecast.stampedeLikelihood?.score).filter((value): value is number => value != null && Number.isFinite(value));
+  const confidence = average(confidenceValues);
+  const confidenceStable = ordered.length >= 2
+    && ordered[ordered.length - 1].receivedAt - ordered[0].receivedAt >= DETAIL_UPDATE_WINDOW_MS - 1000
+    && Math.max(...confidenceValues) - Math.min(...confidenceValues) <= DETAIL_CONFIDENCE_TOLERANCE;
+  const stampedeScore = average(stampedeValues);
+  const stampedeLevel: NonNullable<RiskForecast["stampedeLikelihood"]>["level"] = stampedeScore >= STAMPEDE_HIGH_SCORE ? "HIGH" : stampedeScore >= STAMPEDE_MEDIUM_SCORE ? "MEDIUM" : stampedeValues.length ? "LOW" : "INSUFFICIENT_DATA";
+  return {
+    forecast: {
+      ...latest,
+      confidence,
+      directionConfidence: directionConfidenceValues.length ? average(directionConfidenceValues) : latest.directionConfidence,
+      directionDegrees: directionDegreesValues.length ? average(directionDegreesValues) : latest.directionDegrees,
+      stampedeLikelihood: latest.stampedeLikelihood && stampedeValues.length
+        ? { ...latest.stampedeLikelihood, score: stampedeScore, level: stampedeLevel }
+        : latest.stampedeLikelihood,
+    },
+    confidenceStable,
+  };
+}
+
+function aggregateZoneSamples(samples: DetailZoneSample[]) {
+  const ordered = [...samples].sort((left, right) => left.receivedAt - right.receivedAt);
+  const latest = ordered[ordered.length - 1]?.zone;
+  if (!latest) return undefined;
+  const riskCounts = ordered.reduce<Partial<Record<RiskLevel, number>>>((counts, sample) => {
+    counts[sample.zone.currentRiskLevel] = (counts[sample.zone.currentRiskLevel] || 0) + 1;
+    return counts;
+  }, {});
+  const riskLevel = (Object.keys(riskCounts) as RiskLevel[]).sort((left, right) => {
+    const countDifference = (riskCounts[right] || 0) - (riskCounts[left] || 0);
+    return countDifference || (ordered.findLast((sample) => sample.zone.currentRiskLevel === right)?.receivedAt || 0) - (ordered.findLast((sample) => sample.zone.currentRiskLevel === left)?.receivedAt || 0);
+  })[0] || latest.currentRiskLevel;
+  return { ...latest, currentRiskLevel: riskLevel };
 }
 function highestRisk(zones: Zone[]): RiskLevel {
   return zones.reduce<RiskLevel>(
@@ -296,7 +349,7 @@ function InformativeBottleneckBadge({ summary }: { summary?: HotspotSummary }) {
   </span>;
 }
 
-function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forecast?: RiskForecast; loading: boolean; error?: string; now: number; updatedAt?: number }) {
+function EarlyWarningPanel({ forecast, loading, error, now, updatedAt, stampedeConfidenceStable }: { forecast?: RiskForecast; loading: boolean; error?: string; now: number; updatedAt?: number; stampedeConfidenceStable: boolean }) {
   const stateLabel: Record<ForecastState, string> = {
     STABLE: "Stable",
     RISING: "Rising",
@@ -316,7 +369,7 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt }: { forec
   const analysisUpdated = Boolean(updatedAt && now - updatedAt < 5000);
   const hysteresisHeld = Boolean(forecast?.explanation.toLowerCase().includes("held by"));
   const stampedeLevel = forecast?.stampedeLikelihood?.level || "INSUFFICIENT_DATA";
-  const stampedePriority = stampedeLevel === "MEDIUM" || stampedeLevel === "HIGH";
+  const stampedePriority = stampedeConfidenceStable && (forecast?.confidence || 0) >= 0.5 && (stampedeLevel === "MEDIUM" || stampedeLevel === "HIGH");
   return <Card className={`${styles.forecastCard} ${forecast ? stateClass[forecast.state] : styles.forecastInsufficient} ${stampedePriority ? styles.forecastPriority : styles.forecastResting}`} id="forecast">
     <div className={styles.cardHeader}>
       <div><span className={styles.kicker}>EARLY WARNING</span><h2>Risk forecast</h2><p>Projected risk is decision support, not a confirmed incident.</p></div>
@@ -397,8 +450,9 @@ function HotspotDetail({ summary }: { summary: HotspotSummary }) {
   </section>;
 }
 
-function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSummary, analysisBottleneck, liveTelemetryAt, now, compact = false, onViewMore }: {
+function SelectedZonePanel({ selectedZone, displayedZone, selectedAnalysis, selectedHotspotSummary, analysisBottleneck, liveTelemetryAt, now, compact = false, onViewMore }: {
   selectedZone?: Zone;
+  displayedZone?: Zone;
   selectedAnalysis?: RiskForecast;
   selectedHotspotSummary?: HotspotSummary;
   analysisBottleneck: boolean;
@@ -407,11 +461,12 @@ function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSumm
   compact?: boolean;
   onViewMore?: () => void;
 }) {
+  const detailedZone = displayedZone || selectedZone;
   if (compact) {
     return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
       <div className={styles.cardHeader}>
         <div><span className={styles.kicker}>SELECTED ZONE</span><h2>{selectedZone?.name || "No zone selected"}</h2></div>
-        <StatusBadge level={selectedZone?.currentRiskLevel || "LOW"} />
+        <StatusBadge level={detailedZone?.currentRiskLevel || "LOW"} />
       </div>
       {selectedZone ? <>
         {analysisBottleneck && <InformativeBottleneckBadge summary={selectedHotspotSummary} />}
@@ -420,7 +475,7 @@ function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSumm
           <div><span>Density</span><strong>{selectedZone.currentDensity.toFixed(2)}</strong></div>
           <div><span>Last telemetry</span><strong>{formatTime(liveTelemetryAt)}</strong></div>
         </div>
-        <div className={styles.summaryRow}><span>Risk</span><strong>{selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{formatTime(selectedAnalysis?.analysisGeneratedAt)}</strong></div>
+        <div className={styles.summaryRow}><span>Risk</span><strong>{detailedZone?.currentRiskLevel || selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{formatTime(selectedAnalysis?.analysisGeneratedAt)}</strong></div>
         <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
       </> : <p className={styles.noDataNotice}>Select a zone from the map.</p>}
     </Card>;
@@ -432,7 +487,7 @@ function SelectedZonePanel({ selectedZone, selectedAnalysis, selectedHotspotSumm
         <h2>{selectedZone?.name || "No zone selected"}</h2>
         {selectedZone?.simulationActive && <span className={styles.simulationBadge}>SIMULATION MODE</span>}
       </div>
-      <StatusBadge level={selectedZone?.currentRiskLevel || "LOW"} />
+      <StatusBadge level={detailedZone?.currentRiskLevel || "LOW"} />
     </div>
     {selectedZone ? (
       <>
@@ -655,78 +710,6 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
   );
 }
 
-/*
-function RecommendationPanel({
-  recommendations,
-  now,
-  onUpdate,
-  onTakeAction,
-  simulationZoneIds,
-}: {
-  recommendations: Recommendation[];
-  now: number;
-  onUpdate: (id: number) => void;
-  onTakeAction: (recommendation: Recommendation) => void;
-  simulationZoneIds: Set<number>;
-}) {
-  return (
-    <Card className={styles.recommendationCard} id="recommendations">
-      <div className={styles.cardHeader}>
-        <div>
-          <span className={styles.kicker}>DECISION SUPPORT</span>
-          <h2>Recommended actions</h2>
-          <p>Deterministic rolling-window assessments for sustained patterns.</p>
-        </div>
-        <span className={styles.recommendationCount}>
-          {recommendations.length}
-        </span>
-      </div>
-      {recommendations.length ? (
-        <div className={styles.recommendationPreview}>
-          {recommendations.map((recommendation) => (
-            <article key={recommendation.id}>
-              <span
-                className={`${styles.alertRail} ${styles[`rail${recommendation.severity}`]}`}
-              />
-              <div>
-                <div className={styles.alertPreviewTop}>
-                  <strong>{recommendation.zoneName || "Venue-wide"} {(recommendation.source === "SIMULATION" || (recommendation.zoneId && simulationZoneIds.has(recommendation.zoneId))) && <span className={styles.simulationBadge}>SIMULATION</span>}</strong>
-                  <StatusBadge level={recommendation.severity} />
-                </div>
-                <p>{recommendation.message}</p>
-                <small>{formatAge(recommendation.createdAt, now)} · {recommendation.acknowledgedByUserId ? "Sent to security staff" : "Not yet sent to security staff"}</small>
-                <div className={styles.recommendationActions}>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => onTakeAction(recommendation)}
-                  >
-                    Take Action
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onUpdate(recommendation.id)}
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className={styles.inlineEmpty}>
-          <Icon name="check" />
-          <span>No action is currently recommended.</span>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-}
-*/
 function ConsoleApp({ user }: { user: UserInfo }) {
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
@@ -751,9 +734,19 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const forecastRef = useRef<RiskForecast | undefined>(undefined);
   const forecastRefreshAtRef = useRef<number>();
   const selectedZoneIdRef = useRef<number>();
+  const detailForecastSamplesRef = useRef<DetailForecastSample[]>([]);
+  const detailZoneSamplesRef = useRef<Record<number, DetailZoneSample[]>>({});
+  const detailWindowStartedAtRef = useRef(Date.now());
+  const detailForecastSeededRef = useRef(false);
+  const detailZoneSeededRef = useRef(false);
+  const [displayedForecast, setDisplayedForecast] = useState<RiskForecast>();
+  const [displayedZones, setDisplayedZones] = useState<Record<number, Zone>>({});
+  const [stampedeConfidenceStable, setStampedeConfidenceStable] = useState(false);
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
-  const selectedHotspotSummary = forecast?.analysisHotspotRegions?.length
-    ? { regions: forecast.analysisHotspotRegions, durationSeconds: forecast.hotspotPersistenceSeconds }
+  const detailedForecast = displayedForecast?.zoneId === selectedZoneId ? displayedForecast : forecast?.zoneId === selectedZoneId ? forecast : undefined;
+  const detailedZone = selectedZoneId ? displayedZones[selectedZoneId] || selectedZone : selectedZone;
+  const selectedHotspotSummary = detailedForecast?.analysisHotspotRegions?.length
+    ? { regions: detailedForecast.analysisHotspotRegions, durationSeconds: detailedForecast.hotspotPersistenceSeconds }
     : undefined;
   const zonesRequiringAttention = zones.filter((zone) => riskRank[zone.currentRiskLevel] >= riskRank.MEDIUM).length;
   const freshSignals = zones.filter((zone) => zone.lastUpdated && now - new Date(zone.lastUpdated).valueOf() <= LIVE_SIGNAL_WINDOW_MS).length;
@@ -766,10 +759,33 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const simulationZoneIds = new Set(zones.filter((zone) => zone.simulationActive).map((zone) => zone.id));
   const liveTelemetryAt = selectedZoneId ? liveTelemetryAtByZone[selectedZoneId] || selectedZone?.lastUpdated : selectedZone?.lastUpdated;
   const telemetryStale = Boolean(liveTelemetryAt) && now - new Date(liveTelemetryAt!).valueOf() > LIVE_SIGNAL_WINDOW_MS;
-  const selectedAnalysis = forecast?.zoneId === selectedZoneId ? forecast : undefined;
-  const analysisBottleneck = selectedAnalysis?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
+  const selectedAnalysis = detailedForecast;
+  const analysisBottleneck = detailedForecast?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
   useEffect(() => { forecastRef.current = forecast; }, [forecast]);
   useEffect(() => { selectedZoneIdRef.current = selectedZoneId; }, [selectedZoneId]);
+  const recordDetailForecast = useCallback((nextForecast: RiskForecast) => {
+    if (nextForecast.zoneId !== selectedZoneIdRef.current) return;
+    const now = Date.now();
+    if (!detailForecastSeededRef.current) {
+      detailForecastSeededRef.current = true;
+      setDisplayedForecast(nextForecast);
+    }
+    detailForecastSamplesRef.current = [...detailForecastSamplesRef.current, { forecast: nextForecast, receivedAt: now }]
+      .filter((sample) => now - sample.receivedAt <= DETAIL_UPDATE_WINDOW_MS * 4);
+  }, []);
+  const recordDetailZone = useCallback((zone: Zone) => {
+    if (zone.id !== selectedZoneIdRef.current) return;
+    const now = Date.now();
+    if (!detailZoneSeededRef.current) {
+      detailZoneSeededRef.current = true;
+      setDisplayedZones((current) => ({ ...current, [zone.id]: zone }));
+    }
+    detailZoneSamplesRef.current = {
+      ...detailZoneSamplesRef.current,
+      [zone.id]: [...(detailZoneSamplesRef.current[zone.id] || []), { zone, receivedAt: now }]
+        .filter((sample) => now - sample.receivedAt <= DETAIL_UPDATE_WINDOW_MS * 4),
+    };
+  }, []);
   const loadInitial = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -825,6 +841,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     try {
       const nextForecast = await api<RiskForecast>(`/api/zones/${zoneId}/risk-forecast`);
       if (selectedZoneIdRef.current === zoneId) {
+        recordDetailForecast(nextForecast);
         setForecast(nextForecast);
         setForecastUpdatedAt(Date.now());
       }
@@ -833,7 +850,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       setForecastError(reason instanceof Error ? reason.message : "Could not load the risk forecast.");
     }
     finally { setForecastLoading(false); }
-  }, []);
+  }, [recordDetailForecast]);
   const loadRoutes = useCallback(async (zoneId: number, venueId?: number) => {
     if (!venueId) return;
     try {
@@ -856,6 +873,32 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
+    detailWindowStartedAtRef.current = Date.now();
+    detailForecastSamplesRef.current = [];
+    detailZoneSamplesRef.current = {};
+    detailForecastSeededRef.current = false;
+    detailZoneSeededRef.current = false;
+    setDisplayedForecast(undefined);
+    setDisplayedZones({});
+    setStampedeConfidenceStable(false);
+    if (!selectedZoneId) return;
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now();
+      if (currentTime - detailWindowStartedAtRef.current < DETAIL_UPDATE_WINDOW_MS) return;
+      const forecastAggregation = aggregateForecastSamples(detailForecastSamplesRef.current);
+      const zoneAggregation = aggregateZoneSamples(detailZoneSamplesRef.current[selectedZoneId] || []);
+      if (forecastAggregation) {
+        setDisplayedForecast(forecastAggregation.forecast);
+        setStampedeConfidenceStable(forecastAggregation.confidenceStable);
+      }
+      if (zoneAggregation) setDisplayedZones((current) => ({ ...current, [selectedZoneId]: zoneAggregation }));
+      detailForecastSamplesRef.current = [];
+      detailZoneSamplesRef.current = {};
+      detailWindowStartedAtRef.current = currentTime;
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [selectedZoneId]);
+  useEffect(() => {
     if (!selectedZoneId) return;
     let refreshInFlight = false;
     let disposed = false;
@@ -865,17 +908,22 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       try {
         await Promise.all([
           api<Zone[]>("/api/admin/zones", { cache: "no-store" }).then((latestZones) => {
-            setZones((current) => latestZones.map((zone) => {
-              const local = current.find((item) => item.id === zone.id);
-              const serverTime = new Date(zone.lastUpdated).valueOf();
-              const localTime = local ? new Date(local.lastUpdated).valueOf() : 0;
-              return local && localTime > serverTime
-                ? local
-                : {
-                    ...zone,
-                    simulationActive: local?.simulationActive ?? zone.simulationActive,
-                  };
-            }));
+            setZones((current) => {
+              const next = latestZones.map((zone) => {
+                const local = current.find((item) => item.id === zone.id);
+                const serverTime = new Date(zone.lastUpdated).valueOf();
+                const localTime = local ? new Date(local.lastUpdated).valueOf() : 0;
+                return local && localTime > serverTime
+                  ? local
+                  : {
+                      ...zone,
+                      simulationActive: local?.simulationActive ?? zone.simulationActive,
+                    };
+              });
+              const selected = next.find((zone) => zone.id === selectedZoneId);
+              if (selected) recordDetailZone(selected);
+              return next;
+            });
             setLiveTelemetryAtByZone((current) => {
               const next = { ...current };
               latestZones.forEach((zone) => {
@@ -910,7 +958,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           }),
         ]);
       } catch {
-        // WebSocket delivery remains active; retain the last good snapshot if polling fails.
       } finally {
         refreshInFlight = false;
       }
@@ -921,7 +968,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [selectedZoneId]);
+  }, [recordDetailZone, selectedZoneId]);
   useEffect(() => {
     if (selectedZoneId) loadForecast(selectedZoneId, true);
   }, [selectedZoneId, loadForecast]);
@@ -943,8 +990,8 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         client.subscribe("/topic/risk-updates", (message: IMessage) => {
           const event = JSON.parse(message.body) as RiskEvent;
           const eventZoneId = Number(event.zoneId);
-          setZones((current) =>
-            current.map((zone) =>
+          setZones((current) => {
+            const next = current.map((zone) =>
               Number(zone.id) === eventZoneId
                 ? {
                     ...zone,
@@ -957,8 +1004,11 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                     lastUpdated: event.timestamp,
                   }
                 : zone,
-            ),
-          );
+            );
+            const selected = next.find((zone) => zone.id === eventZoneId);
+            if (selected) recordDetailZone(selected);
+            return next;
+          });
           setHealth((current) =>
             current
               ? { ...current, totalRiskEvents: current.totalRiskEvents + 1 }
@@ -977,6 +1027,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           const selected = nextForecast.zoneId === selectedZoneIdRef.current;
           const currentForecast = forecastRef.current;
           if (!selected) return;
+          recordDetailForecast(nextForecast);
           if (nextForecast.lastTelemetryAt) setLiveTelemetryAtByZone((current) => ({ ...current, [nextForecast.zoneId]: nextForecast.lastTelemetryAt! }));
           const committedSnapshotChanged = !currentForecast || currentForecast.analysisGeneratedAt !== nextForecast.analysisGeneratedAt;
           if (committedSnapshotChanged) {
@@ -995,7 +1046,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       client.deactivate();
       stompRef.current = null;
     };
-  }, []);
+  }, [recordDetailForecast, recordDetailZone]);
   function takeAction(id: number, zoneId: number | null | undefined, zoneName: string | null | undefined, message: string) {
     const params = new URLSearchParams();
     if (zoneId) params.set("zoneId", String(zoneId));
@@ -1003,41 +1054,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     params.set("recommendationId", String(id));
     window.location.assign(`/console/admin?${params.toString()}`);
   }
-  /*
-  async function updateRecommendation(id: number) {
-    try {
-      await api<Recommendation>(`/api/recommendations/${id}/dismiss`, {
-        method: "PATCH",
-      });
-      setRecommendations((current) =>
-        current.filter((recommendation) => recommendation.id !== id),
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not update recommendation.",
-      );
-    }
-  }
-  async function dismissAlert(id: number) {
-    setDismissingAlertId(id); setError("");
-    try {
-      await api(`/api/alerts/${id}/resolve`, { method: "PATCH" });
-      setAlerts((current) => current.filter((alert) => alert.id !== id));
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not dismiss alert."); }
-    finally { setDismissingAlertId(undefined); }
-  }
-  async function dismissAllAlerts() {
-    setDismissingAll(true); setError("");
-    try {
-      await api("/api/alerts/resolve-all", { method: "PATCH" });
-      setAlerts([]);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not dismiss alerts."); }
-    finally { setDismissingAll(false); }
-  }
-  }
-  */
   if (loading)
     return (
       <AppShell
@@ -1158,13 +1174,13 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             />
           </div>
         </Card>
-        <EarlyWarningPanel forecast={forecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} />
+        <EarlyWarningPanel forecast={detailedForecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} stampedeConfidenceStable={stampedeConfidenceStable} />
         <div className={styles.insightGrid}>
-          <FlowIntelligencePanel compact forecast={forecast} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
-          <SelectedZonePanel compact selectedZone={selectedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
+          <FlowIntelligencePanel compact forecast={detailedForecast} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
+          <SelectedZonePanel compact selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
         </div>
-        {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={forecast} route={route} graph={routeGraph} now={now} /></DetailModal>}
-        {detailView === "zone" && <DetailModal title="Selected zone" onClose={() => setDetailView(undefined)}><SelectedZonePanel selectedZone={selectedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} /></DetailModal>}
+        {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={detailedForecast} route={route} graph={routeGraph} now={now} /></DetailModal>}
+        {detailView === "zone" && <DetailModal title="Selected zone" onClose={() => setDetailView(undefined)}><SelectedZonePanel selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} /></DetailModal>}
         <div className={styles.lowerGrid}>
           <Card className={styles.zoneTableCard} id="zones">
           <div className={styles.cardHeader}>
@@ -1204,48 +1220,6 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           </Card>
           <TrendCard zone={selectedZone} events={events} />
         </div>
-        {/* The single response queue lives under Administration. */}
-        {/*
-        <Card className={styles.queueCard} id="alerts">
-          <div className={styles.cardHeader}>
-            <div>
-              <span className={styles.kicker}>RESPONSE QUEUE</span>
-              <h2>Priority alerts</h2>
-            </div>
-            <div className={styles.queueHeaderActions}>
-              <span className={styles.queueCount}>{activeAlerts}</span>
-              {alerts.length > 0 && <Button variant="ghost" size="sm" disabled={dismissingAll} onClick={dismissAllAlerts}>{dismissingAll ? "Dismissing..." : "Dismiss all"}</Button>}
-            </div>
-          </div>
-          <div className={styles.fullAlertList}>
-            {alerts.length ? (
-              alerts.map((alert) => (
-                <article className={styles.fullAlert} key={alert.id}>
-                  <span className={`${styles.alertRail} ${styles[`rail${alert.severity}`]}`} />
-                  <div className={styles.fullAlertBody}>
-                    <div>
-                      <strong>{alert.zoneName || `Zone ${alert.zoneId}`} {(alert.source === "SIMULATION" || simulationZoneIds.has(alert.zoneId)) && <span className={styles.simulationBadge}>SIMULATION</span>}</strong>
-                      <StatusBadge level={alert.severity} />
-                    </div>
-                    <p>{alert.message}</p>
-                    <small>{formatTime(alert.timestamp)}, {formatAge(alert.timestamp, now)}</small>
-                  </div>
-                  <Button variant="primary" size="sm" onClick={() => takeAction("alert", alert.id, alert.zoneId, alert.zoneName, alert.message)}>
-                    Take Action
-                  </Button>
-                  <Button variant="ghost" size="sm" disabled={dismissingAlertId === alert.id || dismissingAll} onClick={() => dismissAlert(alert.id)}>
-                    {dismissingAlertId === alert.id ? "Dismissing..." : "Dismiss"}
-                  </Button>
-                </article>
-              ))
-            ) : (
-              <div className={styles.inlineEmpty}>
-                <Icon name="check" />
-                <span>No active alerts. The response queue is clear.</span>
-              </div>
-            )}
-          </div>
-        </Card> */}
       </div>
     </AppShell>
   );

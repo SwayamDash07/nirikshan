@@ -861,7 +861,18 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       const activeRuns = await api<Array<{ zoneId: number; status: string }>>("/api/admin/scenarios/active").catch(() => []);
       const activeZoneIds = new Set(activeRuns.filter((run) => run.status === "PENDING" || run.status === "RUNNING").map((run) => run.zoneId));
       setVenue(currentVenue);
-      setZones(venueZones.map((zone) => ({ ...zone, simulationActive: activeZoneIds.has(zone.id) })));
+      setZones((current) => venueZones.map((zone) => {
+        const live = current.find((item) => item.id === zone.id);
+        return {
+          ...zone,
+          currentDensity: live?.currentDensity ?? zone.currentDensity,
+          currentPeopleCount: live?.currentPeopleCount ?? zone.currentPeopleCount,
+          currentRiskLevel: live?.currentRiskLevel ?? zone.currentRiskLevel,
+          lastUpdated: live?.lastUpdated ?? zone.lastUpdated,
+          bottleneckDetected: live?.bottleneckDetected ?? zone.bottleneckDetected,
+          simulationActive: live?.simulationActive ?? activeZoneIds.has(zone.id),
+        };
+      }));
       const recentEvents = await Promise.all(venueZones.map(async (zone) => {
         try { return [zone.id, await api<RiskEvent[]>(`/api/zones/${zone.id}/risk-events?limit=50`)] as const; }
         catch { return [zone.id, []] as const; }
@@ -978,37 +989,18 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         await Promise.all([
           api<Zone[]>("/api/admin/zones", { cache: "no-store" }).then((latestZones) => {
             setZones((current) => {
-              const next = latestZones.map((zone) => {
-                const local = current.find((item) => item.id === zone.id);
-                const hasIncomingTelemetry = Number.isFinite(zone.currentDensity)
-                  && Number.isFinite(zone.currentPeopleCount)
-                  && Boolean(zone.currentRiskLevel)
-                  && Number.isFinite(new Date(zone.lastUpdated).valueOf());
-                const nextZone: Zone = {
+              return latestZones.map((zone) => {
+                const live = current.find((item) => item.id === zone.id);
+                return {
                   ...zone,
-                  currentDensity: hasIncomingTelemetry ? zone.currentDensity : local?.currentDensity ?? zone.currentDensity ?? 0,
-                  currentPeopleCount: hasIncomingTelemetry ? zone.currentPeopleCount : local?.currentPeopleCount ?? zone.currentPeopleCount ?? 0,
-                  currentRiskLevel: hasIncomingTelemetry ? zone.currentRiskLevel : local?.currentRiskLevel ?? zone.currentRiskLevel ?? "LOW",
-                  lastUpdated: hasIncomingTelemetry ? zone.lastUpdated : local?.lastUpdated ?? zone.lastUpdated ?? new Date(0).toISOString(),
-                  bottleneckDetected: hasIncomingTelemetry ? zone.bottleneckDetected : local?.bottleneckDetected ?? zone.bottleneckDetected,
-                  simulationActive: local?.simulationActive ?? zone.simulationActive,
+                  currentDensity: live?.currentDensity ?? zone.currentDensity,
+                  currentPeopleCount: live?.currentPeopleCount ?? zone.currentPeopleCount,
+                  currentRiskLevel: live?.currentRiskLevel ?? zone.currentRiskLevel,
+                  lastUpdated: live?.lastUpdated ?? zone.lastUpdated,
+                  bottleneckDetected: live?.bottleneckDetected ?? zone.bottleneckDetected,
+                  simulationActive: live?.simulationActive ?? zone.simulationActive,
                 };
-                const serverTime = new Date(nextZone.lastUpdated).valueOf();
-                const localTime = local ? new Date(local.lastUpdated).valueOf() : 0;
-                return local && localTime > serverTime ? local : nextZone;
               });
-              return next;
-            });
-            setLiveTelemetryAtByZone((current) => {
-              const next = { ...current };
-              latestZones.forEach((zone) => {
-                const incomingTime = new Date(zone.lastUpdated).valueOf();
-                const currentTime = new Date(next[zone.id] || 0).valueOf();
-                if (Number.isFinite(incomingTime) && incomingTime >= currentTime) {
-                  next[zone.id] = zone.lastUpdated;
-                }
-              });
-              return next;
             });
           }),
           api<RiskEvent[]>(`/api/zones/${selectedZoneId}/risk-events?limit=50`, { cache: "no-store" }).then((recent) => {

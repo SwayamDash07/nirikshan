@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/risk-events").permitAll()
                         .requestMatchers("/api/admin/**", "/api/jobs/**", "/api/risk-events/**", "/api/zones/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/job-files/recorded-sessions/*/annotated.mp4").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/job-files/recorded-sessions/*/events.json").permitAll()
                         .requestMatchers("/job-files/**").hasAnyRole("ADMIN", "SECURITY")
                         .requestMatchers(HttpMethod.PATCH, "/api/alerts/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/recommendations/customer").authenticated()

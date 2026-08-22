@@ -1,23 +1,23 @@
 [
   {
     "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:01.659554Z",
-    "densityScore": 0.4822,
-    "peopleCount": 6,
+    "timestamp": "2026-08-22T19:39:12.664833Z",
+    "densityScore": 0.5849,
+    "peopleCount": 7,
     "movementSpeed": 0.0,
     "riskLevel": "LOW",
-    "explanation": "Density reached 0.48 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.00 m/s (0% below baseline)",
+    "explanation": "Density reached 0.58 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.00 m/s (0% below baseline)",
     "densityChange": 0.0,
     "movementSlowdown": 0.0,
     "hotspotPersistenceSeconds": 0.0,
     "hotspotRegions": [
       {
         "gridPosition": "2,1",
-        "relativeDensity": 6.0
+        "relativeDensity": 6.429
       },
       {
         "gridPosition": "3,2",
-        "relativeDensity": 3.0
+        "relativeDensity": 2.571
       }
     ],
     "dominantDirection": "Unknown",
@@ -28,181 +28,17 @@
     "conflictingMovementRatio": 0.0,
     "behaviorState": "INSUFFICIENT_DATA",
     "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
+    "sourceClipId": "zone-5",
     "source": "LIVE"
   },
   {
     "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:02.659554Z",
-    "densityScore": 0.464,
-    "peopleCount": 4,
-    "movementSpeed": 0.3389,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.46 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.34 m/s (0% below baseline)",
-    "densityChange": 0.0,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 1.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 4.5
-      },
-      {
-        "gridPosition": "3,2",
-        "relativeDensity": 4.5
-      }
-    ],
-    "dominantDirection": "NE",
-    "directionDegrees": 65.72,
-    "directionConfidence": 0.356,
-    "directionalConsistency": 0.652,
-    "reverseMovementRatio": 0.125,
-    "conflictingMovementRatio": 0.125,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:03.659554Z",
-    "densityScore": 0.4463,
+    "timestamp": "2026-08-22T19:39:18.664833Z",
+    "densityScore": 0.5255,
     "peopleCount": 6,
-    "movementSpeed": 0.6795,
+    "movementSpeed": 0.5246,
     "riskLevel": "LOW",
-    "explanation": "Density reached 0.45 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.68 m/s (0% below baseline)",
-    "densityChange": 0.0,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 2.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 3.0
-      },
-      {
-        "gridPosition": "3,2",
-        "relativeDensity": 3.0
-      }
-    ],
-    "dominantDirection": "N",
-    "directionDegrees": 4.98,
-    "directionConfidence": 0.269,
-    "directionalConsistency": 0.518,
-    "reverseMovementRatio": 0.113,
-    "conflictingMovementRatio": 0.196,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:04.659554Z",
-    "densityScore": 0.4081,
-    "peopleCount": 5,
-    "movementSpeed": 0.7333,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.41 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.73 m/s (0% below baseline)",
-    "densityChange": 0.0,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 3.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 1.8
-      },
-      {
-        "gridPosition": "3,1",
-        "relativeDensity": 1.8
-      },
-      {
-        "gridPosition": "3,2",
-        "relativeDensity": 5.4
-      }
-    ],
-    "dominantDirection": "N",
-    "directionDegrees": 1.79,
-    "directionConfidence": 0.203,
-    "directionalConsistency": 0.473,
-    "reverseMovementRatio": 0.12,
-    "conflictingMovementRatio": 0.307,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:05.659554Z",
-    "densityScore": 0.3741,
-    "peopleCount": 8,
-    "movementSpeed": 0.8439,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.37 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.84 m/s (0% below baseline)",
-    "densityChange": 0.0,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 4.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 3.375
-      },
-      {
-        "gridPosition": "3,2",
-        "relativeDensity": 4.5
-      }
-    ],
-    "dominantDirection": "N",
-    "directionDegrees": 342.75,
-    "directionConfidence": 0.161,
-    "directionalConsistency": 0.71,
-    "reverseMovementRatio": 0.24,
-    "conflictingMovementRatio": 0.28,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:06.659554Z",
-    "densityScore": 0.4111,
-    "peopleCount": 6,
-    "movementSpeed": 0.8997,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.41 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.90 m/s (0% below baseline)",
-    "densityChange": 0.0,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 5.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 4.5
-      },
-      {
-        "gridPosition": "2,2",
-        "relativeDensity": 3.0
-      }
-    ],
-    "dominantDirection": "NE",
-    "directionDegrees": 52.17,
-    "directionConfidence": 0.327,
-    "directionalConsistency": 0.941,
-    "reverseMovementRatio": 0.267,
-    "conflictingMovementRatio": 0.073,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:07.659554Z",
-    "densityScore": 0.4026,
-    "peopleCount": 6,
-    "movementSpeed": 0.7889,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.40 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.79 m/s (0% below baseline)",
+    "explanation": "Density reached 0.53 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.52 m/s (0% below baseline)",
     "densityChange": 0.0,
     "movementSlowdown": 0.0,
     "hotspotPersistenceSeconds": 6.0,
@@ -216,175 +52,171 @@
         "relativeDensity": 4.5
       }
     ],
-    "dominantDirection": "NE",
-    "directionDegrees": 42.29,
-    "directionConfidence": 0.633,
-    "directionalConsistency": 0.959,
-    "reverseMovementRatio": 0.107,
-    "conflictingMovementRatio": 0.073,
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.135,
+    "directionalConsistency": 0.221,
+    "reverseMovementRatio": 0.05,
+    "conflictingMovementRatio": 0.275,
     "behaviorState": "INSUFFICIENT_DATA",
     "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
+    "sourceClipId": "zone-5",
     "source": "LIVE"
   },
   {
     "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:08.659554Z",
-    "densityScore": 0.44,
-    "peopleCount": 5,
-    "movementSpeed": 0.7219,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.44 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.72 m/s (0% below baseline)",
-    "densityChange": 0.0,
+    "timestamp": "2026-08-22T19:39:24.664833Z",
+    "densityScore": 0.7341,
+    "peopleCount": 9,
+    "movementSpeed": 0.3706,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.73 people/m\u00b2, a 54% increase over the lookback window, with average movement speed at 0.37 m/s (0% below baseline)",
+    "densityChange": 0.5376,
     "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 7.0,
+    "hotspotPersistenceSeconds": 12.0,
     "hotspotRegions": [
       {
         "gridPosition": "2,1",
-        "relativeDensity": 7.2
+        "relativeDensity": 7.0
       },
       {
         "gridPosition": "2,2",
-        "relativeDensity": 1.8
+        "relativeDensity": 2.0
       }
     ],
-    "dominantDirection": "NE",
-    "directionDegrees": 29.17,
-    "directionConfidence": 0.587,
-    "directionalConsistency": 0.903,
-    "reverseMovementRatio": 0.067,
-    "conflictingMovementRatio": 0.147,
+    "dominantDirection": "E",
+    "directionDegrees": 106.66,
+    "directionConfidence": 0.397,
+    "directionalConsistency": 0.728,
+    "reverseMovementRatio": 0.153,
+    "conflictingMovementRatio": 0.1,
     "behaviorState": "INSUFFICIENT_DATA",
     "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
+    "sourceClipId": "zone-5",
     "source": "LIVE"
   },
   {
     "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:09.659554Z",
-    "densityScore": 0.4297,
+    "timestamp": "2026-08-22T19:39:30.664833Z",
+    "densityScore": 0.3882,
+    "peopleCount": 2,
+    "movementSpeed": 0.7274,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.39 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.73 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 18.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "3,2",
+        "relativeDensity": 9.0
+      }
+    ],
+    "dominantDirection": "S",
+    "directionDegrees": 159.48,
+    "directionConfidence": 0.192,
+    "directionalConsistency": 0.446,
+    "reverseMovementRatio": 0.18,
+    "conflictingMovementRatio": 0.133,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "zone-5",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 5,
+    "timestamp": "2026-08-22T19:39:36.664833Z",
+    "densityScore": 0.3669,
+    "peopleCount": 4,
+    "movementSpeed": 0.1661,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.37 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.17 m/s (51% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.5111,
+    "hotspotPersistenceSeconds": 24.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "3,3",
+        "relativeDensity": 2.25
+      }
+    ],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.093,
+    "directionalConsistency": 0.159,
+    "reverseMovementRatio": 0.113,
+    "conflictingMovementRatio": 0.15,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "zone-5",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 5,
+    "timestamp": "2026-08-22T19:39:42.664833Z",
+    "densityScore": 0.5075,
     "peopleCount": 8,
-    "movementSpeed": 0.7976,
+    "movementSpeed": 0.5481,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.51 people/m\u00b2, a 41% increase over the lookback window, with average movement speed at 0.55 m/s (44% below baseline)",
+    "densityChange": 0.4054,
+    "movementSlowdown": 0.4396,
+    "hotspotPersistenceSeconds": 30.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      }
+    ],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.159,
+    "directionalConsistency": 0.236,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.183,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "zone-5",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 5,
+    "timestamp": "2026-08-22T19:39:48.664833Z",
+    "densityScore": 0.1769,
+    "peopleCount": 1,
+    "movementSpeed": 0.4939,
     "riskLevel": "LOW",
-    "explanation": "Density reached 0.43 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.80 m/s (0% below baseline)",
+    "explanation": "Density reached 0.18 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.49 m/s (0% below baseline)",
     "densityChange": 0.0,
     "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 8.0,
+    "hotspotPersistenceSeconds": 36.0,
     "hotspotRegions": [
       {
-        "gridPosition": "2,1",
-        "relativeDensity": 4.5
-      },
-      {
         "gridPosition": "2,2",
-        "relativeDensity": 4.5
-      }
-    ],
-    "dominantDirection": "NE",
-    "directionDegrees": 44.4,
-    "directionConfidence": 0.395,
-    "directionalConsistency": 0.651,
-    "reverseMovementRatio": 0.033,
-    "conflictingMovementRatio": 0.18,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:10.659554Z",
-    "densityScore": 0.5175,
-    "peopleCount": 6,
-    "movementSpeed": 0.7094,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.52 people/m\u00b2, a 7% increase over the lookback window, with average movement speed at 0.71 m/s (0% below baseline)",
-    "densityChange": 0.0732,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 9.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 4.5
-      },
-      {
-        "gridPosition": "2,2",
-        "relativeDensity": 4.5
-      }
-    ],
-    "dominantDirection": "NE",
-    "directionDegrees": 48.56,
-    "directionConfidence": 0.254,
-    "directionalConsistency": 0.543,
-    "reverseMovementRatio": 0.062,
-    "conflictingMovementRatio": 0.309,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:11.659554Z",
-    "densityScore": 0.5563,
-    "peopleCount": 6,
-    "movementSpeed": 0.6528,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.56 people/m\u00b2, a 15% increase over the lookback window, with average movement speed at 0.65 m/s (0% below baseline)",
-    "densityChange": 0.1538,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 10.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 4.5
-      },
-      {
-        "gridPosition": "2,2",
-        "relativeDensity": 4.5
-      }
-    ],
-    "dominantDirection": "NE",
-    "directionDegrees": 46.14,
-    "directionConfidence": 0.215,
-    "directionalConsistency": 0.578,
-    "reverseMovementRatio": 0.152,
-    "conflictingMovementRatio": 0.309,
-    "behaviorState": "INSUFFICIENT_DATA",
-    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
-    "source": "LIVE"
-  },
-  {
-    "zoneId": 5,
-    "timestamp": "2026-08-22T15:45:12.659554Z",
-    "densityScore": 0.6265,
-    "peopleCount": 5,
-    "movementSpeed": 0.5881,
-    "riskLevel": "LOW",
-    "explanation": "Density reached 0.63 people/m\u00b2, a 35% increase over the lookback window, with average movement speed at 0.59 m/s (0% below baseline)",
-    "densityChange": 0.3503,
-    "movementSlowdown": 0.0,
-    "hotspotPersistenceSeconds": 11.0,
-    "hotspotRegions": [
-      {
-        "gridPosition": "2,1",
-        "relativeDensity": 5.4
-      },
-      {
-        "gridPosition": "2,2",
-        "relativeDensity": 3.6
+        "relativeDensity": 9.0
       }
     ],
     "dominantDirection": "N",
-    "directionDegrees": 2.64,
-    "directionConfidence": 0.105,
-    "directionalConsistency": 0.43,
-    "reverseMovementRatio": 0.237,
-    "conflictingMovementRatio": 0.28,
+    "directionDegrees": 22.41,
+    "directionConfidence": 0.232,
+    "directionalConsistency": 0.391,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.2,
     "behaviorState": "INSUFFICIENT_DATA",
     "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
-    "sourceClipId": "c-block-recorded",
+    "sourceClipId": "zone-5",
     "source": "LIVE"
   }
 ]

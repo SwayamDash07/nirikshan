@@ -133,6 +133,20 @@ async function readTelemetry(definition: SessionDefinition) {
       continue;
     }
   }
+
+  const remoteCandidate = definition.eventCandidates.find((candidate) => candidate.startsWith("recorded-sessions/"));
+  if (remoteCandidate) {
+    try {
+      const response = await fetch(`${apiBase}/job-files/${remoteCandidate}`, { cache: "no-store" });
+      if (response.ok) {
+        const raw = await response.json() as RawEvent[];
+        if (Array.isArray(raw)) return { telemetry: normalizeEvents(raw), source: remoteCandidate };
+      }
+    } catch {
+      // The local file fallback below provides a useful state during local-only development.
+    }
+  }
+
   return { telemetry: [], source: "No processed telemetry JSON found" };
 }
 

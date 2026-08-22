@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import cv2
 import numpy as np
@@ -38,7 +38,7 @@ class FaceBlurProcessor:
         if hasattr(self.detector, "empty") and self.detector.empty():
             raise PrivacyProcessingError(f"PRIVACY_PROCESSING_FAILED: face detector unavailable at {path}")
 
-    def sanitize(self, frame: Any) -> PrivacyResult:
+    def sanitize(self, frame: Any, protected_regions: Iterable[tuple[int, int, int, int]] | None = None) -> PrivacyResult:
         if frame is None or not hasattr(frame, "shape") or frame.size == 0:
             raise PrivacyProcessingError("PRIVACY_PROCESSING_FAILED: empty camera frame")
         try:
@@ -47,14 +47,19 @@ class FaceBlurProcessor:
         except Exception as error:
             raise PrivacyProcessingError(f"PRIVACY_PROCESSING_FAILED: face detection error: {error}") from error
         safe = frame.copy()
-        for x, y, width, height in faces:
-            left, top = max(0, int(x)), max(0, int(y))
-            right = min(safe.shape[1], left + int(width))
-            bottom = min(safe.shape[0], top + int(height))
+        regions = [(int(x), int(y), int(width), int(height)) for x, y, width, height in faces]
+        regions.extend((int(left), int(top), int(right - left), int(bottom - top)) for left, top, right, bottom in (protected_regions or []))
+        for x, y, width, height in regions:
+            padding_x = max(2, round(width * 0.35))
+            padding_top = max(2, round(height * 0.25))
+            padding_bottom = max(2, round(height * 0.45))
+            left, top = max(0, x - padding_x), max(0, y - padding_top)
+            right = min(safe.shape[1], x + width + padding_x)
+            bottom = min(safe.shape[0], y + height + padding_bottom)
             if right <= left or bottom <= top:
                 continue
             roi = safe[top:bottom, left:right]
-            kernel = max(15, ((min(roi.shape[:2]) // 2) * 2) + 1)
+            kernel = max(21, ((min(roi.shape[:2]) // 2) * 2) + 1)
             safe[top:bottom, left:right] = cv2.GaussianBlur(roi, (kernel, kernel), 0)
         return PrivacyResult(safe, len(faces))
 

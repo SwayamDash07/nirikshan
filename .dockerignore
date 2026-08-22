@@ -20,3 +20,4 @@ tmp
 !cv-pipeline/outputs/recorded-sessions/
 !cv-pipeline/outputs/recorded-sessions/zone-*/
 !cv-pipeline/outputs/recorded-sessions/zone-*/annotated.mp4
+!cv-pipeline/outputs/recorded-sessions/zone-*/events.json

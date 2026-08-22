@@ -146,6 +146,22 @@ def detect_people(model: YOLO, frame: Any, confidence: float, device: str, augme
     return detections
 
 
+def person_head_regions(detections: list[Detection]) -> list[tuple[int, int, int, int]]:
+    """Return conservative head/upper-body regions for privacy fallback blur.
+
+    Haar face detection is intentionally retained, but small, side-on, distant,
+    and partially occluded faces are common in CCTV footage. A person detector
+    gives us a safe upper-body region to blur when Haar cannot isolate a face.
+    """
+    regions: list[tuple[int, int, int, int]] = []
+    for detection in detections:
+        left, top, right, bottom = detection.box
+        height = max(1, bottom - top)
+        head_bottom = top + max(24, round(height * 0.38))
+        regions.append((left, top, right, head_bottom))
+    return regions
+
+
 def detect_hotspots(detections: list[Detection], frame_width: int, frame_height: int,
                     grid_size: int = HOTSPOT_GRID_SIZE, threshold: float = HOTSPOT_THRESHOLD) -> list[dict[str, Any]]:
     """Find coarse within-camera crowd concentration using the tested signal helper."""
@@ -454,12 +470,6 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                 continue
             timestamp_seconds = frame_index / fps
             is_detection_frame = frame_index % process_every == 0
-            # Skipped loop frames are only read to advance the video position and
-            # are never detected or emitted. Keep privacy processing for frames
-            # that are actually used, plus every frame when annotation output is
-            # enabled so written video remains privacy-safe.
-            if is_detection_frame or writer is not None:
-                frame = privacy.sanitize(frame).frame
             if is_detection_frame:
                 detections = detect_people(model, frame, confidence, device=device, augment=augment)
                 current_total_people = len(detections)
@@ -578,6 +588,13 @@ def process_video(args: argparse.Namespace) -> list[dict[str, Any]]:
                         if len(events) > 600:
                             del events[:-600]
                         Path(args.output).write_text(json.dumps(events, indent=2), encoding="utf-8")
+
+            # Skipped loop frames are only read to advance the video position
+            # and are never emitted. Sanitize every frame written to an
+            # annotation, using recent person boxes as a fallback when Haar
+            # cannot see a small, angled, or occluded face.
+            if is_detection_frame or writer is not None:
+                frame = privacy.sanitize(frame, person_head_regions(detections)).frame
 
             if writer is not None:
                 if args.heatmap_overlay is not False:
@@ -732,19 +749,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--loop", action="store_true", help="Run continuously, restart at EOF, and timestamp each event with current UTC time")
     parser.add_argument("--post-delay", type=float, default=0.0, help="Extra seconds added between live POSTs")
     parser.add_argument("--timeout", type=float, default=5.0, help="HTTP POST timeout in seconds (default: 5 for live latest-first delivery)")
+    parser.add_argument("--skip-zone-lock", action="store_true", help="Skip the local duplicate-zone lock for offline prerecorded exports")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     process_args = parse_args()
-    process_lock = ZoneProcessLock(process_args.zone_id)
+    process_lock = None if process_args.skip_zone_lock else ZoneProcessLock(process_args.zone_id)
     def stop_on_signal(_signum: int, _frame: Any) -> None:
         raise KeyboardInterrupt
 
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, stop_on_signal)
     try:
-        process_lock.acquire()
+        if process_lock is not None:
+            process_lock.acquire()
         process_video(process_args)
     except KeyboardInterrupt:
         print(f"Stopped zone worker cleanly: zone={process_args.zone_id}", flush=True)
@@ -752,4 +771,5 @@ if __name__ == "__main__":
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(1)
     finally:
-        process_lock.release()
+        if process_lock is not None:
+            process_lock.release()

@@ -835,6 +835,18 @@ function ConsoleApp({ user }: { user: UserInfo }) {
     route?.gateAction,
     route?.blockage?.status,
   ]);
+  const earlyWarningKey = JSON.stringify([
+    selectedZoneId,
+    detailedForecast?.generatedAt,
+    detailedForecast?.lastTelemetryAt,
+    detailedForecast?.analysisGeneratedAt,
+    formatAge(detailedForecast?.lastTelemetryAt, now),
+    formatAge(detailedForecast?.generatedAt, now),
+    detailedForecast?.currentDensity,
+    detailedForecast?.projectedDensity,
+    detailedForecast?.confidence,
+    detailedForecast?.state,
+  ]);
   useEffect(() => { forecastRef.current = forecast; }, [forecast]);
   useEffect(() => { selectedZoneIdRef.current = selectedZoneId; }, [selectedZoneId]);
   const recordDetailForecast = useCallback((nextForecast: RiskForecast) => {
@@ -1284,7 +1296,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             />
           </div>
         </Card>
-        <EarlyWarningPanel forecast={detailedForecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} stampedeConfidenceStable={stampedeConfidenceStable} />
+        <EarlyWarningPanel key={earlyWarningKey} forecast={detailedForecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} stampedeConfidenceStable={stampedeConfidenceStable} />
         <div className={styles.insightGrid}>
           <FlowIntelligencePanel key={flowSummaryKey} compact forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
           <SelectedZonePanel key={selectedZone ? `${selectedZone.id}-${selectedZone.lastUpdated}-${selectedZone.currentPeopleCount}-${selectedZone.currentDensity}` : "selected-zone-empty"} compact selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />

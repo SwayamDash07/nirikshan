@@ -285,6 +285,7 @@
 }
 .miniMap {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   margin-top: 18px;
   border: 1px solid var(--border);
@@ -317,6 +318,12 @@
 }
 .zoneDot {
   background: var(--success);
+}
+.walkflowLine {
+  width: 14px !important;
+  height: 0 !important;
+  border-top: 3px solid var(--accent);
+  border-radius: 999px !important;
 }
 .mapLoading {
   display: grid;

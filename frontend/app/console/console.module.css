@@ -265,6 +265,11 @@
 .zoneContext {
   min-width: 0;
 }
+.queueCard {
+  width: min(100%, 1240px);
+  margin: 0 auto 18px;
+  padding: 22px;
+}
 .queueCount,
 .tableMeta {
   display: grid;
@@ -609,6 +614,7 @@
 }
 .leafletPanel {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   box-sizing: border-box;
   width: 100%;

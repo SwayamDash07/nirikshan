@@ -64,7 +64,7 @@ const labels: Record<RiskLevel, string> = {
 const navItems: NavItem[] = [
   { label: "Safety alerts", href: "/alerts", icon: "bell" },
   { label: "Report issue", href: "/alerts/report", icon: "activity" },
-  { label: "Account", href: "/alerts/security", icon: "settings" },
+  { label: "Settings", href: "/alerts/security", icon: "settings" },
 ];
 
 function ago(value: string) {

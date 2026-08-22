@@ -1082,6 +1082,16 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             };
           }
           setZones((current) => {
+            const matchedZone = current.find((zone) => Number(zone.id) === eventZoneId);
+            console.log('[WS-MERGE-TRACE]', {
+              incomingZoneId: eventZoneId,
+              currentZoneCount: current.length,
+              matchFound: Boolean(matchedZone),
+              oldHeadcount: matchedZone?.currentPeopleCount,
+              newHeadcount: event.peopleCount,
+              oldDensity: matchedZone?.currentDensity,
+              newDensity: event.densityScore,
+            });
             const next = current.map((zone) =>
               Number(zone.id) === eventZoneId
                 ? {

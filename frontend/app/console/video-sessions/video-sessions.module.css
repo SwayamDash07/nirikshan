@@ -5,7 +5,7 @@
 .pageIntro p { max-width: 760px; margin: 8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .modeBadge, .privacyBadge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border)); border-radius: 999px; color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--surface)); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 .modeBadge { padding: 8px 10px; }
-.sessionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.sessionGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .sessionCard { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 10px 30px color-mix(in srgb, var(--text) 5%, transparent); }
 .sessionHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 16px 13px; }
 .sessionHeader h2 { margin: 5px 0 0; color: var(--text); font-size: 17px; letter-spacing: -.03em; }
@@ -34,5 +34,6 @@
 .sessionFooter span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .errorState { display: grid; gap: 7px; padding: 20px; color: var(--text-secondary); }
 .errorState strong { color: var(--text); }
-@media (max-width: 900px) { .sessionGrid { grid-template-columns: 1fr; } }
+@media (max-width: 1080px) { .sessionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .sessionGrid { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .pageIntro, .sessionHeader, .sessionFooter { display: grid; }.modeBadge, .privacyBadge { width: max-content; }.videoFrame, .videoUnavailable { min-height: 210px; }.telemetryGrid { padding-inline: 12px; }.sessionFooter { margin-inline: 12px; } }

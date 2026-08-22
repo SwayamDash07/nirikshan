@@ -1276,10 +1276,10 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         <EarlyWarningPanel forecast={detailedForecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} stampedeConfidenceStable={stampedeConfidenceStable} />
         <div className={styles.insightGrid}>
           <FlowIntelligencePanel compact forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
-          <SelectedZonePanel compact selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
+          <SelectedZonePanel key={selectedZone ? `${selectedZone.id}-${selectedZone.lastUpdated}-${selectedZone.currentPeopleCount}-${selectedZone.currentDensity}` : "selected-zone-empty"} compact selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
         </div>
         {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} /></DetailModal>}
-        {detailView === "zone" && <DetailModal title="Selected zone" onClose={() => setDetailView(undefined)}><SelectedZonePanel selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} /></DetailModal>}
+        {detailView === "zone" && <DetailModal title="Selected zone" onClose={() => setDetailView(undefined)}><SelectedZonePanel key={selectedZone ? `${selectedZone.id}-${selectedZone.lastUpdated}-${selectedZone.currentPeopleCount}-${selectedZone.currentDensity}` : "selected-zone-empty"} selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} /></DetailModal>}
         <div className={styles.lowerGrid}>
           <Card className={styles.zoneTableCard} id="zones">
           <div className={styles.cardHeader}>
@@ -1301,7 +1301,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             {zones.length ? (
               zones.map((zone) => (
                 <ZoneRow
-                  key={zone.id}
+                  key={`${zone.id}-${zone.lastUpdated}-${zone.currentPeopleCount}-${zone.currentDensity}`}
                   zone={zone}
                   selected={zone.id === selectedZoneId}
                   onSelect={() => setSelectedZoneId(zone.id)}

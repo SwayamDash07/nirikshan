@@ -492,7 +492,7 @@ function SelectedZonePanel({ selectedZone, displayedZone, selectedAnalysis, sele
   onViewMore?: () => void;
 }) {
   console.log('[SELECTED-ZONE-RENDER]', Date.now());
-  console.log('[SELECTED-ZONE-VALUES]', { headcount: selectedZone?.currentPeopleCount, density: selectedZone?.currentDensity, lastUpdated: selectedZone?.lastUpdated });
+  console.log('[SELECTED-ZONE-VALUES]', JSON.stringify({ headcount: selectedZone?.currentPeopleCount, density: selectedZone?.currentDensity, lastUpdated: selectedZone?.lastUpdated }));
   const selectedZoneRenderCountRef = useRef(0);
   selectedZoneRenderCountRef.current += 1;
   const detailedZone = displayedZone || selectedZone;
@@ -595,7 +595,7 @@ function ZoneRow({
   hotspotSummary?: HotspotSummary;
 }) {
   console.log('[ZONE-ROW-RENDER]', zone.id, Date.now());
-  console.log('[ZONE-ROW-VALUES]', zone.id, { headcount: zone.currentPeopleCount, density: zone.currentDensity, lastUpdated: zone.lastUpdated });
+  console.log('[ZONE-ROW-VALUES]', zone.id, JSON.stringify({ headcount: zone.currentPeopleCount, density: zone.currentDensity, lastUpdated: zone.lastUpdated }));
   return (
     <button
       type="button"
@@ -1075,7 +1075,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
           }
           setZones((current) => {
             const matchedZone = current.find((zone) => Number(zone.id) === eventZoneId);
-            console.log('[WS-MERGE-TRACE]', {
+            console.log('[WS-MERGE-TRACE]', JSON.stringify({
               incomingZoneId: eventZoneId,
               currentZoneCount: current.length,
               matchFound: Boolean(matchedZone),
@@ -1083,7 +1083,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               newHeadcount: event.peopleCount,
               oldDensity: matchedZone?.currentDensity,
               newDensity: event.densityScore,
-            });
+            }));
             const next = current.map((zone) =>
               Number(zone.id) === eventZoneId
                 ? {

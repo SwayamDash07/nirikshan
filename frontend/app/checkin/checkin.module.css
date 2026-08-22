@@ -1,0 +1,13 @@
+.state { display: grid; place-items: center; min-height: 100vh; color: var(--text-secondary); background: var(--bg); font-size: 13px; }
+.page { max-width: 760px; margin: 0 auto; }
+.card { display: grid; gap: 15px; padding: 30px; }
+.kicker { color: var(--primary); font-size: 10px; font-weight: 750; letter-spacing: .12em; }
+.card h2 { margin: 0; color: var(--text); font-size: 25px; letter-spacing: -.045em; }
+.card p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.card p strong { color: var(--text); }
+.meta { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.meta span { color: var(--text-muted); font-size: 11px; }
+.meta strong { color: var(--text); font-size: 12px; }
+.neutral { padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-subtle); }
+.error { padding: 11px 12px; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-soft); font-size: 12px; line-height: 1.45; }
+@media (max-width: 680px) { .card { padding: 22px; }.meta { align-items: flex-start; flex-direction: column; gap: 5px; } }

@@ -5,6 +5,7 @@ import AppShell, { primaryNavItems } from "../../components/AppShell";
 import { Button } from "../../components/ui";
 import { clearSession, readSession, type UserInfo } from "../../lib/auth";
 import ResponseActions from "../ResponseActions";
+import CheckInManagement from "../CheckInManagement";
 import styles from "../console.module.css";
 import managementStyles from "../management.module.css";
 
@@ -23,6 +24,7 @@ export default function Page() {
   if (!user) return <main className={styles.loadingPage}>Checking access</main>;
   return <AppShell user={user} title="Administration" subtitle="Manage operational access and coordinate response" active="Administration" navItems={navItems}>
     <ResponseActions />
+    <CheckInManagement />
     <section className={managementStyles.adminLinks}>
       <div><span className={managementStyles.kicker}>STAFF ACCESS</span><h2>Security personnel</h2><p>Create accounts, review available staff, and send instructions.</p></div>
       <div className={managementStyles.adminLinkList}>

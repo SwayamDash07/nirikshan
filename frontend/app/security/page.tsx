@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import AppShell, { NavItem } from "../components/AppShell";
 import { Button, Card, Spinner } from "../components/ui";
 import { api, clearSession, readSession, type UserInfo } from "../lib/auth";
 import styles from "./security.module.css";
+
+const LeafletVenueMap = dynamic(() => import("../LeafletVenueMap"), {
+  ssr: false,
+  loading: () => <div className={styles.mapLoading}>Loading venue map</div>,
+});
 
 type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type SecurityAlert = {
@@ -21,6 +27,8 @@ type SecurityAlert = {
 };
 type Instruction = { id: number; message: string; createdAt: string };
 type Intervention = { id: number; type: string; message: string; severity: RiskLevel; source?: "LIVE" | "SIMULATION"; affectedRoute?: string | null; direction?: string | null; durationMinutes?: number | null; barricadeInstruction?: string | null; confidence?: number | null };
+type Venue = { id: number; name: string; latitude?: number; longitude?: number };
+type Zone = { id: number; name: string; latitude: number; longitude: number; radiusMeters?: number; currentDensity: number; currentPeopleCount: number; currentRiskLevel: RiskLevel; lastUpdated: string; bottleneckDetected?: boolean; simulationActive?: boolean };
 const labels: Record<RiskLevel, string> = {
   LOW: "Normal",
   MEDIUM: "Watch",
@@ -57,8 +65,31 @@ function SecurityWorkspace({
   const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
   const [instructions, setInstructions] = useState<Instruction[]>([]);
   const [interventions, setInterventions] = useState<Intervention[]>([]);
+  const [venue, setVenue] = useState<Venue>();
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapError, setMapError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const loadMap = useCallback(async () => {
+    setMapLoading(true);
+    setMapError("");
+    try {
+      const venues = await api<Venue[]>("/api/venues");
+      const currentVenue = venues[0];
+      if (!currentVenue) {
+        setVenue(undefined);
+        setZones([]);
+        return;
+      }
+      setVenue(currentVenue);
+      setZones(await api<Zone[]>(`/api/venues/${currentVenue.id}/zones`));
+    } catch (reason) {
+      setMapError(reason instanceof Error ? reason.message : "Could not load the venue map");
+    } finally {
+      setMapLoading(false);
+    }
+  }, []);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -84,14 +115,15 @@ function SecurityWorkspace({
   useEffect(() => {
     if (preview) {
       setLoading(false);
+      void loadMap();
       return;
     }
     if (user.mustChangePassword) {
       window.location.replace("/alerts/security");
       return;
     }
-    load();
-  }, [load, user.mustChangePassword, preview]);
+    void Promise.all([load(), loadMap()]);
+  }, [load, loadMap, user.mustChangePassword, preview]);
   async function acknowledge(id: number) {
     try {
       await api(`/api/security/alerts/${id}/acknowledge`, { method: "POST" });
@@ -130,11 +162,10 @@ function SecurityWorkspace({
           <i />
           {preview ? "Security preview" : "Staff workspace"}
         </span>
-        {!preview && (
-          <Button variant="secondary" size="sm" onClick={load}>
-            Refresh
-          </Button>
-        )}
+        <div className={styles.toolbarActions}>
+          {!preview && <a className={styles.checkInLink} href={`/checkin/${encodeURIComponent(user.name)}`}>Safety check-in</a>}
+          {!preview && <Button variant="secondary" size="sm" onClick={() => { void load(); void loadMap(); }}>Refresh</Button>}
+        </div>
       </div>
       {preview && (
         <div className={styles.previewBanner} role="status">
@@ -146,6 +177,19 @@ function SecurityWorkspace({
           {error}
         </div>
       )}
+      <section className={styles.mapSection} aria-label="Campus security map">
+        <Card className={styles.mapCard}>
+          <div className={styles.cardHeader}>
+            <div>
+              <span className={styles.kicker}>CAMPUS OVERVIEW</span>
+              <h2>Security map</h2>
+              <p>Current zone conditions and recommended evacuation route.</p>
+            </div>
+            <span className={styles.mapBadge}><i />{zones.length ? `${zones.length} zones` : "No zones"}</span>
+          </div>
+          {mapLoading ? <div className={styles.mapLoading}>Loading venue map</div> : mapError ? <div className={styles.mapEmpty} role="status">{mapError}</div> : <LeafletVenueMap venue={venue} zones={zones} onSelect={() => undefined} />}
+        </Card>
+      </section>
       {!error && alerts.some((alert) => alert.source === "SIMULATION") && <div className={styles.simulationBanner} role="status">SIMULATION MODE: This alert is deterministic drill data, not a live camera alert.</div>}
       <section className={styles.securityGrid}>
         <Card className={styles.queue}>

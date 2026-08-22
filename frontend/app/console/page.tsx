@@ -492,6 +492,7 @@ function SelectedZonePanel({ selectedZone, displayedZone, selectedAnalysis, sele
   onViewMore?: () => void;
 }) {
   console.log('[SELECTED-ZONE-RENDER]', Date.now());
+  console.log('[SELECTED-ZONE-VALUES]', { headcount: selectedZone?.currentPeopleCount, density: selectedZone?.currentDensity, lastUpdated: selectedZone?.lastUpdated });
   const selectedZoneRenderCountRef = useRef(0);
   selectedZoneRenderCountRef.current += 1;
   const detailedZone = displayedZone || selectedZone;
@@ -594,6 +595,7 @@ function ZoneRow({
   hotspotSummary?: HotspotSummary;
 }) {
   console.log('[ZONE-ROW-RENDER]', zone.id, Date.now());
+  console.log('[ZONE-ROW-VALUES]', zone.id, { headcount: zone.currentPeopleCount, density: zone.currentDensity, lastUpdated: zone.lastUpdated });
   return (
     <button
       type="button"

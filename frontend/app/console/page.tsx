@@ -1237,7 +1237,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             </a>
           </div>
         </div>
-        <div className={styles.metricGrid}>
+        <div className={styles.metricGrid} key={`${totalHeadcount}-${freshSignals}-${zonesRequiringAttention}`}>
           <Metric
             label="Zones monitored"
             value={health?.totalZones ?? zones.length}

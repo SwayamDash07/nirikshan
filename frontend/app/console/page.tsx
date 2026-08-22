@@ -491,11 +491,13 @@ function SelectedZonePanel({ selectedZone, displayedZone, selectedAnalysis, sele
   compact?: boolean;
   onViewMore?: () => void;
 }) {
+  const selectedZoneRenderCountRef = useRef(0);
+  selectedZoneRenderCountRef.current += 1;
   const detailedZone = displayedZone || selectedZone;
   if (compact) {
     return <Card className={`${styles.zoneContext} ${styles.summaryCard}`}>
       <div className={styles.cardHeader}>
-        <div><span className={styles.kicker}>SELECTED ZONE</span><h2>{selectedZone?.name || "No zone selected"}</h2></div>
+        <div><span className={styles.kicker}>SELECTED ZONE</span><h2>{selectedZone?.name || "No zone selected"}</h2><small>Render count: {selectedZoneRenderCountRef.current}</small></div>
         <StatusBadge level={detailedZone?.currentRiskLevel || "LOW"} />
       </div>
       {selectedZone ? <>
@@ -515,6 +517,7 @@ function SelectedZonePanel({ selectedZone, displayedZone, selectedAnalysis, sele
       <div>
         <span className={styles.kicker}>SELECTED ZONE</span>
         <h2>{selectedZone?.name || "No zone selected"}</h2>
+        <small>Render count: {selectedZoneRenderCountRef.current}</small>
         {selectedZone?.simulationActive && <span className={styles.simulationBadge}>SIMULATION MODE</span>}
       </div>
       <StatusBadge level={detailedZone?.currentRiskLevel || "LOW"} />
@@ -761,6 +764,8 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const zoneTableRenderCountRef = useRef(0);
+  zoneTableRenderCountRef.current += 1;
   useEffect(() => {
     if (typeof window !== "undefined") {
       (window as Window & { DEBUG_ZONES?: Zone[] }).DEBUG_ZONES = zones;
@@ -1276,7 +1281,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
               <h2>Coverage by zone</h2>
               <p>Choose a row to inspect its current signal.</p>
             </div>
-            <span className={styles.tableMeta}>{zones.length} zones</span>
+            <span className={styles.tableMeta}>{zones.length} zones · Render count: {zoneTableRenderCountRef.current}</span>
           </div>
           <div className={styles.zoneTableHeader}>
             <span>Zone</span>

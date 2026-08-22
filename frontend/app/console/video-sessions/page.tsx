@@ -35,13 +35,10 @@ function RecordedTelemetryCards({ session, sample }: { session: RecordedSession;
   </div>;
 }
 
-function EvacuationRouteCard({ route }: { route: string }) {
-  return <div className={styles.routeCard}><span>Evacuation route</span><strong>{route}</strong><small>Recorded-session route guidance</small></div>;
-}
-
 function RecordedSessionCard({ session }: { session: RecordedSession }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [videoFailed, setVideoFailed] = useState(false);
   const sample = useMemo(() => activeTelemetry(session.telemetry, currentTime), [currentTime, session.telemetry]);
   const updateFromVideo = () => {
     const time = videoRef.current?.currentTime;
@@ -54,12 +51,11 @@ function RecordedSessionCard({ session }: { session: RecordedSession }) {
       <span className={styles.privacyBadge}>Recorded Session · Privacy Mode Active</span>
     </div>
     <div className={styles.videoFrame}>
-      <video ref={videoRef} className={styles.video} src={session.videoUrl || undefined} loop muted playsInline controls preload="metadata" onTimeUpdate={updateFromVideo} onLoadedMetadata={updateFromVideo} aria-label={`Recorded privacy-safe footage for ${session.zoneName}`} />
-      {!session.videoAvailable && <div className={styles.videoUnavailable}><strong>Privacy-safe demo output unavailable</strong><span>Only annotated face-blurred footage can be shown in this view.</span></div>}
+      <video ref={videoRef} className={styles.video} src={session.videoUrl || undefined} autoPlay loop muted playsInline controls preload="metadata" onTimeUpdate={updateFromVideo} onLoadedMetadata={updateFromVideo} onError={() => setVideoFailed(true)} aria-label={`Recorded privacy-safe footage for ${session.zoneName}`} />
+      {(!session.videoAvailable || videoFailed) && <div className={styles.videoUnavailable}><strong>Recorded video unavailable</strong><span>Check that the privacy-safe recording is available from the backend.</span></div>}
       {sample && <div className={styles.videoOverlay}><span>{formatTime(currentTime)} · RECORDED</span><strong>{sample.peopleCount} people</strong><small>{sample.densityScore.toFixed(2)} people / m² · {riskLabels[sample.riskLevel]}</small></div>}
     </div>
     <RecordedTelemetryCards session={session} sample={sample} />
-    <EvacuationRouteCard route={session.evacuationRoute} />
     <div className={styles.sessionFooter}><span>{sample ? sample.explanation : session.telemetrySource}</span><span>{session.telemetry.length ? `${formatTime(sample?.secondsIntoClip ?? 0)} telemetry position` : "Telemetry unavailable"}</span></div>
   </article>;
 }

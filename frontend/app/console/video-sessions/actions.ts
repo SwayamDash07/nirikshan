@@ -1,6 +1,6 @@
 "use server";
 
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 export type RecordedRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -21,7 +21,6 @@ export type RecordedSession = {
   cameraLabel: string;
   videoUrl: string;
   telemetrySource: string;
-  evacuationRoute: string;
   telemetry: RecordedTelemetry[];
   videoAvailable: boolean;
 };
@@ -43,7 +42,6 @@ type SessionDefinition = {
   cameraLabel: string;
   eventCandidates: string[];
   videoCandidates: string[];
-  evacuationRoute: string;
 };
 
 const sessionDefinitions: SessionDefinition[] = [
@@ -54,7 +52,6 @@ const sessionDefinitions: SessionDefinition[] = [
     cameraLabel: "Main Gate camera",
     eventCandidates: ["recorded-sessions/zone-1/events.json", "4/events.json"],
     videoCandidates: ["recorded-sessions/zone-1/annotated.mp4"],
-    evacuationRoute: "Main Gate → Hostel 25 Gate → Main Gate Exit",
   },
   {
     id: "hostel-25-gate",
@@ -63,7 +60,6 @@ const sessionDefinitions: SessionDefinition[] = [
     cameraLabel: "Hostel 25 Gate camera",
     eventCandidates: ["recorded-sessions/zone-2/events.json", "1/events.json"],
     videoCandidates: ["recorded-sessions/zone-2/annotated.mp4"],
-    evacuationRoute: "Hostel 25 Gate → Main Gate Exit",
   },
   {
     id: "cafeteria",
@@ -72,7 +68,6 @@ const sessionDefinitions: SessionDefinition[] = [
     cameraLabel: "Cafeteria camera",
     eventCandidates: ["recorded-sessions/zone-3/events.json", "5/events.json"],
     videoCandidates: ["recorded-sessions/zone-3/annotated.mp4"],
-    evacuationRoute: "Cafeteria → A Block Entrance → Main Gate Exit",
   },
   {
     id: "a-block-entrance",
@@ -81,7 +76,6 @@ const sessionDefinitions: SessionDefinition[] = [
     cameraLabel: "A Block Entrance camera",
     eventCandidates: ["recorded-sessions/zone-4/events.json", "6/events.json"],
     videoCandidates: ["recorded-sessions/zone-4/annotated.mp4"],
-    evacuationRoute: "A Block Entrance → Main Gate Exit",
   },
   {
     id: "c-block-gate",
@@ -90,7 +84,6 @@ const sessionDefinitions: SessionDefinition[] = [
     cameraLabel: "C Block Gate camera",
     eventCandidates: ["recorded-sessions/zone-5/events.json", "7/events.json"],
     videoCandidates: ["recorded-sessions/zone-5/annotated.mp4"],
-    evacuationRoute: "C Block Gate → Hostel 25 Gate → Main Gate Exit",
   },
   {
     id: "main-gate-exit",
@@ -99,26 +92,11 @@ const sessionDefinitions: SessionDefinition[] = [
     cameraLabel: "Main Gate Exit camera",
     eventCandidates: ["recorded-sessions/zone-6/events.json", "live/zone-6/events.json"],
     videoCandidates: ["recorded-sessions/zone-6/annotated.mp4"],
-    evacuationRoute: "Main Gate Exit",
   },
 ];
 
 const outputRoot = path.resolve(process.env.NIRIKSHAN_CV_OUTPUT_DIR || path.join(process.cwd(), "..", "cv-pipeline", "outputs"));
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
-
-async function firstExistingBinary(candidates: string[]) {
-  for (const candidate of candidates) {
-    const filePath = path.resolve(outputRoot, candidate);
-    if (!filePath.startsWith(`${outputRoot}${path.sep}`)) continue;
-    try {
-      await access(filePath);
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
-}
 
 function normalizeEvents(rawEvents: RawEvent[]): RecordedTelemetry[] {
   const firstTimestamp = rawEvents.find((event) => event.timestamp)?.timestamp;
@@ -160,18 +138,15 @@ async function readTelemetry(definition: SessionDefinition) {
 
 export async function getRecordedSessions(): Promise<RecordedSession[]> {
   return Promise.all(sessionDefinitions.map(async (definition) => {
-    const [eventData, videoCandidate] = await Promise.all([
-      readTelemetry(definition),
-      firstExistingBinary(definition.videoCandidates),
-    ]);
+    const eventData = await readTelemetry(definition);
+    const videoCandidate = definition.videoCandidates[0];
     return {
       id: definition.id,
       zoneId: definition.zoneId,
       zoneName: definition.zoneName,
       cameraLabel: definition.cameraLabel,
-      videoUrl: videoCandidate ? `${apiBase}/job-files/${videoCandidate}` : "",
+      videoUrl: `${apiBase}/job-files/${videoCandidate}`,
       telemetrySource: eventData.source,
-      evacuationRoute: definition.evacuationRoute,
       telemetry: eventData.telemetry,
       videoAvailable: Boolean(videoCandidate),
     };

@@ -20,12 +20,10 @@
 .videoUnavailable strong { font-size: 14px; }
 .videoUnavailable span { color: #9eb1bb; font-size: 11px; }
 .telemetryGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 0; }
-.telemetryCard, .routeCard { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); }
-.telemetryCard span, .routeCard span { display: block; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.telemetryCard { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+.telemetryCard span { display: block; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
 .telemetryCard strong { display: block; margin-top: 6px; overflow: hidden; color: var(--text); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
-.telemetryCard small, .routeCard small { display: block; margin-top: 4px; color: var(--text-muted); font-size: 9px; }
-.routeCard { margin: 10px 16px 0; }
-.routeCard strong { display: block; margin-top: 6px; color: var(--text); font-size: 12px; line-height: 1.4; }
+.telemetryCard small { display: block; margin-top: 4px; color: var(--text-muted); font-size: 9px; }
 .riskBadge { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; font-size: 12px; font-weight: 750; }
 .riskBadge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .riskLOW { color: var(--risk-low); }
@@ -37,4 +35,4 @@
 .errorState { display: grid; gap: 7px; padding: 20px; color: var(--text-secondary); }
 .errorState strong { color: var(--text); }
 @media (max-width: 900px) { .sessionGrid { grid-template-columns: 1fr; } }
-@media (max-width: 620px) { .pageIntro, .sessionHeader, .sessionFooter { display: grid; }.modeBadge, .privacyBadge { width: max-content; }.videoFrame, .videoUnavailable { min-height: 210px; }.telemetryGrid { padding-inline: 12px; }.routeCard { margin-inline: 12px; }.sessionFooter { margin-inline: 12px; } }
+@media (max-width: 620px) { .pageIntro, .sessionHeader, .sessionFooter { display: grid; }.modeBadge, .privacyBadge { width: max-content; }.videoFrame, .videoUnavailable { min-height: 210px; }.telemetryGrid { padding-inline: 12px; }.sessionFooter { margin-inline: 12px; } }

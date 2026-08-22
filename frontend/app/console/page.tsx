@@ -986,44 +986,28 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       if (refreshInFlight || disposed) return;
       refreshInFlight = true;
       try {
-        await Promise.all([
-          api<Zone[]>("/api/admin/zones", { cache: "no-store" }).then((latestZones) => {
-            setZones((current) => {
-              return latestZones.map((zone) => {
-                const live = current.find((item) => item.id === zone.id);
-                return {
-                  ...zone,
-                  currentDensity: live?.currentDensity ?? zone.currentDensity,
-                  currentPeopleCount: live?.currentPeopleCount ?? zone.currentPeopleCount,
-                  currentRiskLevel: live?.currentRiskLevel ?? zone.currentRiskLevel,
-                  lastUpdated: live?.lastUpdated ?? zone.lastUpdated,
-                  bottleneckDetected: live?.bottleneckDetected ?? zone.bottleneckDetected,
-                  simulationActive: live?.simulationActive ?? zone.simulationActive,
-                };
-              });
-            });
-          }),
-          api<RiskEvent[]>(`/api/zones/${selectedZoneId}/risk-events?limit=50`, { cache: "no-store" }).then((recent) => {
-            setEvents((current) => {
-              const merged = new Map(current.map((event) => [event.timestamp, event]));
-              recent.forEach((event) => merged.set(event.timestamp, event));
-              return [...merged.values()]
-                .sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf())
-                .slice(0, 50);
-            });
-            setHotspotEventsByZone((current) => {
-              const existing = current[selectedZoneId] || [];
-              const merged = new Map(existing.map((event) => [event.timestamp, event]));
-              recent.forEach((event) => merged.set(event.timestamp, event));
-              return {
-                ...current,
-                [selectedZoneId]: [...merged.values()]
-                  .sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf())
-                  .slice(0, 50),
-              };
-            });
-          }),
-        ]);
+        const recent = await api<RiskEvent[]>(
+          `/api/zones/${selectedZoneId}/risk-events?limit=50`,
+          { cache: "no-store" },
+        );
+        setEvents((current) => {
+          const merged = new Map(current.map((event) => [event.timestamp, event]));
+          recent.forEach((event) => merged.set(event.timestamp, event));
+          return [...merged.values()]
+            .sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf())
+            .slice(0, 50);
+        });
+        setHotspotEventsByZone((current) => {
+          const existing = current[selectedZoneId] || [];
+          const merged = new Map(existing.map((event) => [event.timestamp, event]));
+          recent.forEach((event) => merged.set(event.timestamp, event));
+          return {
+            ...current,
+            [selectedZoneId]: [...merged.values()]
+              .sort((a, b) => new Date(b.timestamp).valueOf() - new Date(a.timestamp).valueOf())
+              .slice(0, 50),
+          };
+        });
       } catch {
       } finally {
         refreshInFlight = false;

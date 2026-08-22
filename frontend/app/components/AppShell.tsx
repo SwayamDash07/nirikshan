@@ -18,6 +18,7 @@ export type PreviewRole = "SECURITY" | "CITIZEN";
 const localCvEnabled = process.env.NEXT_PUBLIC_LOCAL_CV_ENABLED === "true";
 export const primaryNavItems: NavItem[] = [
   { label: "Dashboard", href: "/console", icon: "grid" },
+  { label: "Video Sessions", href: "/console/video-sessions", icon: "activity" },
   { label: "Administration", href: "/console/admin", icon: "users" },
   { label: "Citizen reports", href: "/console/reports", icon: "activity" },
   { label: "3D Model", href: "/console/3d-map", icon: "map" },

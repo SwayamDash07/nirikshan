@@ -1,0 +1,40 @@
+.loadingPage { min-height: 100vh; display: grid; place-items: center; color: var(--text-muted); background: var(--background); font-size: 13px; }
+.kicker { color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.pageIntro { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.pageIntro h2 { margin: 7px 0 0; color: var(--text); font-size: 20px; letter-spacing: -.035em; }
+.pageIntro p { max-width: 760px; margin: 8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.modeBadge, .privacyBadge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border)); border-radius: 999px; color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--surface)); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.modeBadge { padding: 8px 10px; }
+.sessionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.sessionCard { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 10px 30px color-mix(in srgb, var(--text) 5%, transparent); }
+.sessionHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 16px 13px; }
+.sessionHeader h2 { margin: 5px 0 0; color: var(--text); font-size: 17px; letter-spacing: -.03em; }
+.sessionHeader p { margin: 4px 0 0; color: var(--text-muted); font-size: 11px; }
+.privacyBadge { padding: 6px 8px; font-size: 8px; letter-spacing: .05em; }
+.videoFrame { position: relative; min-height: 250px; overflow: hidden; background: #071018; }
+.video { display: block; width: 100%; max-height: 380px; aspect-ratio: 16 / 9; object-fit: cover; background: #071018; }
+.videoOverlay { position: absolute; right: 12px; bottom: 42px; display: grid; gap: 4px; min-width: 145px; padding: 10px; border: 1px solid color-mix(in srgb, white 17%, transparent); border-radius: var(--radius-sm); color: #fff; background: rgb(5 12 18 / 84%); backdrop-filter: blur(6px); }
+.videoOverlay span, .videoOverlay small { color: #b7c8d4; font-size: 9px; }
+.videoOverlay strong { font-size: 16px; }
+.videoUnavailable { position: absolute; z-index: 2; inset: 0; display: grid; place-content: center; gap: 7px; min-height: 250px; padding: 24px; color: #edf7f9; background: rgb(7 16 24 / 92%); text-align: center; }
+.videoUnavailable strong { font-size: 14px; }
+.videoUnavailable span { color: #9eb1bb; font-size: 11px; }
+.telemetryGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 0; }
+.telemetryCard, .routeCard { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+.telemetryCard span, .routeCard span { display: block; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.telemetryCard strong { display: block; margin-top: 6px; overflow: hidden; color: var(--text); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.telemetryCard small, .routeCard small { display: block; margin-top: 4px; color: var(--text-muted); font-size: 9px; }
+.routeCard { margin: 10px 16px 0; }
+.routeCard strong { display: block; margin-top: 6px; color: var(--text); font-size: 12px; line-height: 1.4; }
+.riskBadge { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; font-size: 12px; font-weight: 750; }
+.riskBadge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.riskLOW { color: var(--risk-low); }
+.riskMEDIUM { color: var(--risk-medium); }
+.riskHIGH { color: var(--risk-high); }
+.riskCRITICAL { color: var(--risk-critical); }
+.sessionFooter { display: flex; justify-content: space-between; gap: 14px; margin: 12px 16px 16px; color: var(--text-muted); font-size: 10px; line-height: 1.4; }
+.sessionFooter span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.errorState { display: grid; gap: 7px; padding: 20px; color: var(--text-secondary); }
+.errorState strong { color: var(--text); }
+@media (max-width: 900px) { .sessionGrid { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .pageIntro, .sessionHeader, .sessionFooter { display: grid; }.modeBadge, .privacyBadge { width: max-content; }.videoFrame, .videoUnavailable { min-height: 210px; }.telemetryGrid { padding-inline: 12px; }.routeCard { margin-inline: 12px; }.sessionFooter { margin-inline: 12px; } }

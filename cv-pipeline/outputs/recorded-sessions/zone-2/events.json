@@ -1,0 +1,394 @@
+[
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:29.978716Z",
+    "densityScore": 1.0007,
+    "peopleCount": 8,
+    "movementSpeed": 0.0,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 1.00 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.00 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 0.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 5.625
+      }
+    ],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.0,
+    "directionalConsistency": 0.0,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:30.978716Z",
+    "densityScore": 0.9048,
+    "peopleCount": 7,
+    "movementSpeed": 0.4654,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.90 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.47 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 1.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 2.571
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 3.857
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.571
+      }
+    ],
+    "dominantDirection": "N",
+    "directionDegrees": 348.25,
+    "directionConfidence": 0.598,
+    "directionalConsistency": 1.0,
+    "reverseMovementRatio": 0.071,
+    "conflictingMovementRatio": 0.155,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:31.978716Z",
+    "densityScore": 0.7422,
+    "peopleCount": 3,
+    "movementSpeed": 0.5089,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.74 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.51 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 2.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 3.0
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 3.0
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 3.0
+      }
+    ],
+    "dominantDirection": "NW",
+    "directionDegrees": 318.79,
+    "directionConfidence": 0.457,
+    "directionalConsistency": 0.748,
+    "reverseMovementRatio": 0.077,
+    "conflictingMovementRatio": 0.161,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:32.978716Z",
+    "densityScore": 0.7666,
+    "peopleCount": 7,
+    "movementSpeed": 0.6368,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.77 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.64 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 3.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 2.571
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 5.143
+      }
+    ],
+    "dominantDirection": "NW",
+    "directionDegrees": 308.76,
+    "directionConfidence": 0.449,
+    "directionalConsistency": 0.769,
+    "reverseMovementRatio": 0.033,
+    "conflictingMovementRatio": 0.224,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:33.978716Z",
+    "densityScore": 0.7003,
+    "peopleCount": 8,
+    "movementSpeed": 0.9744,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.70 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.97 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 4.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 5.625
+      }
+    ],
+    "dominantDirection": "NW",
+    "directionDegrees": 297.58,
+    "directionConfidence": 0.441,
+    "directionalConsistency": 0.882,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.37,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:34.978716Z",
+    "densityScore": 0.72,
+    "peopleCount": 6,
+    "movementSpeed": 1.0605,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.72 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 1.06 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 5.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 7.5
+      }
+    ],
+    "dominantDirection": "W",
+    "directionDegrees": 272.27,
+    "directionConfidence": 0.527,
+    "directionalConsistency": 0.919,
+    "reverseMovementRatio": 0.029,
+    "conflictingMovementRatio": 0.277,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:35.978716Z",
+    "densityScore": 0.6469,
+    "peopleCount": 1,
+    "movementSpeed": 1.2052,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.65 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 1.21 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 6.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 9.0
+      }
+    ],
+    "dominantDirection": "W",
+    "directionDegrees": 278.88,
+    "directionConfidence": 0.42,
+    "directionalConsistency": 0.794,
+    "reverseMovementRatio": 0.069,
+    "conflictingMovementRatio": 0.26,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:36.978716Z",
+    "densityScore": 0.4886,
+    "peopleCount": 2,
+    "movementSpeed": 0.8627,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.49 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.86 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 0.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      }
+    ],
+    "dominantDirection": "W",
+    "directionDegrees": 278.88,
+    "directionConfidence": 0.42,
+    "directionalConsistency": 0.794,
+    "reverseMovementRatio": 0.069,
+    "conflictingMovementRatio": 0.26,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:37.978716Z",
+    "densityScore": 0.2896,
+    "peopleCount": 1,
+    "movementSpeed": 1.0993,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.29 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 1.10 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 1.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 9.0
+      }
+    ],
+    "dominantDirection": "W",
+    "directionDegrees": 278.88,
+    "directionConfidence": 0.42,
+    "directionalConsistency": 0.794,
+    "reverseMovementRatio": 0.069,
+    "conflictingMovementRatio": 0.26,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:38.978716Z",
+    "densityScore": 0.3348,
+    "peopleCount": 4,
+    "movementSpeed": 1.3604,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.33 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 1.36 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 2.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.25
+      }
+    ],
+    "dominantDirection": "W",
+    "directionDegrees": 271.6,
+    "directionConfidence": 0.467,
+    "directionalConsistency": 0.794,
+    "reverseMovementRatio": 0.069,
+    "conflictingMovementRatio": 0.21,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:39.978716Z",
+    "densityScore": 0.4667,
+    "peopleCount": 4,
+    "movementSpeed": 1.685,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.47 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 1.69 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 3.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.25
+      }
+    ],
+    "dominantDirection": "W",
+    "directionDegrees": 251.47,
+    "directionConfidence": 0.317,
+    "directionalConsistency": 0.592,
+    "reverseMovementRatio": 0.04,
+    "conflictingMovementRatio": 0.33,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 2,
+    "timestamp": "2026-08-22T15:44:40.978716Z",
+    "densityScore": 0.5917,
+    "peopleCount": 4,
+    "movementSpeed": 1.7367,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.59 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 1.74 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 4.0,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,1",
+        "relativeDensity": 2.25
+      },
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.25
+      }
+    ],
+    "dominantDirection": "SW",
+    "directionDegrees": 214.47,
+    "directionConfidence": 0.373,
+    "directionalConsistency": 0.856,
+    "reverseMovementRatio": 0.05,
+    "conflictingMovementRatio": 0.5,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "hostel-25-recorded",
+    "source": "LIVE"
+  }
+]

@@ -1,0 +1,365 @@
+[
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:38.577351Z",
+    "densityScore": 0.0,
+    "peopleCount": 0,
+    "movementSpeed": 0.0,
+    "riskLevel": "LOW",
+    "explanation": "Density reached 0.00 people/m\u00b2, a 0% increase over the lookback window, with average movement speed at 0.00 m/s (0% below baseline)",
+    "densityChange": 0.0,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 0.0,
+    "hotspotRegions": [],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.0,
+    "directionalConsistency": 0.0,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:39.577351Z",
+    "densityScore": 0.1157,
+    "peopleCount": 2,
+    "movementSpeed": 0.0522,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.12 people/m\u00b2, a 11568% increase over the lookback window, with average movement speed at 0.05 m/s (0% below baseline)",
+    "densityChange": 115.678,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 0.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 9.0
+      }
+    ],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.0,
+    "directionalConsistency": 0.0,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:40.577351Z",
+    "densityScore": 0.1609,
+    "peopleCount": 4,
+    "movementSpeed": 0.1895,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.16 people/m\u00b2, a 16094% increase over the lookback window, with average movement speed at 0.19 m/s (0% below baseline)",
+    "densityChange": 160.9363,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 1.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 6.75
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.25
+      }
+    ],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.0,
+    "directionalConsistency": 0.0,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:41.577351Z",
+    "densityScore": 0.1899,
+    "peopleCount": 4,
+    "movementSpeed": 0.1884,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.19 people/m\u00b2, a 18988% increase over the lookback window, with average movement speed at 0.19 m/s (0% below baseline)",
+    "densityChange": 189.8845,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 2.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 6.75
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 2.25
+      }
+    ],
+    "dominantDirection": "N",
+    "directionDegrees": 9.69,
+    "directionConfidence": 0.801,
+    "directionalConsistency": 0.996,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:42.577351Z",
+    "densityScore": 0.2384,
+    "peopleCount": 3,
+    "movementSpeed": 0.2527,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.24 people/m\u00b2, a 23844% increase over the lookback window, with average movement speed at 0.25 m/s (0% below baseline)",
+    "densityChange": 238.436,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 3.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 6.0
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 3.0
+      }
+    ],
+    "dominantDirection": "NE",
+    "directionDegrees": 64.23,
+    "directionConfidence": 0.293,
+    "directionalConsistency": 0.351,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:43.577351Z",
+    "densityScore": 0.2618,
+    "peopleCount": 3,
+    "movementSpeed": 0.4494,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.26 people/m\u00b2, a 26179% increase over the lookback window, with average movement speed at 0.45 m/s (0% below baseline)",
+    "densityChange": 261.7891,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 4.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 9.0
+      }
+    ],
+    "dominantDirection": "NE",
+    "directionDegrees": 52.28,
+    "directionConfidence": 0.423,
+    "directionalConsistency": 0.488,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:44.577351Z",
+    "densityScore": 0.2365,
+    "peopleCount": 3,
+    "movementSpeed": 0.4216,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.24 people/m\u00b2, a 23653% increase over the lookback window, with average movement speed at 0.42 m/s (0% below baseline)",
+    "densityChange": 236.5276,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 5.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 9.0
+      }
+    ],
+    "dominantDirection": "NE",
+    "directionDegrees": 52.28,
+    "directionConfidence": 0.423,
+    "directionalConsistency": 0.488,
+    "reverseMovementRatio": 0.0,
+    "conflictingMovementRatio": 0.0,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:45.577351Z",
+    "densityScore": 0.2181,
+    "peopleCount": 3,
+    "movementSpeed": 0.7406,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.22 people/m\u00b2, a 21805% increase over the lookback window, with average movement speed at 0.74 m/s (0% below baseline)",
+    "densityChange": 218.0528,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 6.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 6.0
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 3.0
+      }
+    ],
+    "dominantDirection": "SE",
+    "directionDegrees": 139.41,
+    "directionConfidence": 0.306,
+    "directionalConsistency": 0.396,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.067,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:46.577351Z",
+    "densityScore": 0.1917,
+    "peopleCount": 2,
+    "movementSpeed": 0.5025,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.19 people/m\u00b2, a 19172% increase over the lookback window, with average movement speed at 0.50 m/s (0% below baseline)",
+    "densityChange": 191.7181,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 7.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 4.5
+      }
+    ],
+    "dominantDirection": "SE",
+    "directionDegrees": 139.41,
+    "directionConfidence": 0.306,
+    "directionalConsistency": 0.396,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.067,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:47.577351Z",
+    "densityScore": 0.2182,
+    "peopleCount": 4,
+    "movementSpeed": 0.5467,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.22 people/m\u00b2, a 21818% increase over the lookback window, with average movement speed at 0.55 m/s (0% below baseline)",
+    "densityChange": 218.1823,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 8.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 4.5
+      }
+    ],
+    "dominantDirection": "SE",
+    "directionDegrees": 151.91,
+    "directionConfidence": 0.273,
+    "directionalConsistency": 0.385,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.2,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:48.577351Z",
+    "densityScore": 0.1969,
+    "peopleCount": 2,
+    "movementSpeed": 0.2759,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.20 people/m\u00b2, a 19687% increase over the lookback window, with average movement speed at 0.28 m/s (0% below baseline)",
+    "densityChange": 196.8734,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 9.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 4.5
+      }
+    ],
+    "dominantDirection": "SE",
+    "directionDegrees": 151.91,
+    "directionConfidence": 0.273,
+    "directionalConsistency": 0.385,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.2,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  },
+  {
+    "zoneId": 3,
+    "timestamp": "2026-08-22T15:44:49.577351Z",
+    "densityScore": 0.2182,
+    "peopleCount": 4,
+    "movementSpeed": 0.2746,
+    "riskLevel": "MEDIUM",
+    "explanation": "Density reached 0.22 people/m\u00b2, a 89% increase over the lookback window, with average movement speed at 0.27 m/s (0% below baseline)",
+    "densityChange": 0.8862,
+    "movementSlowdown": 0.0,
+    "hotspotPersistenceSeconds": 10.5,
+    "hotspotRegions": [
+      {
+        "gridPosition": "2,2",
+        "relativeDensity": 4.5
+      },
+      {
+        "gridPosition": "2,3",
+        "relativeDensity": 4.5
+      }
+    ],
+    "dominantDirection": "Unknown",
+    "directionDegrees": null,
+    "directionConfidence": 0.176,
+    "directionalConsistency": 0.286,
+    "reverseMovementRatio": 0.067,
+    "conflictingMovementRatio": 0.333,
+    "behaviorState": "INSUFFICIENT_DATA",
+    "behaviorExplanation": "Direction estimate is insufficient for a reliable flow state.",
+    "sourceClipId": "cafeteria-recorded",
+    "source": "LIVE"
+  }
+]

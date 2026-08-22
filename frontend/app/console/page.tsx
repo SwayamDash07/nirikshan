@@ -970,14 +970,22 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             setZones((current) => {
               const next = latestZones.map((zone) => {
                 const local = current.find((item) => item.id === zone.id);
-                const serverTime = new Date(zone.lastUpdated).valueOf();
+                const hasIncomingTelemetry = Number.isFinite(zone.currentDensity)
+                  && Number.isFinite(zone.currentPeopleCount)
+                  && Boolean(zone.currentRiskLevel)
+                  && Number.isFinite(new Date(zone.lastUpdated).valueOf());
+                const nextZone: Zone = {
+                  ...zone,
+                  currentDensity: hasIncomingTelemetry ? zone.currentDensity : local?.currentDensity ?? zone.currentDensity ?? 0,
+                  currentPeopleCount: hasIncomingTelemetry ? zone.currentPeopleCount : local?.currentPeopleCount ?? zone.currentPeopleCount ?? 0,
+                  currentRiskLevel: hasIncomingTelemetry ? zone.currentRiskLevel : local?.currentRiskLevel ?? zone.currentRiskLevel ?? "LOW",
+                  lastUpdated: hasIncomingTelemetry ? zone.lastUpdated : local?.lastUpdated ?? zone.lastUpdated ?? new Date(0).toISOString(),
+                  bottleneckDetected: hasIncomingTelemetry ? zone.bottleneckDetected : local?.bottleneckDetected ?? zone.bottleneckDetected,
+                  simulationActive: local?.simulationActive ?? zone.simulationActive,
+                };
+                const serverTime = new Date(nextZone.lastUpdated).valueOf();
                 const localTime = local ? new Date(local.lastUpdated).valueOf() : 0;
-                return local && localTime > serverTime
-                  ? local
-                  : {
-                      ...zone,
-                      simulationActive: local?.simulationActive ?? zone.simulationActive,
-                    };
+                return local && localTime > serverTime ? local : nextZone;
               });
               return next;
             });

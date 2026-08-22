@@ -237,8 +237,12 @@ function analysisWindowLabel(start?: string, end?: string) {
   return `${formatTime(start)}–${formatTime(end)}`;
 }
 function flowDataIsSufficient(forecast?: RiskForecast, flowStatus?: FlowStatus) {
-  if (flowStatus) return flowStatus.sufficientData;
-  return Boolean(forecast && (forecast.flowState || forecast.behaviorState) !== "INSUFFICIENT_DATA" && forecast.dataSufficiency === "SUFFICIENT");
+  return Boolean(
+    flowStatus?.sufficientData ||
+      (forecast &&
+        (forecast.flowState || forecast.behaviorState) !== "INSUFFICIENT_DATA" &&
+        forecast.dataSufficiency === "SUFFICIENT"),
+  );
 }
 function directionDataIsAvailable(forecast?: RiskForecast, flowStatus?: FlowStatus) {
   return Boolean(
@@ -251,13 +255,16 @@ function directionDataIsAvailable(forecast?: RiskForecast, flowStatus?: FlowStat
   );
 }
 function flowPresentation(forecast?: RiskForecast, flowStatus?: FlowStatus) {
-  const state = flowStatus?.behaviorState || forecast?.flowState || forecast?.behaviorState || "INSUFFICIENT_DATA";
+  const state = (flowStatus?.behaviorState && flowStatus.behaviorState !== "INSUFFICIENT_DATA"
+    ? flowStatus.behaviorState
+    : undefined) || (forecast?.flowState !== "INSUFFICIENT_DATA" ? forecast?.flowState : undefined) || forecast?.behaviorState || "INSUFFICIENT_DATA";
   const sufficient = flowDataIsSufficient(forecast, flowStatus);
   const directionAvailable = directionDataIsAvailable(forecast, flowStatus);
   const behaviorStabilizing = !sufficient && directionAvailable && state === "INSUFFICIENT_DATA";
+  const hasForecastSummary = Boolean(forecast && !forecast.stale);
   return {
     stateLabel: behaviorStabilizing ? "STABILIZING" : state.replaceAll("_", " "),
-    resultLabel: forecast?.stale && !flowStatus ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable ? "PARTIAL" : "INSUFFICIENT_DATA",
+    resultLabel: forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable || hasForecastSummary ? "PARTIAL" : "INSUFFICIENT_DATA",
     sufficient,
     directionAvailable,
     dominantDirection: flowStatus?.dominantDirection ?? forecast?.dominantDirection,
@@ -509,7 +516,7 @@ function SelectedZonePanel({ selectedZone, displayedZone, selectedAnalysis, sele
           <div><span>Density</span><strong>{selectedZone.currentDensity.toFixed(2)}</strong></div>
           <div><span>Last telemetry</span><strong>{formatTime(liveTelemetryAt)}</strong></div>
         </div>
-        <div className={styles.summaryRow}><span>Risk</span><strong>{detailedZone?.currentRiskLevel || selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{formatTime(selectedAnalysis?.analysisGeneratedAt)}</strong></div>
+        <div className={styles.summaryRow}><span>Risk</span><strong>{detailedZone?.currentRiskLevel || selectedZone.currentRiskLevel}</strong><span>Analysis</span><strong>{selectedAnalysis ? `${riskMeta[selectedAnalysis.currentRisk].label} now → ${riskMeta[selectedAnalysis.projectedRisk].label} projected` : "Unavailable"}</strong></div>
         <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
       </> : <p className={styles.noDataNotice}>Select a zone from the map.</p>}
     </Card>;

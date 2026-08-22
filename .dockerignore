@@ -14,3 +14,9 @@ tmp
 *.mov
 *.avi
 *.mkv
+
+!cv-pipeline/
+!cv-pipeline/outputs/
+!cv-pipeline/outputs/recorded-sessions/
+!cv-pipeline/outputs/recorded-sessions/zone-*/
+!cv-pipeline/outputs/recorded-sessions/zone-*/annotated.mp4

@@ -8,6 +8,9 @@ FROM eclipse-temurin:17-jre AS runtime
 
 WORKDIR /app
 COPY --from=backend-build /build/target/nirikshan-0.0.1-SNAPSHOT.jar /app/nirikshan.jar
+COPY cv-pipeline/outputs/recorded-sessions /app/cv-pipeline/outputs/recorded-sessions
+
+ENV NIRIKSHAN_CV_PIPELINE_DIR=/app/cv-pipeline
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-Xms64m", "-Xmx160m", "-XX:MaxMetaspaceSize=160m", "-XX:MaxDirectMemorySize=32m", "-XX:ActiveProcessorCount=1", "-XX:+UseSerialGC", "-XX:+ExitOnOutOfMemoryError", "-jar", "/app/nirikshan.jar"]

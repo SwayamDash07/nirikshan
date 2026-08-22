@@ -36,15 +36,15 @@ export default function CampusLocationPicker({
   onSelect: (venue: CampusVenue, source: VenueSelectionSource) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [tracking, setTracking] = useState(true);
+  const [locationRequest, setLocationRequest] = useState(0);
   const [locationState, setLocationState] = useState<"locating" | "ready" | "denied" | "unavailable">("locating");
 
   useEffect(() => {
-    if (!tracking) return;
     if (!navigator.geolocation) {
       setLocationState("unavailable");
       return;
     }
+    setLocationState("locating");
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         onLocationChange({ lat: position.coords.latitude, lng: position.coords.longitude });
@@ -54,7 +54,7 @@ export default function CampusLocationPicker({
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [onLocationChange, tracking]);
+  }, [locationRequest, onLocationChange]);
 
   const matches = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -76,14 +76,19 @@ export default function CampusLocationPicker({
     : locationState === "denied" ? "Location access is off"
       : locationState === "unavailable" ? "Live location is unavailable on this device" : "Finding your location…";
 
+  function requestLocation() {
+    setLocationState("locating");
+    setLocationRequest((current) => current + 1);
+  }
+
   return <section className={styles.picker} aria-label="Campus and location selector">
-    <div className={styles.pickerTopline}><div><span className={styles.kicker}>LOCATION SERVICES</span><strong>{selectedVenue?.name || "Choose your campus"}</strong></div><span className={`${styles.status} ${covered ? styles.statusGood : styles.statusWarn}`}><i />{status}</span></div>
+    <div className={styles.pickerTopline}><div><span className={styles.kicker}>LOCATION SERVICES</span><strong>{selectedVenue?.name || "Choose your campus"}</strong></div><span className={`${styles.status} ${locationState === "ready" && covered ? styles.statusGood : styles.statusWarn}`}><i />{status}</span></div>
     <div className={styles.searchRow}>
       <label className={styles.searchBox}>
         <span aria-hidden="true">⌕</span>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search campus, e.g. Campus-25 or KIIT" aria-label="Search campus" />
       </label>
-      <button className={styles.locationButton} type="button" onClick={() => setTracking(true)} disabled={locationState === "locating"}>⌖ <span>Use my location</span></button>
+      <button className={styles.locationButton} type="button" onClick={requestLocation} disabled={locationState === "locating"}>⌖ <span>Use my location</span></button>
     </div>
     {query && <div className={styles.results} role="listbox" aria-label="Campus search results">{matches.length ? matches.map((venue) => <button key={venue.id} type="button" role="option" onClick={() => { onSelect(venue, "search"); setQuery(""); }}>{venue.name}<small>{venue.description || "Safety services available"}</small></button>) : <p>No supported campus matches that search.</p>}</div>}
     {nearest && venueIsCovered(nearest.venue, location) && nearest.venue.id !== selectedVenue?.id && <button className={styles.nearest} type="button" onClick={() => onSelect(nearest.venue, "nearest")}>Use {nearest.venue.name}, {nearest.distance}m away</button>}

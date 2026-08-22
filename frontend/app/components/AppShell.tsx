@@ -27,7 +27,7 @@ export const primaryNavItems: NavItem[] = [
 ];
 
 const roleLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security operator", CITIZEN: "Campus member" };
-const switchLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security personnel", CITIZEN: "Customer view" };
+const switchLabels: Record<Role, string> = { ADMIN: "Administrator", SECURITY: "Security personnel", CITIZEN: "Citizen view" };
 const sidebarKey = "nirikshan.sidebar-collapsed";
 
 export function AppShell({ user, title, subtitle, active, navItems, previewRole, assistantZones, children }: { user: UserInfo; title: string; subtitle?: string; active: string; navItems: NavItem[]; previewRole?: PreviewRole; assistantZones?: AssistantZone[]; children: ReactNode }) {
@@ -41,7 +41,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   const [queryPreview, setQueryPreview] = useState<PreviewRole | undefined>(() => {
     if (typeof window === "undefined") return undefined;
     const preview = new URLSearchParams(window.location.search).get("preview");
-    return preview === "security" ? "SECURITY" : preview === "customer" ? "CITIZEN" : undefined;
+    return preview === "security" ? "SECURITY" : preview === "citizen" || preview === "customer" ? "CITIZEN" : undefined;
   });
   const [previewBannerVisible, setPreviewBannerVisible] = useState(false);
   const workspaceRole = previewRole || queryPreview || user.role;
@@ -54,7 +54,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     if (savedLanguage === "en" || savedLanguage === "hi" || savedLanguage === "or") setLanguage(savedLanguage);
     const preview = new URLSearchParams(window.location.search).get("preview");
     if (preview === "security") setQueryPreview("SECURITY");
-    if (preview === "customer") setQueryPreview("CITIZEN");
+    if (preview === "citizen" || preview === "customer") setQueryPreview("CITIZEN");
   }, []);
 
   useEffect(() => {
@@ -119,9 +119,10 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   }
 
   function changeWorkspace(nextRole: Role) {
-    const destinations: Record<Role, string> = { ADMIN: "/console", SECURITY: "/security?preview=security", CITIZEN: "/alerts?preview=customer" };
+    const destinations: Record<Role, string> = { ADMIN: "/console", SECURITY: "/security?preview=security", CITIZEN: "/alerts?preview=citizen" };
     if (nextRole === "CITIZEN") {
       window.sessionStorage.removeItem("nirikshan.preview-banner.citizen");
+      window.sessionStorage.removeItem("nirikshan.preview-citizen.location-shown");
       window.sessionStorage.removeItem("nirikshan.preview-customer.location-shown");
     }
     if (nextRole === "SECURITY") window.sessionStorage.removeItem("nirikshan.preview-banner.security");
@@ -133,7 +134,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     const preview = previewRole || queryPreview;
     if (!preview || href.includes("preview=")) return href;
     const [path, hash] = href.split("#");
-    const previewValue = preview === "SECURITY" ? "security" : "customer";
+    const previewValue = preview === "SECURITY" ? "security" : "citizen";
     return `${path}${path.includes("?") ? "&" : "?"}preview=${previewValue}${hash ? `#${hash}` : ""}`;
   }
 
@@ -170,7 +171,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     <main className={mainClass}>
       <div className={styles.mobileNav}>{navItems.map((item) => <a key={item.href} className={active === item.label ? styles.mobileActive : ""} href={previewHref(item.href)}><Icon name={item.icon} /><span>{item.label}</span></a>)}</div>
       <header className={styles.pageHeader}><div><div className={styles.breadcrumb}>Nirikshan <span>/</span> {title}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className={styles.headerAction}><LanguageSelector language={language} onChange={changeLanguage} className={styles.languageSelector} /><ThemeToggle /></div></header>
-      {queryPreview && previewBannerVisible && <div className={styles.previewBanner} role="status"><span>{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Customer view preview is active."} You are still signed in with administrator permissions.</span><small className={styles.previewDuration}>10s</small><i className={styles.previewProgress} aria-hidden="true" /></div>}
+      {queryPreview && previewBannerVisible && <div className={styles.previewBanner} role="status"><span>{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Citizen view preview is active."} You are still signed in with administrator permissions.</span><small className={styles.previewDuration}>10s</small><i className={styles.previewProgress} aria-hidden="true" /></div>}
       {(offline || pendingReports > 0) && <div className={styles.offlineBanner} role="status">{offline ? "Offline mode: showing the last safe data available." : "Connection restored."}{pendingReports > 0 && ` ${pendingReports} incident report${pendingReports === 1 ? "" : "s"} waiting to sync.`}</div>}
       {children}
       <AssistantChatWidget language={language} onLanguageChange={changeLanguage} zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />

@@ -31,7 +31,7 @@ function ReportIssue({ session }: { session: Session }) {
 
 export default function Page() {
   const [session, setSession] = useState<Session>();
-  useEffect(() => { const next = readSession(); if (!next) { clearSession(); window.location.replace("/alerts"); return; } const customerPreview = next.user.role === "ADMIN" && new URLSearchParams(window.location.search).get("preview") === "customer"; if (next.user.role === "ADMIN" && !customerPreview) { window.location.replace("/console"); return; } if (next.user.role === "SECURITY") { window.location.replace("/security"); return; } setSession(next); }, []);
+  useEffect(() => { const next = readSession(); if (!next) { clearSession(); window.location.replace("/alerts"); return; } const citizenPreview = next.user.role === "ADMIN" && ["citizen", "customer"].includes(new URLSearchParams(window.location.search).get("preview") || ""); if (next.user.role === "ADMIN" && !citizenPreview) { window.location.replace("/console"); return; } if (next.user.role === "SECURITY") { window.location.replace("/security"); return; } setSession(next); }, []);
   if (!session) return <main className={styles.centerState}>Checking citizen access</main>;
   return <ReportIssue session={session} />;
 }

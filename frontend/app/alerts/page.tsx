@@ -219,7 +219,7 @@ function Auth({ done }: { done: (session: Session) => void }) {
 
 function Citizen({ session }: { session: Session }) {
   const { language } = useAiLanguage();
-  const customerPreview = session.user.role === "ADMIN" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "customer";
+  const citizenPreview = session.user.role === "ADMIN" && typeof window !== "undefined" && ["citizen", "customer"].includes(new URLSearchParams(window.location.search).get("preview") || "");
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
@@ -238,15 +238,13 @@ function Citizen({ session }: { session: Session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    if (!customerPreview) {
-      setLocationIntroVisible(true);
-      return;
-    }
-    const key = "nirikshan.preview-customer.location-shown";
+    const key = citizenPreview
+      ? "nirikshan.preview-citizen.location-shown"
+      : `nirikshan.citizen.location-shown.${session.user.id}`;
     if (window.sessionStorage.getItem(key) === "shown") return;
     window.sessionStorage.setItem(key, "shown");
     setLocationIntroVisible(true);
-  }, [customerPreview]);
+  }, [citizenPreview, session.user.id]);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -377,9 +375,8 @@ function Citizen({ session }: { session: Session }) {
   const locationFarFromCampus25 = Boolean(
     location && campus25Venue && !venueIsCovered(campus25Venue, location),
   );
-  const showLocationView = customerPreview
-    ? locationIntroVisible && (!location || locationFarFromCampus25)
-    : !location || locationFarFromCampus25;
+  const showLocationView =
+    locationIntroVisible && (!location || locationFarFromCampus25);
   if (session.user.mustChangePassword) {
     window.location.replace("/alerts/security");
     return <main className={styles.centerState}>Opening account security</main>;
@@ -539,10 +536,10 @@ export default function Page() {
       setCheckingSession(false);
       return;
     }
-    const customerPreview =
+    const citizenPreview =
       next.user.role === "ADMIN" &&
-      new URLSearchParams(window.location.search).get("preview") === "customer";
-    if (next.user.role === "ADMIN" && !customerPreview) {
+      ["citizen", "customer"].includes(new URLSearchParams(window.location.search).get("preview") || "");
+    if (next.user.role === "ADMIN" && !citizenPreview) {
       window.location.replace("/console");
       return;
     }

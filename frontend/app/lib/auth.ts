@@ -73,7 +73,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
     if (!response.ok) {
       const data = payload && typeof payload === "object" ? payload as { error?: string; message?: string } : undefined;
-      const message = data?.message || data?.error || (typeof payload === "string" && payload.trim()) || `Backend returned HTTP ${response.status}`;
+      const rawMessage = data?.message || data?.error || (typeof payload === "string" && payload.trim()) || `Backend returned HTTP ${response.status}`;
+      const message = rawMessage.includes("<html") || rawMessage.includes("<!DOCTYPE") ? `Backend returned HTTP ${response.status} for ${path}` : rawMessage;
       if (response.status === 401 || response.status === 403) clearSession();
       throw new ApiError(message, response.status, path, requestId);
     }

@@ -894,8 +894,8 @@ function ConsoleApp({ user }: { user: UserInfo }) {
       const [venueZones, status, nextReports] =
         await Promise.all([
           api<Zone[]>("/api/admin/zones"),
-          api<Health>("/api/health"),
-         api<CitizenReport[]>("/api/citizen-reports"),
+          api<Health>("/api/health").catch(() => undefined),
+          api<CitizenReport[]>("/api/citizen-reports").catch(() => []),
         ]);
       const activeRuns = await api<Array<{ zoneId: number; status: string }>>("/api/admin/scenarios/active").catch(() => []);
       const activeZoneIds = new Set(activeRuns.filter((run) => run.status === "PENDING" || run.status === "RUNNING").map((run) => run.zoneId));

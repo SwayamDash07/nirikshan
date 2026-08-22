@@ -744,6 +744,7 @@ function TrendCard({ zone, events }: { zone?: Zone; events: RiskEvent[] }) {
 }
 
 function ConsoleApp({ user }: { user: UserInfo }) {
+  console.log('[RENDER-INVOKED]', Date.now());
   const [venue, setVenue] = useState<Venue>();
   const [zones, setZones] = useState<Zone[]>([]);
   const [reports, setReports] = useState<CitizenReport[]>([]);

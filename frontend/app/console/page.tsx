@@ -804,7 +804,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const overallRisk = highestRisk(zones);
   const overallMeta = riskMeta[overallRisk];
   const simulationZoneIds = new Set(zones.filter((zone) => zone.simulationActive).map((zone) => zone.id));
-  const liveTelemetryAt = selectedZoneId ? liveTelemetryAtByZone[selectedZoneId] || selectedZone?.lastUpdated : selectedZone?.lastUpdated;
+  const liveTelemetryAt = selectedZone?.lastUpdated;
   const telemetryStale = Boolean(liveTelemetryAt) && now - new Date(liveTelemetryAt!).valueOf() > LIVE_SIGNAL_WINDOW_MS;
   const selectedAnalysis = detailedForecast;
   const analysisBottleneck = detailedForecast?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
@@ -1306,7 +1306,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
                   selected={zone.id === selectedZoneId}
                   onSelect={() => setSelectedZoneId(zone.id)}
                   now={now}
-                  lastSignalAt={liveTelemetryAtByZone[zone.id] || zone.lastUpdated}
+                  lastSignalAt={zone.lastUpdated}
                   hotspotSummary={summarizeHotspots(hotspotEventsByZone[zone.id], now)}
                 />
               ))

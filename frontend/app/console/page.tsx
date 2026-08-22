@@ -454,10 +454,6 @@ function FlowIntelligencePanel({ forecast: inputForecast, flowStatus, route, gra
         <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
         <span>Gate action</span><strong>{route?.gateActionDetail?.action.replaceAll("_", " ") || route?.gateAction?.replaceAll("_", " ") || "Unavailable"}</strong>
       </div>
-      {hasAnalysisSnapshot && <div className={styles.summaryRow}>
-        <span>Analysis</span>
-        <strong>{forecast ? `${riskMeta[forecast.currentRisk].label} now → ${riskMeta[forecast.projectedRisk].label} projected` : behaviorExplanation || "Analysis available in View more"}</strong>
-      </div>}
       {route?.blockage && <div className={styles.summaryRow}><span>Route state</span><strong>{route.blockage.status}</strong></div>}
       <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
     </Card>;
@@ -1316,7 +1312,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
             {zones.length ? (
               zones.map((zone) => (
                 <ZoneRow
-                  key={`${zone.id}-${zone.lastUpdated}-${zone.currentPeopleCount}-${zone.currentDensity}`}
+                  key={`${zone.id}-${zone.lastUpdated}-${zone.currentPeopleCount}-${zone.currentDensity}-${formatAge(zone.lastUpdated, now)}`}
                   zone={zone}
                   selected={zone.id === selectedZoneId}
                   onSelect={() => setSelectedZoneId(zone.id)}

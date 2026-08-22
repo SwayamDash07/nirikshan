@@ -298,6 +298,8 @@
 }
 .mapCaption {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   padding: 10px 12px;
   color: var(--text-muted);
@@ -324,6 +326,30 @@
   height: 0 !important;
   border-top: 3px solid var(--accent);
   border-radius: 999px !important;
+}
+.focusButton {
+  min-height: 26px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.focusButton:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.focusButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.focusButton:disabled {
+  cursor: not-allowed;
+  opacity: .5;
 }
 .mapLoading {
   display: grid;

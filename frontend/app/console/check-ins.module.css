@@ -1,5 +1,9 @@
 .card { max-width: 1240px; margin: 0 auto 18px; padding: 22px; }
 .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.headerTools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.filter { display: inline-flex; align-items: center; gap: 7px; color: var(--text-muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.filter select { min-height: 32px; padding: 0 24px 0 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface-subtle); font: inherit; cursor: pointer; }
+.filter select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .connection { display: inline-flex; align-items: center; gap: 7px; min-height: 25px; padding: 0 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .connection i { width: 6px; height: 6px; border-radius: 50%; }
 .connectionLive { color: var(--success); background: var(--success-soft); }.connectionLive i { background: var(--success); }
@@ -21,4 +25,4 @@
 .empty { display: grid; place-items: center; gap: 6px; min-height: 130px; color: var(--text-secondary); text-align: center; }
 .empty strong { color: var(--text); font-size: 13px; }
 .empty span { color: var(--text-muted); font-size: 11px; }
-@media (max-width: 680px) { .header { align-items: stretch; flex-direction: column; }.header button { width: 100%; }.connection { width: fit-content; } }
+@media (max-width: 680px) { .header { align-items: stretch; flex-direction: column; }.headerTools { align-items: stretch; flex-direction: column; }.header button { width: 100%; }.connection { width: fit-content; } }

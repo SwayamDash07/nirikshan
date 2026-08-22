@@ -5,7 +5,6 @@ import AppShell, { primaryNavItems } from "../../components/AppShell";
 import { Button } from "../../components/ui";
 import { clearSession, readSession, type UserInfo } from "../../lib/auth";
 import ResponseActions from "../ResponseActions";
-import CheckInManagement from "../CheckInManagement";
 import styles from "../console.module.css";
 import managementStyles from "../management.module.css";
 
@@ -24,12 +23,12 @@ export default function Page() {
   if (!user) return <main className={styles.loadingPage}>Checking access</main>;
   return <AppShell user={user} title="Administration" subtitle="Manage operational access and coordinate response" active="Administration" navItems={navItems}>
     <ResponseActions />
-    <CheckInManagement />
     <section className={managementStyles.adminLinks}>
-      <div><span className={managementStyles.kicker}>STAFF ACCESS</span><h2>Security personnel</h2><p>Create accounts, review available staff, and send instructions.</p></div>
+      <div><span className={managementStyles.kicker}>STAFF COORDINATION</span><h2>Security personnel</h2><p>Manage access, instructions, and staff confirmation check-ins.</p></div>
       <div className={managementStyles.adminLinkList}>
         <a className={managementStyles.staffLink} href="/console/admin/staff"><span><strong>Manage staff</strong><small>Create and remove security accounts and review the staff list.</small></span><Button variant="secondary" size="sm">Open page</Button></a>
         <a className={managementStyles.staffLink} href="/console/admin/actions"><span><strong>Send instructions</strong><small>Send a message to all security personnel, a zone team, or one person.</small></span><Button variant="secondary" size="sm">Open page</Button></a>
+        <a className={managementStyles.staffLink} href="/console/admin/check-ins"><span><strong>Staff check-ins</strong><small>Trigger confirmations and filter staff by response status.</small></span><Button variant="secondary" size="sm">Open page</Button></a>
       </div>
     </section>
   </AppShell>;

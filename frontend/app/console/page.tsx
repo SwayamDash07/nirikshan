@@ -761,6 +761,11 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as Window & { DEBUG_ZONES?: Zone[] }).DEBUG_ZONES = zones;
+    }
+  }, [zones]);
   const stompRef = useRef<Client | null>(null);
   const forecastRef = useRef<RiskForecast | undefined>(undefined);
   const forecastRefreshAtRef = useRef<number>();
@@ -1049,6 +1054,15 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         client.subscribe("/topic/risk-updates", (message: IMessage) => {
           const event = JSON.parse(message.body) as RiskEvent;
           const eventZoneId = Number(event.zoneId);
+          if (typeof window !== "undefined") {
+            (window as Window & { DEBUG_LAST_EVENT?: { zoneId: number; densityScore: number; peopleCount?: number; timestamp: string; receivedAt: number } }).DEBUG_LAST_EVENT = {
+              zoneId: eventZoneId,
+              densityScore: event.densityScore,
+              peopleCount: event.peopleCount,
+              timestamp: event.timestamp,
+              receivedAt: Date.now(),
+            };
+          }
           setZones((current) => {
             const next = current.map((zone) =>
               Number(zone.id) === eventZoneId

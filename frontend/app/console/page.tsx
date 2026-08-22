@@ -261,10 +261,13 @@ function flowPresentation(forecast?: RiskForecast, flowStatus?: FlowStatus) {
   const sufficient = flowDataIsSufficient(forecast, flowStatus);
   const directionAvailable = directionDataIsAvailable(forecast, flowStatus);
   const behaviorStabilizing = !sufficient && directionAvailable && state === "INSUFFICIENT_DATA";
-  const hasForecastSummary = Boolean(forecast && !forecast.stale);
+  const hasAnalysisSnapshot = Boolean(
+    (forecast && !forecast.stale) || flowStatus?.analysisGeneratedAt || flowStatus?.behaviorExplanation,
+  );
   return {
-    stateLabel: behaviorStabilizing ? "STABILIZING" : state.replaceAll("_", " "),
-    resultLabel: forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable || hasForecastSummary ? "PARTIAL" : "INSUFFICIENT_DATA",
+    stateLabel: behaviorStabilizing ? "STABILIZING" : state === "INSUFFICIENT_DATA" && hasAnalysisSnapshot ? "PARTIAL" : state.replaceAll("_", " "),
+    resultLabel: forecast?.stale ? "STALE" : forecast?.source === "SIMULATION" ? "SIMULATION" : sufficient ? "LIVE" : directionAvailable || hasAnalysisSnapshot ? "PARTIAL" : "INSUFFICIENT_DATA",
+    hasAnalysisSnapshot,
     sufficient,
     directionAvailable,
     dominantDirection: flowStatus?.dominantDirection ?? forecast?.dominantDirection,
@@ -433,7 +436,7 @@ function EarlyWarningPanel({ forecast, loading, error, now, updatedAt, stampedeC
 
 function FlowIntelligencePanel({ forecast: inputForecast, flowStatus, route, graph, now, compact = false, onViewMore }: { forecast?: RiskForecast; flowStatus?: FlowStatus; route?: RouteRecommendation; graph?: RouteGraph; now: number; compact?: boolean; onViewMore?: () => void }) {
   const forecast = inputForecast;
-  const { stateLabel, resultLabel, sufficient, directionAvailable, dominantDirection, directionDegrees, directionConfidence, behaviorExplanation, analysisGeneratedAt, analysisWindowStart, analysisWindowEnd, nextAnalysisAt, analysisIntervalSeconds } = flowPresentation(forecast, flowStatus);
+  const { stateLabel, resultLabel, hasAnalysisSnapshot, sufficient, directionAvailable, dominantDirection, directionDegrees, directionConfidence, behaviorExplanation, analysisGeneratedAt, analysisWindowStart, analysisWindowEnd, nextAnalysisAt, analysisIntervalSeconds } = flowPresentation(forecast, flowStatus);
   const reverseWarning = sufficient && (flowStatus?.reverseMovementRatio ?? forecast?.reverseMovementRatio ?? 0) >= 0.45;
   const conflictWarning = sufficient && (flowStatus?.conflictingMovementRatio ?? forecast?.conflictingMovementRatio ?? 0) >= 0.30;
   if (compact) {
@@ -451,6 +454,10 @@ function FlowIntelligencePanel({ forecast: inputForecast, flowStatus, route, gra
         <span>Route</span><strong>{route?.recommendedRoute?.exitOrGate || "Unavailable"}</strong>
         <span>Gate action</span><strong>{route?.gateActionDetail?.action.replaceAll("_", " ") || route?.gateAction?.replaceAll("_", " ") || "Unavailable"}</strong>
       </div>
+      {hasAnalysisSnapshot && <div className={styles.summaryRow}>
+        <span>Analysis</span>
+        <strong>{forecast ? `${riskMeta[forecast.currentRisk].label} now → ${riskMeta[forecast.projectedRisk].label} projected` : behaviorExplanation || "Analysis available in View more"}</strong>
+      </div>}
       {route?.blockage && <div className={styles.summaryRow}><span>Route state</span><strong>{route.blockage.status}</strong></div>}
       <button type="button" className={styles.viewMoreButton} onClick={onViewMore}>View more <Icon name="arrow" /></button>
     </Card>;

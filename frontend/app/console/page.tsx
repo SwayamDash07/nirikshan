@@ -822,6 +822,23 @@ function ConsoleApp({ user }: { user: UserInfo }) {
   const telemetryStale = Boolean(liveTelemetryAt) && now - new Date(liveTelemetryAt!).valueOf() > LIVE_SIGNAL_WINDOW_MS;
   const selectedAnalysis = detailedForecast;
   const analysisBottleneck = detailedForecast?.bottleneckDetected ?? selectedZone?.bottleneckDetected ?? false;
+  const flowSummaryKey = JSON.stringify([
+    selectedZoneId,
+    detailedForecast?.analysisGeneratedAt,
+    detailedForecast?.lastTelemetryAt,
+    detailedForecast?.currentRisk,
+    detailedForecast?.projectedRisk,
+    flowStatus?.analysisGeneratedAt,
+    flowStatus?.analysisWindowEnd,
+    flowStatus?.behaviorState,
+    flowStatus?.dominantDirection,
+    flowStatus?.directionDegrees,
+    flowStatus?.directionConfidence,
+    flowStatus?.behaviorExplanation,
+    route?.recommendedRoute?.routeId,
+    route?.gateAction,
+    route?.blockage?.status,
+  ]);
   useEffect(() => { forecastRef.current = forecast; }, [forecast]);
   useEffect(() => { selectedZoneIdRef.current = selectedZoneId; }, [selectedZoneId]);
   const recordDetailForecast = useCallback((nextForecast: RiskForecast) => {
@@ -1273,7 +1290,7 @@ function ConsoleApp({ user }: { user: UserInfo }) {
         </Card>
         <EarlyWarningPanel forecast={detailedForecast} loading={forecastLoading} error={forecastError} now={now} updatedAt={forecastUpdatedAt} stampedeConfidenceStable={stampedeConfidenceStable} />
         <div className={styles.insightGrid}>
-          <FlowIntelligencePanel compact forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
+          <FlowIntelligencePanel key={flowSummaryKey} compact forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} onViewMore={() => setDetailView("flow")} />
           <SelectedZonePanel key={selectedZone ? `${selectedZone.id}-${selectedZone.lastUpdated}-${selectedZone.currentPeopleCount}-${selectedZone.currentDensity}` : "selected-zone-empty"} compact selectedZone={selectedZone} displayedZone={detailedZone} selectedAnalysis={selectedAnalysis} selectedHotspotSummary={selectedHotspotSummary} analysisBottleneck={analysisBottleneck} liveTelemetryAt={liveTelemetryAt} now={now} onViewMore={() => setDetailView("zone")} />
         </div>
         {detailView === "flow" && <DetailModal title="Flow intelligence" onClose={() => setDetailView(undefined)}><FlowIntelligencePanel forecast={detailedForecast} flowStatus={flowStatus} route={route} graph={routeGraph} now={now} /></DetailModal>}

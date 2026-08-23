@@ -244,7 +244,7 @@ Render provides `DATABASE_URL` directly. The `prod` profile also supports `PGHOS
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE="prod"
-$env:DATABASE_URL="postgresql://postgres:<password>@<railway-public-host>:<port>/railway"
+$env:DATABASE_URL="postgresql://<user>:<password>@<render-postgres-host>:5432/<database>"
 mvn spring-boot:run
 ```
 

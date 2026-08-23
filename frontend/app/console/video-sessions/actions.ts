@@ -19,6 +19,7 @@ export type RecordedSession = {
   zoneId: number;
   zoneName: string;
   cameraLabel: string;
+  measuredAreaSqMeters: number;
   videoUrl: string;
   telemetrySource: string;
   telemetry: RecordedTelemetry[];
@@ -40,6 +41,7 @@ type SessionDefinition = {
   zoneId: number;
   zoneName: string;
   cameraLabel: string;
+  measuredAreaSqMeters: number;
   eventCandidates: string[];
   videoCandidates: string[];
 };
@@ -50,6 +52,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 1,
     zoneName: "Main Gate",
     cameraLabel: "Main Gate camera",
+    measuredAreaSqMeters: 18,
     eventCandidates: ["recorded-sessions/zone-1/events.json"],
     videoCandidates: ["recorded-sessions/zone-1/annotated.mp4"],
   },
@@ -58,6 +61,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 2,
     zoneName: "Hostel 25 Gate",
     cameraLabel: "Hostel 25 Gate camera",
+    measuredAreaSqMeters: 12,
     eventCandidates: ["recorded-sessions/zone-2/events.json"],
     videoCandidates: ["recorded-sessions/zone-2/annotated.mp4"],
   },
@@ -66,6 +70,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 3,
     zoneName: "Cafeteria",
     cameraLabel: "Cafeteria camera",
+    measuredAreaSqMeters: 12,
     eventCandidates: ["recorded-sessions/zone-3/events.json"],
     videoCandidates: ["recorded-sessions/zone-3/annotated.mp4"],
   },
@@ -74,6 +79,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 4,
     zoneName: "A Block Entrance",
     cameraLabel: "A Block Entrance camera",
+    measuredAreaSqMeters: 18,
     eventCandidates: ["recorded-sessions/zone-4/events.json"],
     videoCandidates: ["recorded-sessions/zone-4/annotated.mp4"],
   },
@@ -82,6 +88,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 5,
     zoneName: "C Block Gate",
     cameraLabel: "C Block Gate camera",
+    measuredAreaSqMeters: 15,
     eventCandidates: ["recorded-sessions/zone-5/events.json"],
     videoCandidates: ["recorded-sessions/zone-5/annotated.mp4"],
   },
@@ -90,6 +97,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 6,
     zoneName: "C Block Exit",
     cameraLabel: "C Block Exit camera",
+    measuredAreaSqMeters: 18,
     eventCandidates: ["recorded-sessions/zone-6/events.json"],
     videoCandidates: ["recorded-sessions/zone-6/annotated.mp4"],
   },
@@ -161,6 +169,7 @@ export async function getRecordedSessions(): Promise<RecordedSession[]> {
       zoneId: definition.zoneId,
       zoneName: definition.zoneName,
       cameraLabel: definition.cameraLabel,
+      measuredAreaSqMeters: definition.measuredAreaSqMeters,
       videoUrl: `${apiBase}/job-files/${videoCandidate}?v=${videoVersion}`,
       telemetrySource: eventData.source,
       telemetry: eventData.telemetry,

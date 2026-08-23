@@ -90,8 +90,8 @@ function SecurityWorkspace({
       setMapLoading(false);
     }
   }, []);
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [nextAlerts, nextInstructions, nextInterventions] = await Promise.all([
@@ -124,6 +124,16 @@ function SecurityWorkspace({
     }
     void Promise.all([load(), loadMap()]);
   }, [load, loadMap, user.mustChangePassword, preview]);
+  useEffect(() => {
+    if (preview || user.mustChangePassword) return;
+    const refresh = () => void load(false);
+    const interval = window.setInterval(refresh, 5000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load, preview, user.mustChangePassword]);
   async function acknowledge(id: number) {
     try {
       await api(`/api/security/alerts/${id}/acknowledge`, { method: "POST" });

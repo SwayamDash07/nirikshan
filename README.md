@@ -2,6 +2,16 @@
 
 Nirikshan is a campus crowd safety platform that processes camera telemetry, evaluates zone risk, and delivers live operational and citizen safety information.
 
+## Live access
+
+Main application: [Open Nirikshan](https://nirikshan-ecru.vercel.app/)
+
+Administrator workspace: [Open admin access](https://nirikshan-ecru.vercel.app/console/admin)
+
+The administrator workspace is intentionally not linked from the public navigation. Open the direct admin link after signing in with the administrator account.
+
+Administrator email: `admin@example.com`
+
 ## 1. Problem statement
 
 Campus safety teams need a current view of crowd density, headcount, changing risk, active alerts, and evacuation options across several zones. Nirikshan combines computer vision telemetry, backend risk evaluation, live dashboard updates, route guidance, security check ins, and a citizen safety view.

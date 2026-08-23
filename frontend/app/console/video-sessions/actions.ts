@@ -1,6 +1,6 @@
 "use server";
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 export type RecordedRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -50,7 +50,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 1,
     zoneName: "Main Gate",
     cameraLabel: "Main Gate camera",
-    eventCandidates: ["recorded-sessions/zone-1/events.json", "4/events.json"],
+    eventCandidates: ["recorded-sessions/zone-1/events.json"],
     videoCandidates: ["recorded-sessions/zone-1/annotated.mp4"],
   },
   {
@@ -58,7 +58,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 2,
     zoneName: "Hostel 25 Gate",
     cameraLabel: "Hostel 25 Gate camera",
-    eventCandidates: ["recorded-sessions/zone-2/events.json", "1/events.json"],
+    eventCandidates: ["recorded-sessions/zone-2/events.json"],
     videoCandidates: ["recorded-sessions/zone-2/annotated.mp4"],
   },
   {
@@ -66,7 +66,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 3,
     zoneName: "Cafeteria",
     cameraLabel: "Cafeteria camera",
-    eventCandidates: ["recorded-sessions/zone-3/events.json", "5/events.json"],
+    eventCandidates: ["recorded-sessions/zone-3/events.json"],
     videoCandidates: ["recorded-sessions/zone-3/annotated.mp4"],
   },
   {
@@ -74,7 +74,7 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 4,
     zoneName: "A Block Entrance",
     cameraLabel: "A Block Entrance camera",
-    eventCandidates: ["recorded-sessions/zone-4/events.json", "6/events.json"],
+    eventCandidates: ["recorded-sessions/zone-4/events.json"],
     videoCandidates: ["recorded-sessions/zone-4/annotated.mp4"],
   },
   {
@@ -82,15 +82,15 @@ const sessionDefinitions: SessionDefinition[] = [
     zoneId: 5,
     zoneName: "C Block Gate",
     cameraLabel: "C Block Gate camera",
-    eventCandidates: ["recorded-sessions/zone-5/events.json", "7/events.json"],
+    eventCandidates: ["recorded-sessions/zone-5/events.json"],
     videoCandidates: ["recorded-sessions/zone-5/annotated.mp4"],
   },
   {
-    id: "main-gate-exit",
+    id: "c-block-exit",
     zoneId: 6,
-    zoneName: "Main Gate Exit",
-    cameraLabel: "Main Gate Exit camera",
-    eventCandidates: ["recorded-sessions/zone-6/events.json", "live/zone-6/events.json"],
+    zoneName: "C Block Exit",
+    cameraLabel: "C Block Exit camera",
+    eventCandidates: ["recorded-sessions/zone-6/events.json"],
     videoCandidates: ["recorded-sessions/zone-6/annotated.mp4"],
   },
 ];
@@ -154,12 +154,14 @@ export async function getRecordedSessions(): Promise<RecordedSession[]> {
   return Promise.all(sessionDefinitions.map(async (definition) => {
     const eventData = await readTelemetry(definition);
     const videoCandidate = definition.videoCandidates[0];
+    const videoPath = path.resolve(outputRoot, videoCandidate);
+    const videoVersion = await stat(videoPath).then((metadata) => Math.floor(metadata.mtimeMs)).catch(() => 0);
     return {
       id: definition.id,
       zoneId: definition.zoneId,
       zoneName: definition.zoneName,
       cameraLabel: definition.cameraLabel,
-      videoUrl: `${apiBase}/job-files/${videoCandidate}`,
+      videoUrl: `${apiBase}/job-files/${videoCandidate}?v=${videoVersion}`,
       telemetrySource: eventData.source,
       telemetry: eventData.telemetry,
       videoAvailable: Boolean(videoCandidate),

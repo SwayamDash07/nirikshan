@@ -284,7 +284,7 @@ Create `cv-pipeline/outputs/live/zones.json` with one entry per configured zone.
   {"zoneId": 3, "input": "real_footage/cafeteria.mp4", "sourceClipId": "cafeteria"},
   {"zoneId": 4, "input": "real_footage/a_block.mp4", "sourceClipId": "a-block"},
   {"zoneId": 5, "input": "real_footage/c_block.mp4", "sourceClipId": "c-block"},
-  {"zoneId": 6, "input": "real_footage/main_gate_exit.mp4", "sourceClipId": "main-gate-exit"}
+  {"zoneId": 6, "input": "real_footage/c_block_exit.mp4", "sourceClipId": "c-block-exit"}
 ]
 ```
 

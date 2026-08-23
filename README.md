@@ -54,7 +54,7 @@ The CV pipeline is Python based and uses OpenCV, PyTorch, Ultralytics YOLO, NumP
 
 ### AI assistant
 
-The AI assistant is implemented in the backend through AssistantService and GroqChatClient. AssistantService scopes requests to the selected venue and caller role, gathers the operational safety context, constructs the configured prompt, and sends it to Groq. The current default model in code is llama-3.1-8b-instant. The model is configurable through nirikshan.incident-summary.model. The assistant is intended for campus safety questions grounded in available operational data.
+The AI assistant is implemented in the backend through AssistantService and GroqChatClient. AssistantService scopes requests to the selected venue and caller role, gathers the operational safety context, constructs the configured prompt, and sends it to Groq. The current default model in code is openai/gpt-oss-20b. The model is configurable through nirikshan.incident-summary.model. The assistant is intended for campus safety questions grounded in available operational data.
 
 ### Deployment
 

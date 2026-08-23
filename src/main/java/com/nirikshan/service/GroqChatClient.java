@@ -23,7 +23,7 @@ public class GroqChatClient {
     private final ObjectMapper mapper;
 
     public GroqChatClient(@Value("${GROQ_API_KEY:}") String apiKey,
-                          @Value("${nirikshan.incident-summary.model:llama-3.1-8b-instant}") String model,
+                          @Value("${nirikshan.incident-summary.model:openai/gpt-oss-20b}") String model,
                           ObjectMapper mapper) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model;

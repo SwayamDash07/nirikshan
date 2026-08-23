@@ -1,54 +1,129 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
-  <title id="title">Nirikshan system architecture</title>
-  <desc id="desc">Next.js frontend, Spring Boot backend, PostgreSQL database, Python computer vision pipeline, and Groq assistant deployed with the backend on Render.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="850" viewBox="0 0 1400 850" role="img" aria-labelledby="title desc">
+  <title id="title">Nirikshan detailed system architecture</title>
+  <desc id="desc">Detailed Nirikshan architecture showing the browser frontend, Render hosted Spring Boot backend, PostgreSQL, local Python computer vision workers, Groq assistant, live event flow, recorded replay flow, and security boundaries.</desc>
   <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#355070"/></marker>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,7 L10,3.5 z" fill="#355070"/></marker>
+    <marker id="arrowGreen" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,7 L10,3.5 z" fill="#287d68"/></marker>
     <style>
       .canvas { fill: #f7fafc; }
-      .box { fill: #ffffff; stroke: #355070; stroke-width: 2; rx: 16; }
-      .external { fill: #eef6ff; stroke: #2f6690; stroke-width: 2; rx: 16; }
-      .title { font: 700 25px Arial, sans-serif; fill: #17232b; }
-      .label { font: 700 18px Arial, sans-serif; fill: #17232b; }
-      .text { font: 14px Arial, sans-serif; fill: #40515c; }
-      .arrow { stroke: #355070; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
-      .boundary { fill: none; stroke: #8da9bc; stroke-width: 2; stroke-dasharray: 9 7; rx: 22; }
-      .boundaryText { font: 700 15px Arial, sans-serif; fill: #5f7685; }
+      .title { font: 700 29px Arial, sans-serif; fill: #17232b; }
+      .subtitle { font: 14px Arial, sans-serif; fill: #536874; }
+      .group { fill: none; stroke-width: 2.5; stroke-dasharray: 10 8; rx: 22; }
+      .render { stroke: #7d9db1; }
+      .local { stroke: #6c8fa7; }
+      .externalGroup { stroke: #9d8cbd; }
+      .groupLabel { font: 700 16px Arial, sans-serif; fill: #506b7a; }
+      .card { fill: #ffffff; stroke: #355070; stroke-width: 2; rx: 16; }
+      .localCard { fill: #eef6ff; stroke: #2f6690; stroke-width: 2; rx: 16; }
+      .externalCard { fill: #f5f0ff; stroke: #7558a6; stroke-width: 2; rx: 16; }
+      .database { fill: #fffaf0; stroke: #9a6b26; stroke-width: 2; }
+      .cardTitle { font: 700 19px Arial, sans-serif; fill: #17232b; }
+      .cardText { font: 14px Arial, sans-serif; fill: #40515c; }
+      .caption { font: italic 13px Arial, sans-serif; fill: #607884; }
+      .flow { stroke: #355070; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .liveFlow { stroke: #287d68; stroke-width: 3; fill: none; marker-end: url(#arrowGreen); }
+      .flowLabel { font: 700 12px Arial, sans-serif; fill: #355070; }
+      .liveLabel { font: 700 12px Arial, sans-serif; fill: #287d68; }
+      .legendText { font: 13px Arial, sans-serif; fill: #40515c; }
+      .legendTitle { font: 700 14px Arial, sans-serif; fill: #17232b; }
     </style>
   </defs>
-  <rect class="canvas" width="1200" height="650"/>
-  <text class="title" x="600" y="48" text-anchor="middle">Nirikshan architecture</text>
-  <rect class="boundary" x="35" y="82" width="1130" height="505"/>
-  <text class="boundaryText" x="58" y="111">Render deployment boundary</text>
-  <rect class="box" x="75" y="160" width="280" height="150"/>
-  <text class="label" x="215" y="197" text-anchor="middle">Next.js frontend</text>
-  <text class="text" x="215" y="226" text-anchor="middle">App Router and TypeScript</text>
-  <text class="text" x="215" y="250" text-anchor="middle">Server actions only</text>
-  <text class="text" x="215" y="274" text-anchor="middle">REST, WebSocket and Leaflet UI</text>
-  <rect class="box" x="460" y="145" width="300" height="185"/>
-  <text class="label" x="610" y="184" text-anchor="middle">Spring Boot backend</text>
-  <text class="text" x="610" y="214" text-anchor="middle">REST controllers and STOMP</text>
-  <text class="text" x="610" y="238" text-anchor="middle">Risk intelligence and routes</text>
-  <text class="text" x="610" y="262" text-anchor="middle">Auth, alerts and check ins</text>
-  <text class="text" x="610" y="286" text-anchor="middle">Groq assistant and SSE stream</text>
-  <rect class="box" x="855" y="160" width="250" height="150"/>
-  <text class="label" x="980" y="201" text-anchor="middle">PostgreSQL</text>
-  <text class="text" x="980" y="232" text-anchor="middle">Zones and telemetry</text>
-  <text class="text" x="980" y="256" text-anchor="middle">Alerts and recommendations</text>
-  <text class="text" x="980" y="280" text-anchor="middle">Users and audit records</text>
-  <rect class="external" x="75" y="420" width="280" height="125"/>
-  <text class="label" x="215" y="458" text-anchor="middle">Python CV pipeline</text>
-  <text class="text" x="215" y="487" text-anchor="middle">YOLO and privacy processing</text>
-  <text class="text" x="215" y="511" text-anchor="middle">Live workers post risk events</text>
-  <text class="text" x="215" y="535" text-anchor="middle">Replay supports recorded demos</text>
-  <rect class="external" x="855" y="420" width="250" height="125"/>
-  <text class="label" x="980" y="458" text-anchor="middle">Groq API</text>
-  <text class="text" x="980" y="487" text-anchor="middle">Assistant question answering</text>
-  <text class="text" x="980" y="511" text-anchor="middle">Context scoped by application</text>
-  <text class="text" x="980" y="535" text-anchor="middle">Streaming chat completion</text>
-  <path class="arrow" d="M355 235 L460 235"/>
-  <path class="arrow" d="M760 235 L855 235"/>
-  <path class="arrow" d="M355 483 L460 300"/>
-  <path class="arrow" d="M610 330 L610 390 L355 483"/>
-  <path class="arrow" d="M760 285 L855 483"/>
-  <path class="arrow" d="M855 483 L760 285"/>
+
+  <rect class="canvas" width="1400" height="850"/>
+  <text class="title" x="700" y="43" text-anchor="middle">Nirikshan system architecture</text>
+  <text class="subtitle" x="700" y="68" text-anchor="middle">Live telemetry enters from local CV workers, is evaluated by the backend, and is delivered to role specific web views</text>
+
+  <rect class="group render" x="450" y="105" width="520" height="610"/>
+  <text class="groupLabel" x="475" y="136">RENDER DEPLOYMENT</text>
+  <text class="caption" x="475" y="158">Application services, persistence, authentication, and live messaging</text>
+
+  <rect class="group local" x="35" y="105" width="380" height="610"/>
+  <text class="groupLabel" x="60" y="136">LOCAL GPU WORKSTATION</text>
+  <text class="caption" x="60" y="158">Camera processing remains outside the web container</text>
+
+  <rect class="group externalGroup" x="1010" y="105" width="355" height="610"/>
+  <text class="groupLabel" x="1035" y="136">EXTERNAL SERVICES</text>
+  <text class="caption" x="1035" y="158">Browser delivery and model completion services</text>
+
+  <rect class="card" x="60" y="190" width="330" height="175"/>
+  <text class="cardTitle" x="225" y="225" text-anchor="middle">Next.js frontend</text>
+  <text class="cardText" x="225" y="252" text-anchor="middle">App Router and TypeScript</text>
+  <text class="cardText" x="225" y="275" text-anchor="middle">Server actions, no API routes</text>
+  <text class="cardText" x="225" y="298" text-anchor="middle">Leaflet maps and dashboard views</text>
+  <text class="cardText" x="225" y="321" text-anchor="middle">REST, STOMP, and streamed assistant UI</text>
+  <text class="caption" x="225" y="348" text-anchor="middle">Admin, security, and citizen experiences</text>
+
+  <rect class="localCard" x="60" y="450" width="330" height="190"/>
+  <text class="cardTitle" x="225" y="485" text-anchor="middle">Python CV pipeline</text>
+  <text class="cardText" x="225" y="512" text-anchor="middle">OpenCV privacy processing</text>
+  <text class="cardText" x="225" y="535" text-anchor="middle">yolo26s.pt tiled inference</text>
+  <text class="cardText" x="225" y="558" text-anchor="middle">Headcount and perspective density</text>
+  <text class="cardText" x="225" y="581" text-anchor="middle">Movement, hotspots, and risk score</text>
+  <text class="caption" x="225" y="615" text-anchor="middle">Live workers post aggregate events</text>
+
+  <rect class="card" x="485" y="190" width="450" height="225"/>
+  <text class="cardTitle" x="710" y="225" text-anchor="middle">Spring Boot backend</text>
+  <text class="cardText" x="710" y="253" text-anchor="middle">REST controllers and role based security</text>
+  <text class="cardText" x="710" y="276" text-anchor="middle">Risk intelligence, forecasts, and routes</text>
+  <text class="cardText" x="710" y="299" text-anchor="middle">Alerts, recommendations, and check ins</text>
+  <text class="cardText" x="710" y="322" text-anchor="middle">AssistantService and GroqChatClient</text>
+  <text class="cardText" x="710" y="345" text-anchor="middle">STOMP updates and assistant SSE stream</text>
+  <text class="caption" x="710" y="385" text-anchor="middle">Single operational source for web clients</text>
+
+  <path class="database" d="M590 490 C590 468 830 468 830 490 L830 600 C830 622 590 622 590 600 Z"/>
+  <ellipse class="database" cx="710" cy="490" rx="120" ry="22"/>
+  <path d="M590 490 L590 600 M830 490 L830 600" fill="none" stroke="#9a6b26" stroke-width="2"/>
+  <ellipse cx="710" cy="600" rx="120" ry="22" fill="none" stroke="#9a6b26" stroke-width="2"/>
+  <text class="cardTitle" x="710" y="535" text-anchor="middle">PostgreSQL</text>
+  <text class="cardText" x="710" y="560" text-anchor="middle">Zones, telemetry, alerts, routes</text>
+  <text class="cardText" x="710" y="582" text-anchor="middle">Users, check ins, audit records</text>
+
+  <rect class="externalCard" x="1040" y="190" width="295" height="175"/>
+  <text class="cardTitle" x="1187" y="225" text-anchor="middle">Browser clients</text>
+  <text class="cardText" x="1187" y="252" text-anchor="middle">Vercel hosted Next.js app</text>
+  <text class="cardText" x="1187" y="275" text-anchor="middle">Admin and security workspaces</text>
+  <text class="cardText" x="1187" y="298" text-anchor="middle">Citizen safety view</text>
+  <text class="caption" x="1187" y="335" text-anchor="middle">Receives REST and live updates</text>
+
+  <rect class="externalCard" x="1040" y="450" width="295" height="190"/>
+  <text class="cardTitle" x="1187" y="485" text-anchor="middle">Groq API</text>
+  <text class="cardText" x="1187" y="512" text-anchor="middle">OpenAI compatible chat endpoint</text>
+  <text class="cardText" x="1187" y="535" text-anchor="middle">Scoped campus safety context</text>
+  <text class="cardText" x="1187" y="558" text-anchor="middle">Configurable assistant model</text>
+  <text class="caption" x="1187" y="615" text-anchor="middle">Tokens stream back to the assistant UI</text>
+
+  <path class="flow" d="M390 278 L485 278"/>
+  <text class="flowLabel" x="437" y="266" text-anchor="middle">REST and STOMP</text>
+
+  <path class="liveFlow" d="M390 535 L485 350"/>
+  <text class="liveLabel" x="421" y="453" text-anchor="middle" transform="rotate(-28 421 453)">POST risk events</text>
+
+  <path class="flow" d="M710 415 L710 468"/>
+  <text class="flowLabel" x="735" y="451">persist and query</text>
+
+  <path class="flow" d="M935 278 L1040 278"/>
+  <text class="flowLabel" x="988" y="266" text-anchor="middle">REST, WebSocket, SSE</text>
+
+  <path class="flow" d="M935 330 L1040 520"/>
+  <text class="flowLabel" x="1000" y="430" text-anchor="middle" transform="rotate(61 1000 430)">prompt context</text>
+
+  <path class="flow" d="M1040 575 L935 350"/>
+  <text class="flowLabel" x="1002" y="570" text-anchor="middle" transform="rotate(-61 1002 570)">streamed completion</text>
+
+  <rect x="475" y="665" width="470" height="38" fill="#eaf7f1" stroke="#8bc9ad" rx="10"/>
+  <circle cx="496" cy="684" r="7" fill="#287d68"/>
+  <text class="legendText" x="512" y="689">Green flow: live CV telemetry entering the backend</text>
+
+  <rect x="35" y="755" width="1330" height="65" fill="#ffffff" stroke="#b7c8d2" rx="12"/>
+  <text class="legendTitle" x="58" y="780">Legend</text>
+  <rect x="150" y="769" width="25" height="18" fill="#ffffff" stroke="#355070" stroke-width="2" rx="4"/>
+  <text class="legendText" x="185" y="783">Application component</text>
+  <rect x="350" y="769" width="25" height="18" fill="#eef6ff" stroke="#2f6690" stroke-width="2" rx="4"/>
+  <text class="legendText" x="385" y="783">Local processing component</text>
+  <rect x="620" y="769" width="25" height="18" fill="#f5f0ff" stroke="#7558a6" stroke-width="2" rx="4"/>
+  <text class="legendText" x="655" y="783">External service</text>
+  <line x1="865" y1="778" x2="905" y2="778" stroke="#355070" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text class="legendText" x="918" y="783">Request or response flow</text>
+  <line x1="1125" y1="778" x2="1165" y2="778" stroke="#287d68" stroke-width="3" marker-end="url(#arrowGreen)"/>
+  <text class="legendText" x="1178" y="783">Live telemetry flow</text>
 </svg>

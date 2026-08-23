@@ -38,6 +38,8 @@ Campus safety teams need a current view of crowd density, headcount, changing ri
 
 ![Nirikshan architecture diagram](docs/images/architecture.svg)
 
+The diagram separates the Vercel browser client, Render application services, local GPU processing, and external Groq services. Its legend identifies application, local processing, external service, request and response, and live telemetry flows.
+
 ### Frontend
 
 The frontend is a Next.js App Router application. It uses server actions for server side data loading and has no Next.js API routes. Browser clients call the Spring Boot backend and subscribe to STOMP topics over WebSocket. Leaflet and OpenStreetMap provide the map views.

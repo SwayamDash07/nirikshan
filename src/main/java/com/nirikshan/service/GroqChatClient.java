@@ -23,7 +23,7 @@ public class GroqChatClient {
     private final ObjectMapper mapper;
 
     public GroqChatClient(@Value("${GROQ_API_KEY:}") String apiKey,
-                          @Value("${nirikshan.incident-summary.model:openai/gpt-oss-20b}") String model,
+                          @Value("${nirikshan.incident-summary.model:llama-3.1-8b-instant}") String model,
                           ObjectMapper mapper) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model;
@@ -43,11 +43,11 @@ public class GroqChatClient {
                 .contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(String.class);
     }
 
-    public void stream(String systemPrompt, String userPrompt, int maxCompletionTokens, Consumer<String> onToken) {
+    public StreamResult stream(String systemPrompt, String userPrompt, int maxCompletionTokens, Consumer<String> onToken) {
         if (!isConfigured()) throw new IllegalStateException("GROQ_API_KEY is not configured");
         Map<String, Object> body = Map.of("model", model, "temperature", 0.1, "max_completion_tokens", maxCompletionTokens,
                 "stream", true, "messages", List.of(Map.of("role", "system", "content", systemPrompt), Map.of("role", "user", "content", userPrompt)));
-        client.post().uri("/chat/completions")
+        return client.post().uri("/chat/completions")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .header(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -56,6 +56,8 @@ public class GroqChatClient {
                     if (response.getStatusCode().isError()) {
                         throw new IllegalStateException("Groq streaming request failed with status " + response.getStatusCode().value());
                     }
+                    boolean completed = false;
+                    StringBuilder contentBuffer = new StringBuilder();
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
@@ -64,10 +66,17 @@ public class GroqChatClient {
                             if (data.isBlank() || "[DONE]".equals(data)) continue;
                             JsonNode root = mapper.readTree(data);
                             JsonNode content = root.path("choices").path(0).path("delta").path("content");
-                            if (content.isTextual() && !content.asText().isEmpty()) onToken.accept(content.asText());
+                            if (content.isTextual() && !content.asText().isEmpty()) {
+                                contentBuffer.append(content.asText());
+                                onToken.accept(content.asText());
+                            }
+                            String finishReason = root.path("choices").path(0).path("finish_reason").asText("");
+                            if ("stop".equalsIgnoreCase(finishReason) || "eos".equalsIgnoreCase(finishReason)) completed = true;
                         }
                     }
-                    return null;
+                    return new StreamResult(contentBuffer.toString(), completed);
                 });
     }
+
+    public record StreamResult(String content, boolean completed) { }
 }

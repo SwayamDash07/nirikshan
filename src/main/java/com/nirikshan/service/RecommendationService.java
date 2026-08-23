@@ -193,6 +193,10 @@ public class RecommendationService {
         return uniquePending(recommendations.findByZoneIdAndStatus(zoneId, RecommendationStatus.PENDING)).stream().map(this::toResponse).toList();
     }
 
+    public List<RecommendationResponse> forAllZones() {
+        return uniquePending(recommendations.findByStatusOrderByCreatedAtDesc(RecommendationStatus.PENDING)).stream().map(this::toResponse).toList();
+    }
+
     @Transactional
     public RecommendationResponse acknowledge(Long id) {
         Recommendation recommendation = find(id);

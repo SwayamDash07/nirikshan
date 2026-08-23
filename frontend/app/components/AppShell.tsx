@@ -130,7 +130,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   }
 
   function changeWorkspace(nextRole: Role) {
-    const destinations: Record<Role, string> = { ADMIN: "/console", SECURITY: "/security?preview=security", CITIZEN: "/alerts?preview=citizen" };
+    const destinations: Record<Role, string> = { ADMIN: "/console", SECURITY: "/security", CITIZEN: "/alerts?preview=citizen" };
     if (nextRole === "CITIZEN") {
       window.sessionStorage.removeItem("nirikshan.preview-banner.citizen");
       window.sessionStorage.removeItem("nirikshan.preview-citizen.location-shown");

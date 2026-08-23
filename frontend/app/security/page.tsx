@@ -162,8 +162,8 @@ function SecurityWorkspace({
     <AppShell
       user={shellUser}
       previewRole={preview ? "SECURITY" : undefined}
-      title={user.assignedZoneName || "Assigned zone"}
-      subtitle="Operational alerts and instructions from the command team"
+      title={user.assignedZoneName || "All campus zones"}
+      subtitle={user.role === "ADMIN" ? "Admin security coverage across every campus zone" : "Operational alerts and instructions from the command team"}
       active="Assigned zone"
       navItems={navItems}
     >
@@ -322,12 +322,11 @@ export default function Page() {
       });
       return;
     }
-    if (session.user.role !== "SECURITY") {
-      if (session.user.role === "ADMIN") window.location.replace("/console");
-      else window.location.replace("/alerts");
+    if (session.user.role !== "SECURITY" && session.user.role !== "ADMIN") {
+      window.location.replace("/alerts");
       return;
     }
-    setAccess({ user: session.user, shellUser: session.user, preview: false });
+    setAccess({ user: session.user.role === "ADMIN" ? { ...session.user, assignedZoneId: null, assignedZoneName: null, mustChangePassword: false } : session.user, shellUser: session.user, preview: false });
   }, []);
   if (!access) return <main className={styles.state}>Checking access</main>;
   return (

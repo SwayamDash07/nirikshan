@@ -187,7 +187,3 @@ The repository currently contains these four supplied screenshots. No separate s
 4. Route recommendations depend on the configured venue route graph and the telemetry and alert data available to the backend.
 5. The AI assistant is limited to the operational campus safety context assembled by AssistantService.
 6. The deployed Render backend does not run the local Python inference workers.
-
-## 9. Credits and team
-
-Nirikshan is maintained as a team project. Add final team member names, affiliations, repository links, and external asset credits here before submission.

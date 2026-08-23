@@ -23,10 +23,12 @@ public class GroqChatClient {
     private final ObjectMapper mapper;
 
     public GroqChatClient(@Value("${GROQ_API_KEY:}") String apiKey,
-                          @Value("${nirikshan.incident-summary.model:openai/gpt-oss-20b}") String model,
+                          @Value("${NIRIKSHAN_INCIDENT_SUMMARY_MODEL:${nirikshan.incident-summary.model:openai/gpt-oss-20b}}") String model,
                           ObjectMapper mapper) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
-        this.model = model;
+        String configuredModel = model == null ? "" : model.trim();
+        this.model = configuredModel.isBlank() || "llama-3.1-8b-instant".equalsIgnoreCase(configuredModel)
+                ? "openai/gpt-oss-20b" : configuredModel;
         this.mapper = mapper;
         this.client = RestClient.builder().baseUrl("https://api.groq.com/openai/v1").build();
     }

@@ -101,15 +101,25 @@ public class AssistantService {
                     onToken.accept(token);
                 });
                 if (!result.completed() || !completeSentence(streamed.toString())) {
-                    JsonNode root = mapper.readTree(groq.complete(prepared.system(), prepared.userPrompt(), 2400));
-                    String complete = root.path("choices").path(0).path("message").path("content").asText("").trim();
-                    if (!complete.isBlank()) onReplace.accept(complete);
+                    replaceWithComplete(prepared, onReplace);
                 }
                 onComplete.run();
             } catch (Throwable failure) {
-                onError.accept(failure);
+                try {
+                    replaceWithComplete(prepared, onReplace);
+                    onComplete.run();
+                } catch (Throwable recoveryFailure) {
+                    onError.accept(recoveryFailure);
+                }
             }
         });
+    }
+
+    private void replaceWithComplete(PreparedChat prepared, Consumer<String> onReplace) throws Exception {
+        JsonNode root = mapper.readTree(groq.complete(prepared.system(), prepared.userPrompt(), 2400));
+        String complete = root.path("choices").path(0).path("message").path("content").asText("").trim();
+        if (complete.isBlank()) throw new IllegalStateException("Groq returned an empty assistant response");
+        onReplace.accept(complete);
     }
 
     private PreparedChat prepare(AssistantChatRequest request, AiLanguage language) {

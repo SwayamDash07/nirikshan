@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { streamApi } from "../lib/auth";
+import { api, streamApi } from "../lib/auth";
 import Icon from "./Icon";
 import LanguageSelector from "./LanguageSelector";
 import type { AiLanguage } from "../lib/aiLanguage";
@@ -24,6 +24,11 @@ function historyContent(value: string) {
 
 function plainText(value: string) {
   return value.replace(/\*\*/g, "").replace(/^\s*#{1,6}\s*/gm, "").replace(/^\s*[-*]\s+/gm, "").trim();
+}
+
+function isCompleteResponse(value: string) {
+  const text = value.trim();
+  return text.length > 0 && /[.!?؟।]$/.test(text);
 }
 
 export default function AssistantChatWidget({ zones, language, onLanguageChange }: { zones: AssistantZone[]; language: AiLanguage; onLanguageChange: (language: AiLanguage) => void }) {
@@ -50,20 +55,31 @@ export default function AssistantChatWidget({ zones, language, onLanguageChange 
     setLoading(true);
     try {
       let streamed = "";
+      let streamCompleted = false;
+      const requestBody = JSON.stringify({ message, language, ...(zoneId === undefined ? {} : { zoneId }), conversationHistory: history });
       setMessages((current) => [...current, { role: "assistant", content: "" }]);
       await streamApi("/api/assistant/chat/stream", {
         method: "POST",
-        body: JSON.stringify({ message, language, ...(zoneId === undefined ? {} : { zoneId }), conversationHistory: history }),
+        body: requestBody,
       }, (event, data) => {
         if (event === "token") {
           streamed += data;
           setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: plainText(streamed) } : item));
+        } else if (event === "done") {
+          streamCompleted = true;
         } else if (event === "error") {
           throw new Error(data || "The assistant is unavailable right now.");
         }
       });
+      if (!streamCompleted || !isCompleteResponse(plainText(streamed))) {
+        const complete = await api<{ response: string }>("/api/assistant/chat", { method: "POST", body: requestBody });
+        const completeText = plainText(complete.response || "");
+        if (!isCompleteResponse(completeText)) throw new Error("The assistant returned an incomplete response. Please try again.");
+        setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: completeText } : item));
+      }
     } catch (reason) {
-      setMessages((current) => [...current, { role: "assistant", content: plainText(reason instanceof Error ? reason.message : "The assistant is unavailable right now.") }]);
+      const content = plainText(reason instanceof Error ? reason.message : "The assistant is unavailable right now.");
+      setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content } : item));
     } finally {
       setLoading(false);
     }

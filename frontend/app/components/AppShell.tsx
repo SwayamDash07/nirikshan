@@ -34,6 +34,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
   const [mobileOpen, setMobileOpen] = useState(false);
   const [offline, setOffline] = useState(false);
   const [pendingReports, setPendingReports] = useState(0);
+  const [loadedAssistantZones, setLoadedAssistantZones] = useState<AssistantZone[]>([]);
   const [language, setLanguage] = useState<AiLanguage>("en");
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const roleMenuRef = useRef<HTMLDivElement>(null);
@@ -43,6 +44,17 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     return preview === "security" ? "SECURITY" : preview === "citizen" || preview === "customer" ? "CITIZEN" : undefined;
   });
   const [previewBannerVisible, setPreviewBannerVisible] = useState(false);
+  useEffect(() => {
+    if (assistantZones !== undefined || user.assignedZoneId) return;
+    let active = true;
+    api<Array<{ id: number }>>("/api/venues").then((venues) => {
+      const venue = venues[0];
+      return venue ? api<Array<{ id: number; name: string }>>(`/api/venues/${venue.id}/zones`) : [];
+    }).then((zones) => {
+      if (active) setLoadedAssistantZones(zones.map((zone) => ({ id: zone.id, name: zone.name })));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [assistantZones, user.assignedZoneId]);
   const workspaceRole = previewRole || queryPreview || user.role;
   const homeHref = workspaceRole === "ADMIN" ? "/console" : workspaceRole === "SECURITY" ? "/security" : "/alerts";
   usePageLanguage(language);
@@ -173,7 +185,7 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
       {queryPreview && previewBannerVisible && <div className={styles.previewBanner} role="status"><span>{queryPreview === "SECURITY" ? "Security personnel preview is active." : "Citizen view preview is active."} You are still signed in with administrator permissions.</span><small className={styles.previewDuration}>10s</small><i className={styles.previewProgress} aria-hidden="true" /></div>}
       {(offline || pendingReports > 0) && <div className={styles.offlineBanner} role="status">{offline ? "Offline mode: showing the last safe data available." : "Connection restored."}{pendingReports > 0 && ` ${pendingReports} incident report${pendingReports === 1 ? "" : "s"} waiting to sync.`}</div>}
       {children}
-      <AssistantChatWidget language={language} onLanguageChange={changeLanguage} zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : [])} />
+      <AssistantChatWidget language={language} onLanguageChange={changeLanguage} zones={assistantZones ?? (user.assignedZoneId && user.assignedZoneName ? [{ id: user.assignedZoneId, name: user.assignedZoneName }] : loadedAssistantZones)} />
     </main>
   </div></AiLanguageProvider>;
 }

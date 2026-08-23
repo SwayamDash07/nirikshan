@@ -6,7 +6,7 @@ Nirikshan is a campus crowd safety platform that processes camera telemetry, eva
 
 Main application: [Open Nirikshan](https://nirikshan-ecru.vercel.app/)
 
-Administrator workspace: [Open admin access](https://nirikshan-ecru.vercel.app/console/admin)
+Administrator workspace: [Open admin access](https://nirikshan-ecru.vercel.app/console/login)
 
 The administrator workspace is intentionally not linked from the public navigation. Open the direct admin link after signing in with the administrator account.
 

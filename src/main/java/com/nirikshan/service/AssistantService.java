@@ -66,7 +66,7 @@ public class AssistantService {
         PreparedChat prepared = prepare(request, language);
         if (prepared.immediateResponse() != null) return prepared.immediateResponse();
         try {
-            JsonNode root = mapper.readTree(groq.complete(prepared.system(), prepared.userPrompt(), 700));
+            JsonNode root = mapper.readTree(groq.complete(prepared.system(), prepared.userPrompt(), 1200));
             String response = root.path("choices").path(0).path("message").path("content").asText("").trim();
             return response.isBlank() ? UNAVAILABLE : response;
         } catch (RestClientResponseException failure) {
@@ -95,7 +95,7 @@ public class AssistantService {
         }
         CompletableFuture.runAsync(() -> {
             try {
-                groq.stream(prepared.system(), prepared.userPrompt(), 700, onToken);
+                groq.stream(prepared.system(), prepared.userPrompt(), 1200, onToken);
                 onComplete.run();
             } catch (Throwable failure) {
                 onError.accept(failure);

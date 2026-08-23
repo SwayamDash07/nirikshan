@@ -410,32 +410,3 @@ The previous backend-driven `smoke_scenario_api.py` flow is no longer a supporte
 If browser automation is not installed, replay the corresponding local fixture against the target URL and inspect the same dashboard/API behavior.
 
 Example requests are in [`requests.http`](requests.http).
-
-## Campus 25 3D model evidence and coordinate contract
-
-The administrator 3D map is available at `/console/3d-map`. It preserves the Campus 25 local projection already used by the prototype:
-
-- longitude becomes local X in meters using `111,320 * cos(model-center latitude)` meters per degree;
-- latitude becomes local Z using `-110,540` meters per degree, so north is negative Z;
-- the model center is the mean latitude/longitude of the route points in `frontend/app/console/campus25Route.ts`;
-- gate and zone coordinates are kept in WGS84 decimal degrees and reconciled with the backend zone seed and gate migrations. In particular, Main Gate is the inbound entry and Main Gate Exit is the outbound exit.
-
-The 3D scene now uses explicit connected road/path segments, coordinate-backed gate markers, building labels, zone/landmark labels, exit labels, and evidence status. It does not create wall, tree, facade, security-post, restricted-boundary, or entrance geometry when no authoritative coordinate or visual evidence is available. Existing building footprints and floor counts are retained as lightweight `unverified` geometry until they can be checked against reference material.
-
-The current visual model intentionally omits Hostel A-D and Cafe geometry, labels, and gate markers at the user's request. Their coordinate records remain in the route/zone data only so the supplied corridor validation and operational locations do not break.
-
-### Reference photos and PDFs
-
-Put future evidence in `frontend/public/campus-reference/` using the category folders `building/`, `entrance/`, `pathway/`, `road/`, `landmark/`, and `viewpoint/`. Register every photo and PDF page in `manifest.json`, including the 1-based PDF page number, areas covered, repeatable landmarks, and viewpoint notes. Inspect every PDF page: photos, diagrams, labels, maps, coordinate tables, and pages with only annotations all count as evidence. Do not rely on filenames alone.
-
-The attached `DocScanner 17-Aug-2026 12-33 PM.pdf` has now been inspected page by page: it contains 242 scanned photo pages and no extractable text layer. The PDF remains outside the repository because it is a large source document; the checked-in manifest records its filename, full page range, page-by-page audit ranges, and repeated landmarks. Copy the PDF or compressed derivatives into the reference library when browser-accessible previews are required. The Reference/debug panel reports the attached page range and still shows “No photo/PDF reference” for any area not explicitly mapped in the manifest.
-
-### Modelling assumptions and limitations
-
-- Coordinate-backed points are location evidence, not proof of shape, height, material, or access control.
-- The route is navigable only along the explicitly supplied ordered corridor. No alternate route, wall, bottleneck, restricted polygon, or security-post position is invented.
-- Building geometry is low-poly and intentionally marked `unverified` where only a center/footprint assumption exists.
-- The PDF confirms tree-lined corridors, palms, planted courtyards, the low-wall/black-railing treatment, lamp posts, a guard kiosk, CCTV hardware, and Block-A/Block-B/yoga/waterfront visual landmarks. Their exact map positions, counts, and dimensions are still unverified without per-photo coordinates or a survey, so the model uses only a conservative boundary treatment and does not place decorative tree instances.
-- The scene uses lazy-loaded Three.js, instanced-ready low-poly primitives, capped pixel ratio, 1,024px shadows, no large texture set, and an explicit validation script to keep the model responsive on mobile and desktop.
-
-Run the coordinate/reference checks from `frontend/` with `npm run validate:campus-model`, and run `npm run build` for the production loading check.

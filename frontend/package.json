@@ -6,13 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "validate:campus-model": "node scripts/validate-campus-model.mjs"
+    "lint": "next lint"
   },
   "dependencies": {
     "@stomp/stompjs": "^7.0.0",
     "@types/leaflet": "^1.9.14",
-    "@types/three": "^0.185.4",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "next": "^14.2.15",
@@ -21,8 +19,7 @@
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
     "recharts": "^2.13.3",
-    "sockjs-client": "^1.6.1",
-    "three": "^0.185.1"
+    "sockjs-client": "^1.6.1"
   },
   "devDependencies": {
     "@types/node": "^20.17.6",

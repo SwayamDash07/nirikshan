@@ -21,7 +21,6 @@ export const primaryNavItems: NavItem[] = [
   { label: "Video Sessions", href: "/console/video-sessions", icon: "activity" },
   { label: "Administration", href: "/console/admin", icon: "users" },
   { label: "Citizen reports", href: "/console/reports", icon: "activity" },
-  { label: "3D Model", href: "/console/3d-map", icon: "map" },
   ...(localCvEnabled ? [{ label: "Video Ingestion", href: "/admin", icon: "upload" as IconName }, { label: "Simulator", href: "/admin/scenarios", icon: "activity" as IconName }] : []),
   { label: "Security", href: "/alerts/security", icon: "lock" },
 ];

@@ -7,3 +7,4 @@
 .panel { z-index: 1999; }
 .speakButton { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: 8px; padding: 0; border: 0; border-radius: 6px; color: var(--primary); background: transparent; cursor: pointer; vertical-align: middle; }.speakButton:hover { background: var(--surface-subtle); }.speakButton svg { width: 14px; height: 14px; }.voiceError { margin: 7px 11px 0; color: var(--danger); font-size: 10px; }.composer button.listening { background: var(--danger); }
 .panel, .messages, .composer { min-width: 0; }.messages { min-height: 0; overflow-x: hidden; }.message { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }.message span { display: block; min-width: 0; }.assistantMessage { width: 100%; max-width: 100%; }
+.panel { grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 170px) auto; }.summaryMenu { min-height: 0; max-height: 170px; overflow-y: auto; padding-bottom: 8px; }

@@ -4,7 +4,7 @@ export type IconName = "grid" | "map" | "bell" | "shield" | "upload" | "users" |
 
 export default function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {
   if (name === "settings") {
-    return <svg viewBox="0 0 24 24" fill="none" {...props}><image href="/setting.png" x="1" y="1" width="22" height="22" preserveAspectRatio="xMidYMid meet" style={{ filter: "invert(1)" }} /></svg>;
+    return <svg viewBox="0 0 24 24" fill="none" {...props}><mask id="settings-mask" maskUnits="userSpaceOnUse" x="1" y="1" width="22" height="22" mask-type="luminance"><image href="/setting.png" x="1" y="1" width="22" height="22" preserveAspectRatio="xMidYMid meet" style={{ filter: "invert(1)" }} /></mask><rect x="1" y="1" width="22" height="22" fill="currentColor" mask="url(#settings-mask)" /></svg>;
   }
   const paths = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">Nirikshan system architecture</title>
+  <desc id="desc">Next.js frontend, Spring Boot backend, PostgreSQL database, Python computer vision pipeline, and Groq assistant deployed with the backend on Render.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#355070"/></marker>
+    <style>
+      .canvas { fill: #f7fafc; }
+      .box { fill: #ffffff; stroke: #355070; stroke-width: 2; rx: 16; }
+      .external { fill: #eef6ff; stroke: #2f6690; stroke-width: 2; rx: 16; }
+      .title { font: 700 25px Arial, sans-serif; fill: #17232b; }
+      .label { font: 700 18px Arial, sans-serif; fill: #17232b; }
+      .text { font: 14px Arial, sans-serif; fill: #40515c; }
+      .arrow { stroke: #355070; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .boundary { fill: none; stroke: #8da9bc; stroke-width: 2; stroke-dasharray: 9 7; rx: 22; }
+      .boundaryText { font: 700 15px Arial, sans-serif; fill: #5f7685; }
+    </style>
+  </defs>
+  <rect class="canvas" width="1200" height="650"/>
+  <text class="title" x="600" y="48" text-anchor="middle">Nirikshan architecture</text>
+  <rect class="boundary" x="35" y="82" width="1130" height="505"/>
+  <text class="boundaryText" x="58" y="111">Render deployment boundary</text>
+  <rect class="box" x="75" y="160" width="280" height="150"/>
+  <text class="label" x="215" y="197" text-anchor="middle">Next.js frontend</text>
+  <text class="text" x="215" y="226" text-anchor="middle">App Router and TypeScript</text>
+  <text class="text" x="215" y="250" text-anchor="middle">Server actions only</text>
+  <text class="text" x="215" y="274" text-anchor="middle">REST, WebSocket and Leaflet UI</text>
+  <rect class="box" x="460" y="145" width="300" height="185"/>
+  <text class="label" x="610" y="184" text-anchor="middle">Spring Boot backend</text>
+  <text class="text" x="610" y="214" text-anchor="middle">REST controllers and STOMP</text>
+  <text class="text" x="610" y="238" text-anchor="middle">Risk intelligence and routes</text>
+  <text class="text" x="610" y="262" text-anchor="middle">Auth, alerts and check ins</text>
+  <text class="text" x="610" y="286" text-anchor="middle">Groq assistant and SSE stream</text>
+  <rect class="box" x="855" y="160" width="250" height="150"/>
+  <text class="label" x="980" y="201" text-anchor="middle">PostgreSQL</text>
+  <text class="text" x="980" y="232" text-anchor="middle">Zones and telemetry</text>
+  <text class="text" x="980" y="256" text-anchor="middle">Alerts and recommendations</text>
+  <text class="text" x="980" y="280" text-anchor="middle">Users and audit records</text>
+  <rect class="external" x="75" y="420" width="280" height="125"/>
+  <text class="label" x="215" y="458" text-anchor="middle">Python CV pipeline</text>
+  <text class="text" x="215" y="487" text-anchor="middle">YOLO and privacy processing</text>
+  <text class="text" x="215" y="511" text-anchor="middle">Live workers post risk events</text>
+  <text class="text" x="215" y="535" text-anchor="middle">Replay supports recorded demos</text>
+  <rect class="external" x="855" y="420" width="250" height="125"/>
+  <text class="label" x="980" y="458" text-anchor="middle">Groq API</text>
+  <text class="text" x="980" y="487" text-anchor="middle">Assistant question answering</text>
+  <text class="text" x="980" y="511" text-anchor="middle">Context scoped by application</text>
+  <text class="text" x="980" y="535" text-anchor="middle">Streaming chat completion</text>
+  <path class="arrow" d="M355 235 L460 235"/>
+  <path class="arrow" d="M760 235 L855 235"/>
+  <path class="arrow" d="M355 483 L460 300"/>
+  <path class="arrow" d="M610 330 L610 390 L355 483"/>
+  <path class="arrow" d="M760 285 L855 483"/>
+  <path class="arrow" d="M855 483 L760 285"/>
+</svg>

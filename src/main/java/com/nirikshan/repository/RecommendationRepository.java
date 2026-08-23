@@ -15,4 +15,5 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
     List<Recommendation> findByZoneIdAndStatus(Long zoneId, RecommendationStatus status);
     List<Recommendation> findByTypeAndStatus(RecommendationType type, RecommendationStatus status);
     List<Recommendation> findByZoneIdAndCreatedAtAfterOrderByCreatedAtAsc(Long zoneId, Instant createdAt);
+    List<Recommendation> findByZoneIdInAndCreatedAtAfterOrderByCreatedAtAsc(List<Long> zoneIds, Instant createdAt);
 }

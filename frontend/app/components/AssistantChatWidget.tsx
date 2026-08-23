@@ -1,14 +1,13 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { api } from "../lib/auth";
+import { streamApi } from "../lib/auth";
 import Icon from "./Icon";
 import LanguageSelector from "./LanguageSelector";
 import type { AiLanguage } from "../lib/aiLanguage";
 import styles from "./assistantChat.module.css";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
-type ChatResponse = { response: string };
 export type AssistantZone = { id: number; name: string };
 type SpeechRecognitionResultEvent = Event & { results: ArrayLike<ArrayLike<{ transcript: string }>> };
 type SpeechRecognitionLike = { lang: string; interimResults: boolean; continuous: boolean; onresult: ((event: SpeechRecognitionResultEvent) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start: () => void; stop: () => void };
@@ -49,11 +48,19 @@ export default function AssistantChatWidget({ zones, language, onLanguageChange 
     setMessages((current) => [...current, { role: "user", content: message }]);
     setLoading(true);
     try {
-      const result = await api<ChatResponse>("/api/assistant/chat", {
+      let streamed = "";
+      setMessages((current) => [...current, { role: "assistant", content: "" }]);
+      await streamApi("/api/assistant/chat/stream", {
         method: "POST",
         body: JSON.stringify({ message, language, ...(zoneId === undefined ? {} : { zoneId }), conversationHistory: history }),
+      }, (event, data) => {
+        if (event === "token") {
+          streamed += data;
+          setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: plainText(streamed) } : item));
+        } else if (event === "error") {
+          throw new Error(data || "The assistant is unavailable right now.");
+        }
       });
-      setMessages((current) => [...current, { role: "assistant", content: plainText(result.response) }]);
     } catch (reason) {
       setMessages((current) => [...current, { role: "assistant", content: plainText(reason instanceof Error ? reason.message : "The assistant is unavailable right now.") }]);
     } finally {

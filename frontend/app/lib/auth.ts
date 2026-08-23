@@ -101,3 +101,42 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     pendingGets.delete(cacheKey);
   }
 }
+
+export async function streamApi(path: string, init: RequestInit, onEvent: (event: string, data: string) => void): Promise<void> {
+  const session = readSession();
+  const headers = new Headers(init.headers);
+  if (session?.token) headers.set("Authorization", `Bearer ${session.token}`);
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  headers.set("Accept", "text/event-stream");
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}${path}`, { ...init, headers, cache: "no-store" });
+  } catch {
+    throw new ApiError(`Cannot reach the backend at ${apiBase}. Check that Spring Boot is running.`, undefined, path);
+  }
+  if (!response.ok || !response.body) {
+    const text = await response.text();
+    let message = text || `Backend returned HTTP ${response.status}`;
+    try { message = (JSON.parse(text) as { message?: string; error?: string }).message || (JSON.parse(text) as { message?: string; error?: string }).error || message; } catch { }
+    if (response.status === 401 || response.status === 403) clearSession();
+    throw new ApiError(message, response.status, path, response.headers.get("X-Request-Id") || undefined);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let event = "message";
+  while (true) {
+    const chunk = await reader.read();
+    buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
+    const frames = buffer.split(/\r?\n\r?\n/);
+    buffer = frames.pop() || "";
+    for (const frame of frames) {
+      const lines = frame.split(/\r?\n/);
+      const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).replace(/^ /, "")).join("\n");
+      const name = lines.find((line) => line.startsWith("event:"))?.slice(6).trim() || event;
+      if (data || name === "done") onEvent(name, data);
+      event = "message";
+    }
+    if (chunk.done) break;
+  }
+}

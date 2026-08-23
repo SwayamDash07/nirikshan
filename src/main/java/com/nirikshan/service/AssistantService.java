@@ -12,7 +12,6 @@ import com.nirikshan.repository.ZoneRepository;
 import com.nirikshan.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientResponseException;
@@ -20,6 +19,8 @@ import org.springframework.web.client.RestClientResponseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 @Service
 public class AssistantService {
@@ -62,9 +63,50 @@ public class AssistantService {
 
     @Transactional(readOnly = true)
     public String chat(AssistantChatRequest request, AiLanguage language) {
+        PreparedChat prepared = prepare(request, language);
+        if (prepared.immediateResponse() != null) return prepared.immediateResponse();
+        try {
+            JsonNode root = mapper.readTree(groq.complete(prepared.system(), prepared.userPrompt(), 700));
+            String response = root.path("choices").path(0).path("message").path("content").asText("").trim();
+            return response.isBlank() ? UNAVAILABLE : response;
+        } catch (RestClientResponseException failure) {
+            log.error("Nirikshan assistant Groq request failed: status={} model={} responseBody={}", failure.getStatusCode().value(), groq.model(), failure.getResponseBodyAsString(), failure);
+            return UNAVAILABLE;
+        } catch (Exception failure) {
+            log.error("Nirikshan assistant request failed: model={} message={}", groq.model(), failure.getMessage(), failure);
+            return UNAVAILABLE;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public void stream(AssistantChatRequest request, AiLanguage language, Consumer<String> onToken,
+                       Consumer<Throwable> onError, Runnable onComplete) {
+        PreparedChat prepared;
+        try {
+            prepared = prepare(request, language);
+        } catch (Throwable failure) {
+            onError.accept(failure);
+            return;
+        }
+        if (prepared.immediateResponse() != null) {
+            onToken.accept(prepared.immediateResponse());
+            onComplete.run();
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                groq.stream(prepared.system(), prepared.userPrompt(), 700, onToken);
+                onComplete.run();
+            } catch (Throwable failure) {
+                onError.accept(failure);
+            }
+        });
+    }
+
+    private PreparedChat prepare(AssistantChatRequest request, AiLanguage language) {
         User user = currentUser.get();
         SummaryAudience audience = SummaryAudience.valueOf(user.getRole().name());
-        if (!isCampusSafetyQuestion(request.message())) return redirect(language);
+        if (!isCampusSafetyQuestion(request.message())) return new PreparedChat(null, null, redirect(language));
 
         boolean specificZone = request.zoneId() != null;
         List<Zone> scopedZones = resolveZones(request.zoneId(), user, audience);
@@ -75,19 +117,9 @@ public class AssistantService {
                 "\n\nLatest user question:\n" + compact(request.message(), 1200);
         if (!groq.isConfigured()) {
             log.warn("Skipping Nirikshan assistant request because GROQ_API_KEY is not configured");
-            return UNAVAILABLE;
+            return new PreparedChat(null, null, UNAVAILABLE);
         }
-        try {
-            JsonNode root = mapper.readTree(groq.complete(system, userPrompt, 700));
-            String response = root.path("choices").path(0).path("message").path("content").asText("").trim();
-            return response.isBlank() ? UNAVAILABLE : response;
-        } catch (RestClientResponseException failure) {
-            log.error("Nirikshan assistant Groq request failed: status={} model={} responseBody={}", failure.getStatusCode().value(), groq.model(), failure.getResponseBodyAsString(), failure);
-            return UNAVAILABLE;
-        } catch (Exception failure) {
-            log.error("Nirikshan assistant request failed: model={} message={}", groq.model(), failure.getMessage(), failure);
-            return UNAVAILABLE;
-        }
+        return new PreparedChat(system, userPrompt, null);
     }
 
     private List<Zone> resolveZones(Long requestedZoneId, User user, SummaryAudience audience) {
@@ -107,6 +139,15 @@ public class AssistantService {
     private String buildContext(List<Zone> scopedZones, SummaryAudience audience, boolean specificZone) {
         StringBuilder context = new StringBuilder();
         Instant cutoff = Instant.now().minus(Duration.ofMinutes(10));
+        List<Long> zoneIds = scopedZones.stream().map(Zone::getId).toList();
+        Map<Long, List<RiskEvent>> recentEvents = specificZone
+                ? events.findByZoneIdInAndTimestampAfterOrderByTimestampAsc(zoneIds, cutoff).stream()
+                .collect(java.util.stream.Collectors.groupingBy(event -> event.getZone().getId()))
+                : Map.of();
+        Map<Long, List<Alert>> recentAlerts = alerts.findByZoneIdInAndTimestampAfterOrderByTimestampAsc(zoneIds, cutoff).stream()
+                .collect(java.util.stream.Collectors.groupingBy(alert -> alert.getZone().getId()));
+        Map<Long, List<Recommendation>> recentRecommendations = recommendations.findByZoneIdInAndCreatedAtAfterOrderByCreatedAtAsc(zoneIds, cutoff).stream()
+                .collect(java.util.stream.Collectors.groupingBy(recommendation -> recommendation.getZone().getId()));
         if (!specificZone) {
             long elevated = scopedZones.stream().filter(zone -> zone.getCurrentRiskLevel() != RiskLevel.LOW).count();
             append(context, "CAMPUS-WIDE STATUS: total zones=" + scopedZones.size() + ", normal zones=" + (scopedZones.size() - elevated) + ", elevated zones=" + elevated + "\n");
@@ -121,10 +162,10 @@ public class AssistantService {
                 append(context, "ZONE " + zone.getName() + ": current condition=" + zone.getCurrentRiskLevel() + ", last updated=" + zone.getLastUpdated() + "\n");
             } else {
                 append(context, "ZONE " + zone.getName() + " (id=" + zone.getId() + "): risk=" + zone.getCurrentRiskLevel() + ", density=" + zone.getCurrentDensity() + ", people=" + zone.getCurrentPeopleCount() + ", updated=" + zone.getLastUpdated() + "\n");
-                events.findByZoneIdOrderByTimestampDesc(zone.getId(), PageRequest.of(0, 6)).stream().filter(event -> event.getTimestamp().isAfter(cutoff)).forEach(event -> append(context, "EVENT " + event.getTimestamp() + ": density=" + event.getDensityScore() + ", people=" + event.getPeopleCount() + ", movement=" + event.getMovementSpeed() + ", risk=" + event.getRiskLevel() + ", note=" + compact(event.getExplanation(), 180) + "\n"));
+                recentEvents.getOrDefault(zone.getId(), List.of()).stream().sorted(Comparator.comparing(RiskEvent::getTimestamp).reversed()).limit(6).forEach(event -> append(context, "EVENT " + event.getTimestamp() + ": density=" + event.getDensityScore() + ", people=" + event.getPeopleCount() + ", movement=" + event.getMovementSpeed() + ", risk=" + event.getRiskLevel() + ", note=" + compact(event.getExplanation(), 180) + "\n"));
             }
-            alerts.findByZoneIdAndTimestampAfterOrderByTimestampAsc(zone.getId(), cutoff).stream().filter(alert -> audience != SummaryAudience.CITIZEN || !alert.isResolved()).limit(5).forEach(alert -> append(context, "ALERT " + zone.getName() + ": severity=" + alert.getSeverity() + ", resolved=" + alert.isResolved() + ", message=" + compact(alert.getMessage(), 220) + "\n"));
-            recommendations.findByZoneIdAndCreatedAtAfterOrderByCreatedAtAsc(zone.getId(), cutoff).stream().filter(recommendation -> audience != SummaryAudience.CITIZEN || recommendation.getType() == RecommendationType.OPEN_ROUTE).limit(5).forEach(recommendation -> append(context, "RECOMMENDATION " + zone.getName() + ": type=" + recommendation.getType() + ", status=" + recommendation.getStatus() + ", message=" + compact(recommendation.getMessage(), 220) + "\n"));
+            recentAlerts.getOrDefault(zone.getId(), List.of()).stream().filter(alert -> audience != SummaryAudience.CITIZEN || !alert.isResolved()).limit(5).forEach(alert -> append(context, "ALERT " + zone.getName() + ": severity=" + alert.getSeverity() + ", resolved=" + alert.isResolved() + ", message=" + compact(alert.getMessage(), 220) + "\n"));
+            recentRecommendations.getOrDefault(zone.getId(), List.of()).stream().filter(recommendation -> audience != SummaryAudience.CITIZEN || recommendation.getType() == RecommendationType.OPEN_ROUTE).limit(5).forEach(recommendation -> append(context, "RECOMMENDATION " + zone.getName() + ": type=" + recommendation.getType() + ", status=" + recommendation.getStatus() + ", message=" + compact(recommendation.getMessage(), 220) + "\n"));
         }
         return context.length() == 0 ? "No current zone data is available." : context.toString();
     }
@@ -180,4 +221,6 @@ public class AssistantService {
         int remaining = MAX_CONTEXT_CHARACTERS - value.length();
         value.append(addition, 0, Math.min(addition.length(), remaining));
     }
+
+    private record PreparedChat(String system, String userPrompt, String immediateResponse) { }
 }

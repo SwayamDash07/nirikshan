@@ -65,6 +65,9 @@ export default function AssistantChatWidget({ zones, language, onLanguageChange 
         if (event === "token") {
           streamed += data;
           setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: plainText(streamed) } : item));
+        } else if (event === "replace") {
+          streamed = data;
+          setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: plainText(streamed) } : item));
         } else if (event === "done") {
           streamCompleted = true;
         } else if (event === "error") {

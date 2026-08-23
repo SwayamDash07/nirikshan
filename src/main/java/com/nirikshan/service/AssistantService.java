@@ -79,7 +79,7 @@ public class AssistantService {
     }
 
     @Transactional(readOnly = true)
-    public void stream(AssistantChatRequest request, AiLanguage language, Consumer<String> onToken,
+    public void stream(AssistantChatRequest request, AiLanguage language, Consumer<String> onToken, Consumer<String> onReplace,
                        Consumer<Throwable> onError, Runnable onComplete) {
         PreparedChat prepared;
         try {
@@ -95,7 +95,16 @@ public class AssistantService {
         }
         CompletableFuture.runAsync(() -> {
             try {
-                groq.stream(prepared.system(), prepared.userPrompt(), 1200, onToken);
+                StringBuilder streamed = new StringBuilder();
+                groq.stream(prepared.system(), prepared.userPrompt(), 1200, token -> {
+                    streamed.append(token);
+                    onToken.accept(token);
+                });
+                if (!completeSentence(streamed.toString())) {
+                    JsonNode root = mapper.readTree(groq.complete(prepared.system(), prepared.userPrompt(), 1200));
+                    String complete = root.path("choices").path(0).path("message").path("content").asText("").trim();
+                    if (!complete.isBlank()) onReplace.accept(complete);
+                }
                 onComplete.run();
             } catch (Throwable failure) {
                 onError.accept(failure);
@@ -214,6 +223,11 @@ public class AssistantService {
     private static String compact(String value, int limit) {
         String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
         return normalized.length() > limit ? normalized.substring(0, limit) + "..." : normalized;
+    }
+
+    private static boolean completeSentence(String value) {
+        String text = value == null ? "" : value.trim();
+        return !text.isBlank() && text.matches(".*[.!?؟।]$");
     }
 
     private static void append(StringBuilder value, String addition) {

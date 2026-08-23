@@ -29,6 +29,7 @@ public class AssistantController {
         SseEmitter emitter = new SseEmitter(0L);
         assistant.stream(request, language,
                 token -> send(emitter, "token", token),
+                response -> send(emitter, "replace", response),
                 failure -> {
                     send(emitter, "error", "The assistant is unavailable right now.");
                     emitter.complete();

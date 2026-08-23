@@ -99,7 +99,8 @@
   <text class="liveLabel" x="421" y="453" text-anchor="middle" transform="rotate(-28 421 453)">POST risk events</text>
 
   <path class="flow" d="M710 415 L710 468"/>
-  <text class="flowLabel" x="735" y="451">persist and query</text>
+  <rect x="730" y="425" width="128" height="25" fill="#f7fafc" rx="5"/>
+  <text class="flowLabel" x="741" y="442">persist and query</text>
 
   <path class="flow" d="M935 278 L1040 278"/>
   <text class="flowLabel" x="988" y="266" text-anchor="middle">REST, WebSocket, SSE</text>

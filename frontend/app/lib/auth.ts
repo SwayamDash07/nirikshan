@@ -125,18 +125,22 @@ export async function streamApi(path: string, init: RequestInit, onEvent: (event
   const decoder = new TextDecoder();
   let buffer = "";
   let event = "message";
+  const dispatch = (frame: string) => {
+    const lines = frame.split(/\r?\n/);
+    const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5)).join("\n");
+    const name = lines.find((line) => line.startsWith("event:"))?.slice(6).trim() || event;
+    if (data || name === "done") onEvent(name, data);
+    event = "message";
+  };
   while (true) {
     const chunk = await reader.read();
     buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
     const frames = buffer.split(/\r?\n\r?\n/);
     buffer = frames.pop() || "";
-    for (const frame of frames) {
-      const lines = frame.split(/\r?\n/);
-      const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).replace(/^ /, "")).join("\n");
-      const name = lines.find((line) => line.startsWith("event:"))?.slice(6).trim() || event;
-      if (data || name === "done") onEvent(name, data);
-      event = "message";
+    frames.forEach(dispatch);
+    if (chunk.done) {
+      if (buffer.trim()) dispatch(buffer);
+      break;
     }
-    if (chunk.done) break;
   }
 }

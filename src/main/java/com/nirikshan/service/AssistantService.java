@@ -95,14 +95,7 @@ public class AssistantService {
         }
         CompletableFuture.runAsync(() -> {
             try {
-                StringBuilder streamed = new StringBuilder();
-                GroqChatClient.StreamResult result = groq.stream(prepared.system(), prepared.userPrompt(), 1200, token -> {
-                    streamed.append(token);
-                    onToken.accept(token);
-                });
-                if (!result.completed() || !completeSentence(streamed.toString())) {
-                    replaceWithComplete(prepared, onReplace);
-                }
+                replaceWithComplete(prepared, onReplace);
                 onComplete.run();
             } catch (Throwable failure) {
                 try {

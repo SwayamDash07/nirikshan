@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api, streamApi } from "../lib/auth";
 import Icon from "./Icon";
 import LanguageSelector from "./LanguageSelector";
@@ -41,7 +41,13 @@ export default function AssistantChatWidget({ zones, language, onLanguageChange 
   const [speaking, setSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const recognition = useRef<SpeechRecognitionLike | undefined>(undefined);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   const visibleMessages = useMemo(() => messages.length ? messages : [{ role: "assistant" as const, content: intro }], [messages]);
+
+  useEffect(() => {
+    const container = messagesRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [messages, loading]);
 
   async function sendMessage(message: string, zoneId?: number) {
     if (!message.trim() || loading) return;
@@ -128,7 +134,7 @@ export default function AssistantChatWidget({ zones, language, onLanguageChange 
   return <>
     {open && <section className={styles.panel} aria-label="Nirikshan Assistant">
       <header className={styles.panelHeader}><div><strong>Nirikshan Assistant</strong><span>Campus safety only</span></div><div className={styles.headerControls}><LanguageSelector language={language} onChange={onLanguageChange} className={styles.languageSelector} /><button type="button" onClick={() => setOpen(false)} aria-label="Close assistant"><Icon name="close" /></button></div></header>
-      <div className={styles.messages} aria-live="polite">{visibleMessages.map((item, index) => <div className={`${styles.message} ${item.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={`${item.role}-${index}`}><span>{plainText(item.content)}</span>{item.role === "assistant" && <button type="button" className={styles.speakButton} onClick={() => speak(plainText(item.content))} aria-label={speaking ? "Stop reading AI response" : "Read AI response aloud"} title={speaking ? "Stop reading" : "Read AI response aloud"}><Icon name={speaking ? "close" : "volume"} /></button>}</div>)}{loading && <div className={`${styles.message} ${styles.assistantMessage} ${styles.loading}`} aria-label="Assistant is responding"><i /><i /><i /></div>}</div>
+      <div ref={messagesRef} className={styles.messages} aria-live="polite">{visibleMessages.map((item, index) => <div className={`${styles.message} ${item.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={`${item.role}-${index}`}><span>{plainText(item.content)}</span>{item.role === "assistant" && <button type="button" className={styles.speakButton} onClick={() => speak(plainText(item.content))} aria-label={speaking ? "Stop reading AI response" : "Read AI response aloud"} title={speaking ? "Stop reading" : "Read AI response aloud"}><Icon name={speaking ? "close" : "volume"} /></button>}</div>)}{loading && <div className={`${styles.message} ${styles.assistantMessage} ${styles.loading}`} aria-label="Assistant is responding"><i /><i /><i /></div>}</div>
       <div className={styles.quickActions}>
         <button type="button" onClick={() => setSummaryOpen((current) => !current)} disabled={loading}>Summary</button>
         <button type="button" onClick={() => void sendMessage("What active safety alerts should I know about?")} disabled={loading}>Active alerts</button>

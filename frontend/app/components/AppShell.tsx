@@ -20,7 +20,7 @@ export const primaryNavItems: NavItem[] = [
   { label: "Dashboard", href: "/console", icon: "grid" },
   { label: "Video Sessions", href: "/console/video-sessions", icon: "activity" },
   { label: "Administration", href: "/console/admin", icon: "users" },
-  { label: "Citizen reports", href: "/console/reports", icon: "activity" },
+  { label: "Citizen reports", href: "/console/reports", icon: "clipboard" },
   ...(localCvEnabled ? [{ label: "Video Ingestion", href: "/admin", icon: "upload" as IconName }, { label: "Simulator", href: "/admin/scenarios", icon: "activity" as IconName }] : []),
   { label: "Security", href: "/alerts/security", icon: "lock" },
 ];

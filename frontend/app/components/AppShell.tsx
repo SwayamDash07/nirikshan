@@ -55,7 +55,8 @@ export function AppShell({ user, title, subtitle, active, navItems, previewRole,
     }).catch(() => undefined);
     return () => { active = false; };
   }, [assistantZones, user.assignedZoneId]);
-  const workspaceRole = previewRole || queryPreview || user.role;
+  const liveSecurityWorkspace = typeof window !== "undefined" && (window.location.pathname === "/security" || window.location.pathname.startsWith("/security/"));
+  const workspaceRole = previewRole || queryPreview || (user.role === "ADMIN" && liveSecurityWorkspace ? "SECURITY" : user.role);
   const homeHref = workspaceRole === "ADMIN" ? "/console" : workspaceRole === "SECURITY" ? "/security" : "/alerts";
   usePageLanguage(language);
 
